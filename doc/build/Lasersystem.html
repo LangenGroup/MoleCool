@@ -1,0 +1,364 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Lasersystem module &mdash; BaF Laser-cooling Simulations  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Levelsystem module" href="Levelsystem.html" />
+    <link rel="prev" title="BaFconstants module" href="BaFconstants.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> BaF Laser-cooling Simulations
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">API documentation</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">mymodules</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="BaFconstants.html">BaFconstants module</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Lasersystem module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Levelsystem.html">Levelsystem module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="System.html">System module</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="ExampleNumPyStyle.html">ExampleNumPyStyle module</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">BaF Laser-cooling Simulations</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="modules.html">mymodules</a> &raquo;</li>
+        
+      <li>Lasersystem module</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/Lasersystem.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-Lasersystem">
+<span id="lasersystem-module"></span><h1>Lasersystem module<a class="headerlink" href="#module-Lasersystem" title="Permalink to this headline">¶</a></h1>
+<p>Created on Wed May 13 18:34:09 2020</p>
+<p>&#64;author: Felix</p>
+<p>This module contains all classes and functions to define a System including all <code class="docutils literal notranslate"><span class="pre">Laser</span></code> objects.</p>
+<p class="rubric">Example</p>
+<p>Below an empty Lasersystem is created and a single Laser with wavelength 860nm
+and 20 mW with linear polarization is added:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">lasers</span> <span class="o">=</span> <span class="n">Lasersystem</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lasers</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="mf">860e-9</span><span class="p">,</span><span class="mf">20e-3</span><span class="p">,</span><span class="s1">&#39;lin&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>But first start python and import the module:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ python
+&gt;&gt;&gt; import Lasersystem
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Every object of <code class="docutils literal notranslate"><span class="pre">Lasersystem</span></code> or <code class="docutils literal notranslate"><span class="pre">Laser</span></code> class can be printed to display
+all attributes via:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">lasers</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">lasers</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<dl class="py class">
+<dt id="Lasersystem.Laser">
+<em class="property">class </em><code class="sig-prename descclassname">Lasersystem.</code><code class="sig-name descname">Laser</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">lamb</span></em>, <em class="sig-param"><span class="n">P</span></em>, <em class="sig-param"><span class="n">pols</span></em>, <em class="sig-param"><span class="n">freq_shift</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">w</span><span class="o">=</span><span class="default_value">0.001</span></em><span class="sig-paren">)</span><a class="headerlink" href="#Lasersystem.Laser" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Sets up an Laser with its properties and can be included in the Lasersystem class.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>freq_shift without 2pi factor</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>lamb</strong> (<em>float</em>) – wavelength lambda.</p></li>
+<li><p><strong>P</strong> (<em>float</em>) – Laser power in W</p></li>
+<li><p><strong>pols</strong> (<em>str</em><em>, </em><em>tuple</em><em>(</em><em>str</em><em>,</em><em>str</em><em>)</em>) – polarization of the laserbeam. Can be either ‘lin’, ‘sigmap’ or
+‘sigmam’ for linear or circular polarized light of the laser.
+For polarization switching a tuple of two polarizations is needed.</p></li>
+<li><p><strong>freq_shift</strong> (<em>float</em><em>, </em><em>optional</em>) – Shift of the laserfrequency (without 2 pi) additional to the
+frequency determined by Param lamb. The default is 0.</p></li>
+<li><p><strong>w</strong> (<em>str</em><em>, </em><em>optional</em>) – laserbeam diameter. The default is 1e-3</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>Exception</strong> – When the given type of the <code class="docutils literal notranslate"><span class="pre">pols</span></code> Parameter is not accepted.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt id="Lasersystem.Laser.E">
+<code class="sig-name descname">E</code><em class="property"> = None</em><a class="headerlink" href="#Lasersystem.Laser.E" title="Permalink to this definition">¶</a></dt>
+<dd><p>Energy of the photons of the laser.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="Lasersystem.Laser.I">
+<code class="sig-name descname">I</code><em class="property"> = None</em><a class="headerlink" href="#Lasersystem.Laser.I" title="Permalink to this definition">¶</a></dt>
+<dd><p>Currently with <strong>fixed</strong> width of 1.5e-3</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="Lasersystem.Laser.name">
+<code class="sig-name descname">name</code><em class="property"> = None</em><a class="headerlink" href="#Lasersystem.Laser.name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt id="Lasersystem.Laser.w">
+<code class="sig-name descname">w</code><em class="property"> = None</em><a class="headerlink" href="#Lasersystem.Laser.w" title="Permalink to this definition">¶</a></dt>
+<dd><p>1/e^2 radius of the beam</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="Lasersystem.Lasersystem">
+<em class="property">class </em><code class="sig-prename descclassname">Lasersystem.</code><code class="sig-name descname">Lasersystem</code><a class="headerlink" href="#Lasersystem.Lasersystem" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>System consisting of Laser objects and methods to add them properly.</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">lasers</span> <span class="o">=</span> <span class="n">Lasersystem</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lasers</span><span class="o">.</span><span class="n">add_sidebands</span><span class="p">(</span><span class="mf">860e-9</span><span class="p">,</span><span class="mf">20e-3</span><span class="p">,</span><span class="s1">&#39;lin&#39;</span><span class="p">,</span><span class="o">-</span><span class="mf">20e6</span><span class="p">,</span><span class="mf">39e6</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">lasers</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt id="Lasersystem.Lasersystem.add">
+<code class="sig-name descname">add</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">lamb</span></em>, <em class="sig-param"><span class="n">P</span></em>, <em class="sig-param"><span class="n">pols</span></em>, <em class="sig-param"><span class="n">freq_shift</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">w</span><span class="o">=</span><span class="default_value">0.001</span></em><span class="sig-paren">)</span><a class="headerlink" href="#Lasersystem.Lasersystem.add" title="Permalink to this definition">¶</a></dt>
+<dd><div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Is the same as self.entries.append(Laser(…)).</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>as in the __init__ method of the class Laser</strong><strong> (</strong><strong>further information</strong><strong>)</strong> (<em>Same</em>) – </p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="Lasersystem.Lasersystem.add_sidebands">
+<code class="sig-name descname">add_sidebands</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">lamb</span></em>, <em class="sig-param"><span class="n">P</span></em>, <em class="sig-param"><span class="n">pols</span></em>, <em class="sig-param"><span class="n">AOM_shift</span></em>, <em class="sig-param"><span class="n">EOM_freq</span></em><span class="sig-paren">)</span><a class="headerlink" href="#Lasersystem.Lasersystem.add_sidebands" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="Lasersystem.Lasersystem.description">
+<em class="property">property </em><code class="sig-name descname">description</code><a class="headerlink" href="#Lasersystem.Lasersystem.description" title="Permalink to this definition">¶</a></dt>
+<dd><p>Displays a short description with the number of included laser objects.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="Lasersystem.Lasersystem.pNum">
+<em class="property">property </em><code class="sig-name descname">pNum</code><a class="headerlink" href="#Lasersystem.Lasersystem.pNum" title="Permalink to this definition">¶</a></dt>
+<dd><p>returns the number of included Laser objects.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="Levelsystem.html" class="btn btn-neutral float-right" title="Levelsystem module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="BaFconstants.html" class="btn btn-neutral float-left" title="BaFconstants module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, fkogel
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

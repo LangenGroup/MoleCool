@@ -1,0 +1,396 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>System module &mdash; BaF Laser-cooling Simulations  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="ExampleNumPyStyle module" href="ExampleNumPyStyle.html" />
+    <link rel="prev" title="Levelsystem module" href="Levelsystem.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> BaF Laser-cooling Simulations
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">API documentation</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">mymodules</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="BaFconstants.html">BaFconstants module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Lasersystem.html">Lasersystem module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Levelsystem.html">Levelsystem module</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">System module</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="ExampleNumPyStyle.html">ExampleNumPyStyle module</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">BaF Laser-cooling Simulations</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="modules.html">mymodules</a> &raquo;</li>
+        
+      <li>System module</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/System.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-System">
+<span id="system-module"></span><h1>System module<a class="headerlink" href="#module-System" title="Permalink to this headline">¶</a></h1>
+<p>Created on Tue May 12 10:17:56 2020</p>
+<p>&#64;author: Felix</p>
+<p>This module contains the main class <code class="docutils literal notranslate"><span class="pre">System</span></code> which provides all information
+about the Lasers, Levels and can carry out simulation calculations, e.g.
+via the rate equations</p>
+<p class="rubric">Example</p>
+<p>Example for setting up a level and laser system with 3 repumping lasers and
+calculating the dynamics:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">system</span> <span class="o">=</span> <span class="n">System</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;Test-Lasersystem&#39;</span><span class="p">)</span>
+
+<span class="c1">#pol     = &#39;lin&#39;</span>
+<span class="c1">#pol     = &#39;sigmap&#39;</span>
+<span class="n">pol</span>     <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;sigmap&#39;</span><span class="p">,</span><span class="s1">&#39;sigmam&#39;</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">lasers</span><span class="o">.</span><span class="n">freq_pol_switch</span> <span class="o">=</span> <span class="mf">5e6</span>
+
+<span class="n">system</span><span class="o">.</span><span class="n">lasers</span><span class="o">.</span><span class="n">add_sidebands</span><span class="p">(</span><span class="mf">859.830e-9</span><span class="p">,</span><span class="mf">20e-3</span><span class="p">,</span><span class="n">pol</span><span class="p">,</span><span class="n">AOM_shift</span><span class="o">=-</span><span class="mf">20.65e6</span><span class="p">,</span> <span class="n">EOM_freq</span><span class="o">=</span><span class="mf">39.33e6</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">lasers</span><span class="o">.</span><span class="n">add_sidebands</span><span class="p">(</span><span class="mf">895.699e-9</span><span class="p">,</span><span class="mf">14e-3</span><span class="p">,</span><span class="n">pol</span><span class="p">,</span><span class="n">AOM_shift</span><span class="o">=-</span><span class="mf">20.65e6</span><span class="p">,</span> <span class="n">EOM_freq</span><span class="o">=</span><span class="mf">39.33e6</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">lasers</span><span class="o">.</span><span class="n">add_sidebands</span><span class="p">(</span><span class="mf">897.961e-9</span><span class="p">,</span><span class="mf">14e-3</span><span class="p">,</span><span class="n">pol</span><span class="p">,</span><span class="n">AOM_shift</span><span class="o">=-</span><span class="mf">20.65e6</span><span class="p">,</span> <span class="n">EOM_freq</span><span class="o">=</span><span class="mf">39.33e6</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">lasers</span><span class="o">.</span><span class="n">add_sidebands</span><span class="p">(</span><span class="mf">900.238e-9</span><span class="p">,</span><span class="mf">14e-3</span><span class="p">,</span><span class="n">pol</span><span class="p">,</span><span class="n">AOM_shift</span><span class="o">=-</span><span class="mf">20.65e6</span><span class="p">,</span> <span class="n">EOM_freq</span><span class="o">=</span><span class="mf">39.33e6</span><span class="p">)</span>
+<span class="c1"># system.lasers.add(859.830e-9,20e-3,pol)</span>
+<span class="c1"># system.lasers.add(895.699e-9,14e-3,pol)</span>
+<span class="c1"># system.lasers.add(897.961e-9,20e-3,pol)</span>
+<span class="c1"># system.lasers.add(900.238e-9,20e-3,pol)</span>
+
+<span class="n">system</span><span class="o">.</span><span class="n">levels</span><span class="o">.</span><span class="n">grstates</span><span class="o">.</span><span class="n">add_grstate</span><span class="p">(</span><span class="n">nu</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="n">N</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">levels</span><span class="o">.</span><span class="n">grstates</span><span class="o">.</span><span class="n">add_grstate</span><span class="p">(</span><span class="n">nu</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">N</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">levels</span><span class="o">.</span><span class="n">grstates</span><span class="o">.</span><span class="n">add_grstate</span><span class="p">(</span><span class="n">nu</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">N</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">levels</span><span class="o">.</span><span class="n">grstates</span><span class="o">.</span><span class="n">add_grstate</span><span class="p">(</span><span class="n">nu</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span><span class="n">N</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">system</span><span class="o">.</span><span class="n">levels</span><span class="o">.</span><span class="n">grstates</span><span class="o">.</span><span class="n">add_lossstate</span><span class="p">(</span><span class="n">nu</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+
+<span class="n">system</span><span class="o">.</span><span class="n">levels</span><span class="o">.</span><span class="n">exstates</span><span class="o">.</span><span class="n">add_exstate</span><span class="p">(</span><span class="n">nu</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="n">N</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="n">J</span><span class="o">=.</span><span class="mi">5</span><span class="p">,</span><span class="n">p</span><span class="o">=+</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">levels</span><span class="o">.</span><span class="n">exstates</span><span class="o">.</span><span class="n">add_exstate</span><span class="p">(</span><span class="n">nu</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">N</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="n">J</span><span class="o">=.</span><span class="mi">5</span><span class="p">,</span><span class="n">p</span><span class="o">=+</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">system</span><span class="o">.</span><span class="n">levels</span><span class="o">.</span><span class="n">exstates</span><span class="o">.</span><span class="n">add_exstate</span><span class="p">(</span><span class="n">nu</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">N</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="n">J</span><span class="o">=.</span><span class="mi">5</span><span class="p">,</span><span class="n">p</span><span class="o">=+</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">nodetuned_list</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">),(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),(</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">),(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">)]</span>
+<span class="c1"># system.N0 = np.array([*np.ones(system.levels.lNum),*np.zeros(system.levels.uNum)])</span>
+<span class="n">system</span><span class="o">.</span><span class="n">calc_rateeqs</span><span class="p">(</span><span class="n">t_int</span><span class="o">=</span><span class="mf">20e-6</span><span class="p">,</span><span class="n">dt</span><span class="o">=</span><span class="mf">0.02e-6</span><span class="p">,</span><span class="n">perfect_resonance</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">nodetuned_list</span><span class="o">=</span><span class="n">nodetuned_list</span><span class="p">,</span><span class="n">velocity_dep</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">magn_remixing</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">calculated_by</span><span class="o">=</span><span class="s1">&#39;Lucas&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py class">
+<dt id="System.System">
+<em class="property">class </em><code class="sig-prename descclassname">System.</code><code class="sig-name descname">System</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">description</span><span class="o">=</span><span class="default_value">'Magneto-optical trapping forces for atoms and molecules with complex level structures'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#System.System" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>System containing instances of <code class="docutils literal notranslate"><span class="pre">Lasersystem</span></code> and <code class="docutils literal notranslate"><span class="pre">Levelsystem</span></code> class.</p>
+<p>An instance of this class is the starting point to define a System on which
+one desires to calculate the time evolution via the rate equations.</p>
+<p class="rubric">Example</p>
+<p>After the Lasers and Levels have been defined in the <code class="docutils literal notranslate"><span class="pre">System</span></code> object
+<cite>system</cite>, the rate equations can be applied and the results can be plotted
+via:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">system</span><span class="o">.</span><span class="n">calc_rateeqs</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">system</span><span class="o">.</span><span class="n">plot_N</span><span class="p">()</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt id="System.System.N0">
+<code class="sig-name descname">N0</code><em class="property"> = None</em><a class="headerlink" href="#System.System.N0" title="Permalink to this definition">¶</a></dt>
+<dd><p>initial population of all levels</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="System.System.calc_rateeqs">
+<code class="sig-name descname">calc_rateeqs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t_int</span><span class="o">=</span><span class="default_value">2e-05</span></em>, <em class="sig-param"><span class="n">dt</span><span class="o">=</span><span class="default_value">2e-08</span></em>, <em class="sig-param"><span class="n">perfect_resonance</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">nodetuned_list</span><span class="o">=</span><span class="default_value">[]</span></em>, <em class="sig-param"><span class="n">velocity_dep</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">magn_remixing</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">calculated_by</span><span class="o">=</span><span class="default_value">'Lucas'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#System.System.calc_rateeqs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the occupations</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>t_int</strong> (<em>float</em><em>, </em><em>optional</em>) – interaction time in which the molecule is exposed to the lasers.
+The default is 20e-6.</p></li>
+<li><p><strong>dt</strong> (<em>float</em><em>, </em><em>optional</em>) – time step of the output data. The default is 0.02e-6.</p></li>
+<li><p><strong>perfect_resonance</strong> (<em>bool</em><em>, </em><em>optional</em>) – Property if a certain vibrational levels are in perfect resonance
+(with no detuning) with a specific lasers
+(defined in the <cite>nodetuned_list</cite>). The default is False.</p></li>
+<li><p><strong>nodetuned_list</strong> (<em>list</em><em>(</em><em>tuples</em><em>)</em><em>, </em><em>optional</em>) – list of tuples (nu,p) for the specific vibrational groundstate level
+with <cite>nu</cite> and the laser with index <cite>p</cite>. The default is [].</p></li>
+<li><p><strong>velocity_dep</strong> (<em>TYPE</em><em>, </em><em>optional</em>) – DESCRIPTION. The default is False.</p></li>
+<li><p><strong>magn_remixing</strong> (<em>bool</em><em>, </em><em>optional</em>) – if True, the adjacent ground hyperfine levels are perfectly mixed
+by a magnetic field. The default is False.</p></li>
+<li><p><strong>calculated_by</strong> (<em>str</em><em>, </em><em>optional</em>) – The branching ratios are different depending on the group or person
+who has calculated these values. Either ‘Lucas’ or ‘YanGroup’.
+The default is ‘Lucas’.</p></li>
+</ul>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>function creates attributes</p>
+<p><code class="docutils literal notranslate"><span class="pre">self.N</span></code> : solution of the time dependent populations N,
+<code class="docutils literal notranslate"><span class="pre">self.Nscatt</span></code> : time dependent scattering number,
+<code class="docutils literal notranslate"><span class="pre">self.Nscattrate</span></code> : time dependent scattering rate,
+<code class="docutils literal notranslate"><span class="pre">self.photons</span></code>: totally scattered photons</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="System.System.plot_N">
+<code class="sig-name descname">plot_N</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#System.System.plot_N" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="System.System.plot_Nscatt">
+<code class="sig-name descname">plot_Nscatt</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#System.System.plot_Nscatt" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="System.System.plot_Nscattrate">
+<code class="sig-name descname">plot_Nscattrate</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#System.System.plot_Nscattrate" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="System.System.plot_Nsum">
+<code class="sig-name descname">plot_Nsum</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#System.System.plot_Nsum" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="System.System.plot_all">
+<code class="sig-name descname">plot_all</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#System.System.plot_all" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt id="System.magn_remix">
+<code class="sig-prename descclassname">System.</code><code class="sig-name descname">magn_remix</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">grs</span></em><span class="sig-paren">)</span><a class="headerlink" href="#System.magn_remix" title="Permalink to this definition">¶</a></dt>
+<dd><p>returns a matrix to perfectly remix all adjacent ground hyperfine levels
+by a magnetic field. The default is False.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>grs</strong> (<em>Groundstates object</em>) – </p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>magnetic remixing matrix.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="System.ode">
+<code class="sig-prename descclassname">System.</code><code class="sig-name descname">ode</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">N</span></em>, <em class="sig-param"><span class="n">lNum</span></em>, <em class="sig-param"><span class="n">uNum</span></em>, <em class="sig-param"><span class="n">pNum</span></em>, <em class="sig-param"><span class="n">Gamma</span></em>, <em class="sig-param"><span class="n">r</span></em>, <em class="sig-param"><span class="n">R1</span></em>, <em class="sig-param"><span class="n">R2</span></em>, <em class="sig-param"><span class="n">tswitch</span></em>, <em class="sig-param"><span class="n">M</span></em><span class="sig-paren">)</span><a class="headerlink" href="#System.ode" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="System.open_object">
+<code class="sig-prename descclassname">System.</code><code class="sig-name descname">open_object</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">filename</span></em><span class="sig-paren">)</span><a class="headerlink" href="#System.open_object" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="System.save_object">
+<code class="sig-prename descclassname">System.</code><code class="sig-name descname">save_object</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">obj</span></em>, <em class="sig-param"><span class="n">filename</span></em><span class="sig-paren">)</span><a class="headerlink" href="#System.save_object" title="Permalink to this definition">¶</a></dt>
+<dd><p>Save an entire class with all its attributes instead of saving a pyplot figure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>obj</strong> (<em>object</em>) – The object you want to save.</p></li>
+<li><p><strong>filename</strong> (<em>TYPE</em>) – the filename to save the data.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="System.selrule">
+<code class="sig-prename descclassname">System.</code><code class="sig-name descname">selrule</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">gr</span></em>, <em class="sig-param"><span class="n">ex</span></em>, <em class="sig-param"><span class="n">pol</span></em><span class="sig-paren">)</span><a class="headerlink" href="#System.selrule" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="ExampleNumPyStyle.html" class="btn btn-neutral float-right" title="ExampleNumPyStyle module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="Levelsystem.html" class="btn btn-neutral float-left" title="Levelsystem module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, fkogel
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
