@@ -2,15 +2,20 @@
 """
 Created on Wed May 13 18:27:42 2020
 
-@author: Felix
+@author: fkogel
+
+v1.4
 
 Module with the BaF specific data to be able to perform molecule specific calculations.
 """
 import numpy as np
-from scipy.constants import c,h,hbar,pi,g
-h = 6.62607e-34#;%2*pi*1.054e-34;
-c = 2.998e8
+from scipy.constants import c,h,hbar,pi,g,u
 
+#%%
+def get_mass():
+    """returns the mass of the :math:`^{138}Ba^{19}F` molecule
+    """
+    return (138+19)*u
 #%%
 def get_Gamma():
     """returns the linewidth :math:`\Gamma` of the excited state
@@ -25,16 +30,17 @@ def freq(gr,ex):
 
     Parameters
     ----------
-    gr : Groundstate object
-    ex : Excitedstate object
-
+    gr : :class:`~Levelsystem.Groundstate`
+        ground state object
+    ex : :class:`~Levelsystem.Excitedstate`
+        excited state object
     Returns
     -------
     float
     
     Note
     ----
-    if <gr> is a loss state, the returned value is arbitrarily set as 1.
+    if **<gr>** is a loss state, the returned value is arbitrarily set as 1.
     """
     # wavelengths of vibrational levels: cols: A(v') states, rows:X(v'') states
     lambda_vibr = np.array([
@@ -96,7 +102,7 @@ def vibrbranch(gr,ex):
 
             
 #%%
-def branratios(gr,ex,calculated_by='Lucas'):
+def branratios(gr,ex,calculated_by='YanGroupnew'):
     """
     Returns the rotational branching ratios between specific hyperfine levels
     of a groundstate <gr> and an excited state <ex> of BaF.
@@ -109,8 +115,8 @@ def branratios(gr,ex,calculated_by='Lucas'):
     
     calculated_by : str, optional
         The branching ratios are different depending on the group or person 
-        who has calculated these values. Either 'Lucas' or 'YanGroup'.
-        The default is 'Lucas'.
+        who has calculated these values. Either 'Lucas', 'YanGroup' or
+        'YanGroupnew'. The default is 'YanGroupnew'.
 
     Returns
     -------
@@ -151,6 +157,23 @@ def branratios(gr,ex,calculated_by='Lucas'):
             r[9,:] = [0.0000, 0.0278, 0.1111, 0.0278] #J=3/2, F=2, MF=0
             r[10,:] = [0.0000, 0.0000, 0.0833, 0.0833] #J=3/2, F=2, MF=+1
             r[11,:] = [0.0000, 0.0000, 0.0000, 0.1667] #J=3/2, F=2, MF=+2
+            
+        elif calculated_by == 'YanGroupnew':
+            r[0,:] = [0,         2/9,    2/9,    2/9] #J=1/2, F=0, MF=0
+            
+            r[1,:] = [0.1282, 0.2493, 0.2493, 0.0000] #J=1/2, F=1, MF=-1
+            r[2,:] = [0.1282, 0.2493, 0.0000, 0.2493] #J=1/2, F=1, MF=-0
+            r[3,:] = [0.1282, 0.0000, 0.2493, 0.2493] #J=1/2, F=1, MF=+1
+            
+            r[4,:] = [0.20513333333333, 0.0007, 0.0007, 0.0000] #J=3/2, F=1, MF=-1
+            r[5,:] = [0.20513333333333, 0.0007, 0.0000, 0.0007] #J=3/2, F=1, MF=0
+            r[6,:] = [0.20513333333333, 0.0000, 0.0007, 0.0007] #J=3/2, F=1, MF=+1
+            
+            r[7,:] =  [0,   1/6,    0,      0   ] #J=3/2, F=2, MF=-2
+            r[8,:] =  [0,   1/12,   1/12,   0   ] #J=3/2, F=2, MF=-1
+            r[9,:] =  [0,   1/36,   1/9,    1/36] #J=3/2, F=2, MF=0
+            r[10,:] = [0,   0,      1/12,   1/12] #J=3/2, F=2, MF=+1
+            r[11,:] = [0,   0,      0,      1/6 ] #J=3/2, F=2, MF=+2
         
         elif calculated_by == 'YanGroup':
             r[0,:] = [0, 2/9, 2/9, 2/9] #J=1/2, F=0, MF=0
@@ -174,8 +197,26 @@ def branratios(gr,ex,calculated_by='Lucas'):
 
 #%%
 def FCF(nu_gr,nu_ex):
+    """returns Franck-Condon-Factors
+    (not needed for the calculation of the rate equations)
+
+    Parameters
+    ----------
+    nu_gr : int
+        vibrational state of the groundstate.
+    nu_ex : int
+        vibrational state of the excited state.
+
+    Returns
+    -------
+    float
+        FCF.
+    
+    Note
+    ----
+    values from Lucas' Masters thesis
+    """
     #first key=nu', second key=nu, value=Franck-Condon-Factor
-    #values from Lucas' Masters thesis
     #??? but these are other values than those in Summary_FCFs.pdf
     FCF_dict = {
                 0:{0: 0.9508,
@@ -195,13 +236,3 @@ def FCF(nu_gr,nu_ex):
                    4: 0.0104}
                 }
     return FCF_dict[nu_ex][nu_gr]
-
-#%%
-#def freq_laser(nu_gr,nu_ex):
-#    lambda_dict = { 0: {0:860e-9,1:896e-9}, 1:{2:898e-9}, 2:{3:900e-9}}
-#    return 2*pi*c/lambda_dict[nu_ex][nu_gr]
-#%%
-#def vibrbranch(nu_gr,nu_ex):
-#    return FCF(nu_gr,nu_ex)*freq_laser(nu_gr,nu_ex)**3 / np.sum(
-#        FCF(nu, nu_ex)*freq_laser(nu, nu_ex)**3 for nu in range(5) )
-    
