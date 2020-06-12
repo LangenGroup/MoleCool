@@ -92,6 +92,7 @@ from math import floor
 import _pickle as pickle
 import time
 from numba import jit, prange
+import sys, os
 
 import matplotlib.pyplot as plt
 # plt.rcParams['errorbar.capsize']=3
@@ -125,15 +126,34 @@ class System:
     #scattphotons = 0
     #init_pop = 
 
-    def __init__(self, description="Magneto-optical trapping forces for atoms and molecules with complex level structures"):
+    def __init__(self, description=None):
+        """creates empty instances of the class :class:`~Lasersystem.Lasersystem`
+        and the class :class:`~Levelsystem.Levelsystem` as ``self.lasers`` and
+        ``self.levels``.
+
+        Parameters
+        ----------
+        description : str, optional
+            A short description of this System can be added. If not provided,
+            the attribute is set to the name of the respective executed main
+            python file.
+
+        Returns
+        -------
+        None.
+
+        """
         self.lasers = Lasersystem()
         self.levels = Levelsystem()
         #self.particles = Particlesystem()
-        self.description = description
+        if description == None:
+            self.description = os.path.basename(sys.argv[0])[:-3]
+        else:
+            self.description = description
         self.N0 = np.array([]) #: initial population of all levels
         self.v0 = np.array([]) #: initial velocity of the particle
         self.r0 = np.array([]) #: initial position of the particle
-        print("System is created as: {}".format(self.description))
+        print("System is created with description: {}".format(self.description))
         
     def calc_rateeqs(self,t_int=20e-6,dt=None, perfect_resonance=False,
                      nodetuned_list=[], magn_remixing=False, magn_strength=8,
@@ -446,8 +466,8 @@ def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,M,po
     
     # shape of k: (pNum,3)
     # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
-    # R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
-    R = Gamma/2 * (rx*sp) / ( 1+4*( delta - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/Gamma**2 )    
+    R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
+    # R = Gamma/2 * (rx*sp) / ( 1+4*( delta - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/Gamma**2 )    
     # sum R over pNum
     R_sum = np.sum(R,axis=2)
     
@@ -477,16 +497,19 @@ def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,M,po
     return dydt
 
 #%%
-def save_object(obj,filename,maxsize=10e3):
+def save_object(obj,filename=None,maxsize=20e3):
     """Save an entire class with all its attributes instead of saving a pyplot figure.
     
     Parameters
     ----------
     obj : object
         The object you want to save.
-    filename : str
+    filename : str, optional
         the filename to save the data. The extension '.pkl' will be added for
-        the saved file.
+        saving the file. If no filename is provided, it is set to the attribute
+        `description` of the object and if the object does not have this
+        attribute, the filename is set to the name of the class belonging to
+        the object.
     maxsize : int, optional
         With this option the attributes ``N``, ``t``, ``Nscatt`` and
         ``Nscattrate`` are shrunken to this value by averaging over the other variable
@@ -496,6 +519,9 @@ def save_object(obj,filename,maxsize=10e3):
     -------
     None.
     """
+    if filename == None:
+        if hasattr(obj,'description'): filename = obj.description
+        else: filename = type(obj).__name__ # instance is set to name of its class
     maxs = maxsize
     if obj.t.size > 2*maxs:
         var_list = [obj.N,obj.t,obj.Nscatt,obj.Nscattrate]
@@ -505,7 +531,6 @@ def save_object(obj,filename,maxsize=10e3):
             if var.ndim > 1:
                 var = var[:,:sh1-(sh1%n1)].reshape(var.shape[0],-1, n1).mean(axis=-1)
             else: var = var[:sh1-(sh1%n1)].reshape(-1, n1).mean(axis=-1)
-            print(var.shape)
             var_list[i] = var
         obj.N,obj.t,obj.Nscatt,obj.Nscattrate = var_list
     #self.N = np.array(self.N,dtype='float16')
@@ -597,7 +622,7 @@ def selrule(gr,ex,pol):
 #%%
 #%%
 if __name__ == '__main__':
-    system = System(description='Test-Lasersystem')
+    system = System()
     
     # pol     = 'lin'
     # pol     = 'sigmap'
