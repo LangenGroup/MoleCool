@@ -466,8 +466,8 @@ def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,M,po
     
     # shape of k: (pNum,3)
     # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
-    R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
-    # R = Gamma/2 * (rx*sp) / ( 1+4*( delta - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/Gamma**2 )    
+    # R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
+    R = Gamma/2 * (rx*sp) / ( 1+4*( delta - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/Gamma**2 )    
     # sum R over pNum
     R_sum = np.sum(R,axis=2)
     
