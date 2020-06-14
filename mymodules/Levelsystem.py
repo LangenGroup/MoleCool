@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v1.4
+v1.4.2
 
 This module contains all classes and functions to define a System including
 all ``Level`` objects.
@@ -12,7 +12,7 @@ all ``Level`` objects.
 Example
 -------
 Below an empty Levelsystem is created which automatically initializes an instance
-of the :class:``Groundstates`` and the :class:``Excitedstates`` classes.
+of the :class:`Groundstates` and the :class:`Excitedstates` classes.
 Within these instances the respective ground states and excited states can be added:
     
     >>> levels = Levelsystem()

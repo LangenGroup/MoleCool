@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v1.4
+v1.4.2
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -22,10 +22,10 @@ lasers and calculating the dynamics::
     pol     = ('sigmap','sigmam')
     system.lasers.freq_pol_switch = 5e6
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6)
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6)
-    system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6)
-    system.lasers.add_sidebands(900.238e-9,14e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6)
+    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
+    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
+    system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
+    system.lasers.add_sidebands(900.238e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
     # use the following lasers without sidebands when `perfect_resonance`
     # input argument of the `calc_rateeqs` function is set to `True`.
     # system.lasers.add(859.830e-9,20e-3,pol)
@@ -61,10 +61,10 @@ a repumper each in the distance :math:`4mm`::
     system.v0 = np.array([200,0,0])
     system.r0 = np.array([-2e-3,0,0])
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6,k=[0,1,0])
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6,k=[0,1,0])
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6,k=[0,1,0],r_k=[4e-3,0,0])
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6,k=[0,1,0],r_k=[4e-3,0,0])
+    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6,k=[0,1,0])
+    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6,k=[0,1,0])
+    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6,k=[0,1,0],r_k=[4e-3,0,0])
+    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6,k=[0,1,0],r_k=[4e-3,0,0])
         
     system.levels.grstates.add_grstate(nu=0,N=1)    
     system.levels.grstates.add_grstate(nu=1,N=1)
@@ -462,7 +462,7 @@ def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,M,po
     if pos_dep:
         for p in range(pNum):
             d = np.linalg.norm(np.cross( y[-3:]-r_k[p] , k[p]/np.linalg.norm(k[p]) ))
-            sp[p] = sp[p] * np.exp(-2 * d**2 / ((0.2*w[p])**2) )
+            sp[p] = sp[p] * np.exp(-2 * d**2 / ((w[p])**2) )
     
     # shape of k: (pNum,3)
     # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
@@ -631,10 +631,10 @@ if __name__ == '__main__':
     system.v0 = np.array([0,0,0])
     system.r0 = np.array([0,0,0])
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6)
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6)
-    # system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6)
-    # system.lasers.add_sidebands(900.238e-9,14e-3,pol,AOM_shift=-20.65e6, EOM_freq=39.33e6)
+    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
+    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
+    # system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
+    # system.lasers.add_sidebands(900.238e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
     # system.lasers.add(859.830e-9,20e-3,pol)
     # system.lasers.add(895.699e-9,14e-3,pol)
     # system.lasers.add(897.961e-9,14e-3,pol)
@@ -657,27 +657,5 @@ if __name__ == '__main__':
     # system.N0 = np.array([*np.ones(system.levels.lNum),*np.zeros(system.levels.uNum)])/system.levels.lNum
     system.calc_rateeqs(t_int=20e-6,dt=None,perfect_resonance=False,
                         nodetuned_list=nodetuned_list,magn_remixing=False,
-                        velocity_dep=False,position_dep=False,calculated_by='YanGroupnew')
+                        velocity_dep=True,position_dep=False,calculated_by='YanGroupnew')
     
-
-
-'''
-print("Excitedstate ordering of columns:")
-for u in range(4):
-    ex = system.levels.exstates[u]
-    print("F'={}, mF={}".format(ex.F,ex.mF))
-for l in range(12):
-    ratios = []
-    for u in range(4):
-        gr ,ex = system.levels.grstates[l],system.levels.exstates[u]
-        ratios.append(branratios(gr,ex))
-    print("J={}, F={}, mF={:+}: {}".format(gr.J,gr.F,gr.mF,ratios))
-    
-print('Selection rules'')
-for l in range(13):
-    list_=[]
-    for u in range(4):
-        gr,ex=system.levels.grstates[l],system.levels.exstates[u]
-        list_.append(selrule(gr,ex,'sigmam'))
-    print(list_)
-'''

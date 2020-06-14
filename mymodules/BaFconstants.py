@@ -4,7 +4,7 @@ Created on Wed May 13 18:27:42 2020
 
 @author: fkogel
 
-v1.4
+v1.4.2
 
 Module with the BaF specific data to be able to perform molecule specific calculations.
 """
@@ -25,8 +25,8 @@ def get_Gamma():
 
 #%%
 def freq(gr,ex):
-    """Gives the angular frequency difference between an ground state <gr> and 
-    an excited state <ex> of BaF.
+    """Gives the angular frequency **difference** between an ground state <gr>
+    and an excited state <ex> of BaF.
 
     Parameters
     ----------
@@ -41,6 +41,9 @@ def freq(gr,ex):
     Note
     ----
     if **<gr>** is a loss state, the returned value is arbitrarily set as 1.
+    If a hyperfine state of the ground state lies **higher** than another
+    hyperfine state in the energy diagramm, the energy **difference**
+    which is returned by this function has to be **smaller!**.
     """
     # wavelengths of vibrational levels: cols: A(v') states, rows:X(v'') states
     lambda_vibr = np.array([
@@ -55,7 +58,7 @@ def freq(gr,ex):
         return  1# arbitraryly specified frequency
     else:
         #return 2*pi*( c/lambda_dict[ex.nu][gr.nu] + 1e6*J_F_dict[gr.J][gr.F] )
-        return 2*pi*(c/lambda_vibr[gr.nu,ex.nu] + 1e6*J_F_dict[gr.J][gr.F] )
+        return 2*pi*(c/lambda_vibr[gr.nu,ex.nu] - 1e6*J_F_dict[gr.J][gr.F] )
     
 #%%
 def vibrbranch(gr,ex):

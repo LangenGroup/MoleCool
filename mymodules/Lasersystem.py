@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v1.4
+v1.4.2
 
 This module contains all classes and functions to define a System including all ``Laser`` objects.
 
@@ -83,10 +83,11 @@ class Lasersystem:
         pols : str, tuple(str,str)
             polarization of the Laser beams.
         AOM_shift : float
-            the center Laser frequency is shifted by an additional AOM shift.
+            the center Laser frequency is shifted by an additional AOM shift 
+            (without 2 pi).
         EOM_freq : float
             starting from the AOM-shifted main frequency, 4 sideband Laserobjects
-            are added with shifted frequencies `[-2,-1,1,2]*EOM_freq`
+            are added with shifted frequencies `[-2,-1,1,2]*EOM_freq` (without 2 pi).
         **kwargs : TYPE
             optional arguments  (see :class:`Laser`).
 
@@ -146,7 +147,7 @@ class Laser:
             For polarization switching a tuple of two polarizations is needed.
         freq_shift : float, optional
             Shift of the laserfrequency (without 2 pi) additional to the
-            frequency determined by Param lamb. The default is 0.0.
+            frequency determined by Parameter lamb. The default is 0.0.
         FWHM : float, optional
             FullWidthHalfMaximum of the Gaussian intensity distribution of the
             laserbeam. The default is None.
