@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v1.4.2
+v1.4.3
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -83,7 +83,7 @@ a repumper each in the distance :math:`4mm`::
     system.plot_Nscatt()
 """
 import numpy as np
-from scipy.integrate import solve_ivp
+from scipy.integrate import solve_ivp, cumtrapz
 from scipy.constants import c,h,hbar,pi,g,u
 from BaFconstants import *
 from Lasersystem import *
@@ -305,7 +305,7 @@ class System:
                         tswitch,self.M))
         else:
             sol = solve_ivp(ode1_jit, (0,t_int),self.y0, method='RK45', t_eval=self.t_eval,
-                  dense_output=True, events=None, vectorized=False,
+                  dense_output=True, events=None, vectorized=False, max_step = 20e-6,
                   args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
                         self.delta,self.sp,self.w,self.k,self.r_k,self.m,
                         tswitch,self.M,position_dep))
@@ -319,12 +319,10 @@ class System:
         self.t = sol.t
         #: solution of the time dependent populations N
         self.N = sol.y[:lNum+uNum]
-        #: time dependent scattering number
-        self.Nscatt = np.zeros(len(self.t)-1)
         #: time dependent scattering rate
         self.Nscattrate = Gamma*np.sum(self.N[lNum:,:], axis=0)
-        for i in range(len(self.t)-1):
-            self.Nscatt[i] = np.sum( np.diff(self.t[:i+2]) * self.Nscattrate[:i+1] )
+        #: time dependent scattering number
+        self.Nscatt = cumtrapz(self.Nscattrate, self.t, initial = 0.0)
         #: totally scattered photons
         self.photons = self.Nscatt[-1]
         if verbose: print("Scattered Photons:",self.photons)
@@ -346,7 +344,7 @@ class System:
         plt.figure('Nscatt: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Totally scattered photons')
-        plt.plot(self.t[:len(self.Nscatt)]*1e6, self.Nscatt, '-')
+        plt.plot(self.t*1e6, self.Nscatt, '-')
     
     def plot_Nscattrate(self):
         plt.figure('Nscattrate: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
@@ -522,18 +520,19 @@ def save_object(obj,filename=None,maxsize=20e3):
     if filename == None:
         if hasattr(obj,'description'): filename = obj.description
         else: filename = type(obj).__name__ # instance is set to name of its class
-    maxs = maxsize
-    if obj.t.size > 2*maxs:
-        var_list = [obj.N,obj.t,obj.Nscatt,obj.Nscattrate]
-        for i,var in enumerate(var_list):
-            sh1 = int(var.shape[-1])
-            n1 = int(sh1 // maxs)
-            if var.ndim > 1:
-                var = var[:,:sh1-(sh1%n1)].reshape(var.shape[0],-1, n1).mean(axis=-1)
-            else: var = var[:sh1-(sh1%n1)].reshape(-1, n1).mean(axis=-1)
-            var_list[i] = var
-        obj.N,obj.t,obj.Nscatt,obj.Nscattrate = var_list
-    #self.N = np.array(self.N,dtype='float16')
+    if type(obj).__name__ == 'System':
+        maxs = maxsize
+        if obj.t.size > 2*maxs:
+            var_list = [obj.N,obj.t,obj.Nscatt,obj.Nscattrate]
+            for i,var in enumerate(var_list):
+                sh1 = int(var.shape[-1])
+                n1 = int(sh1 // maxs)
+                if var.ndim > 1:
+                    var = var[:,:sh1-(sh1%n1)].reshape(var.shape[0],-1, n1).mean(axis=-1)
+                else: var = var[:sh1-(sh1%n1)].reshape(-1, n1).mean(axis=-1)
+                var_list[i] = var
+            obj.N,obj.t,obj.Nscatt,obj.Nscattrate = var_list
+        #self.N = np.array(self.N,dtype='float16')
     with open(filename+'.pkl','wb') as output:
         pickle.dump(obj,output,-1)
         
