@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v1.4.3
+v1.4.4
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -155,10 +155,11 @@ class System:
         self.r0 = np.array([]) #: initial position of the particle
         print("System is created with description: {}".format(self.description))
         
-    def calc_rateeqs(self,t_int=20e-6,dt=None, perfect_resonance=False,
-                     nodetuned_list=[], magn_remixing=False, magn_strength=8,
+    def calc_rateeqs(self,t_int=20e-6,dt=None,t_eval = [],
+                     perfect_resonance=False, nodetuned_list=[],
+                     magn_remixing=False, magn_strength=8,
                      velocity_dep=False, position_dep=False,
-                     calculated_by='YanGroupnew',verbose=True):
+                     calculated_by='YanGroupnew',verbose=True,**kwargs):
         """Calculates the time evolution of the single level occupations with
         rate equations.        
 
@@ -171,6 +172,11 @@ class System:
             time step of the output data. So in this case the ODE solver will
             decide at which time points to calculate the solution.
             The default is None.
+        t_eval : list or numpy array, optional
+            If it desired to get the solution of the ode solver only at 
+            specific time points, the `t_eval` argument can be used to specify 
+            these points. If `_eval` is given, the `dt` argument is ignored.
+            The default is [].
         perfect_resonance : bool, optional
             Property if a certain vibrational levels are in perfect resonance
             (with no detuning) with a specific lasers
@@ -202,6 +208,9 @@ class System:
         verbose : bool, optional
             whether to print additional information like execution time or the
             scattered photon number. The default is True.
+        **kwargs : keyword arguments, optional
+            other options of the `solve_ivp` scipy function can be specified
+            (see homepage of scipy for further information).
         
         Note
         ----
@@ -228,10 +237,13 @@ class System:
         self.w      = np.array([la.w for la in self.lasers ])
         self.r_k    = np.array([ np.array(la.r_k,dtype=float) for la in self.lasers ])
         
-        if dt != None and dt < t_int:
-            self.t_eval = np.arange(0,t_int,dt)
+        if len(t_eval) != 0: self.t_eval = np.array(t_eval)
         else:
-            self.t_eval = None
+            if dt != None and dt < t_int:
+                self.t_eval = np.arange(0,t_int,dt)
+            else:
+                self.t_eval = None
+                
         self.r_   = np.zeros((lNum,uNum))
         self.rx1    = np.zeros((lNum,uNum,pNum))
         self.rx2    = np.zeros((lNum,uNum,pNum))
@@ -299,17 +311,17 @@ class System:
         if verbose: print('Solving ode...', end='')
         start_time = time.perf_counter()
         if not velocity_dep and not position_dep:
-            sol = solve_ivp(ode0_jit, (0,t_int), self.y0, method='RK45', t_eval=self.t_eval,
-                  dense_output=False, events=None, vectorized=False,
-                  args=(lNum,uNum,pNum,Gamma,self.r_,self.R1sum,self.R2sum,
-                        tswitch,self.M))
+            sol = solve_ivp(ode0_jit, (0,t_int), self.y0,
+                    t_eval=self.t_eval, **kwargs,
+                    args=(lNum,uNum,pNum,Gamma,self.r_,self.R1sum,self.R2sum,
+                          tswitch,self.M))
         else:
-            sol = solve_ivp(ode1_jit, (0,t_int),self.y0, method='RK45', t_eval=self.t_eval,
-                  dense_output=True, events=None, vectorized=False, max_step = 20e-6,
-                  args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
-                        self.delta,self.sp,self.w,self.k,self.r_k,self.m,
-                        tswitch,self.M,position_dep))
-            # first_step=0.02e-6,max_step=0.02e-6,
+            sol = solve_ivp(ode1_jit, (0,t_int), self.y0,
+                    t_eval=self.t_eval, max_step = 10e-6, **kwargs,
+                    args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
+                          self.delta,self.sp,self.w,self.k,self.r_k,self.m,
+                          tswitch,self.M,position_dep))
+
             self.v = sol.y[-6:-3]
             self.r = sol.y[-3:]
         self.exectime = time.perf_counter()-start_time
@@ -512,6 +524,7 @@ def save_object(obj,filename=None,maxsize=20e3):
         With this option the attributes ``N``, ``t``, ``Nscatt`` and
         ``Nscattrate`` are shrunken to this value by averaging over the other variable
         entries. Usefull for preventing the files to get to big in disk space.
+        The default is 20e3 which results approximately in a file size of 12MB.
 
     Returns
     -------
@@ -623,15 +636,17 @@ def selrule(gr,ex,pol):
 if __name__ == '__main__':
     system = System()
     
-    # pol     = 'lin'
+    pol     = 'lin'
     # pol     = 'sigmap'
-    pol     = ('sigmap','sigmam')
+    # pol     = ('sigmap','sigmam')
     system.lasers.freq_pol_switch = 5e6
-    system.v0 = np.array([0,0,0])
+    system.v0 = np.array([190,0,0])
     system.r0 = np.array([0,0,0])
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
+    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6,
+                                EOM_freq=39.33e6)#,k=[0,1,0],r_k=[10e-3,0,0])
+    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6,
+                                EOM_freq=39.33e6)#,k=[0,1,0],r_k=[10e-3,0,0])
     # system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
     # system.lasers.add_sidebands(900.238e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
     # system.lasers.add(859.830e-9,20e-3,pol)
@@ -654,7 +669,7 @@ if __name__ == '__main__':
     # excited state nu being in perfect resonance with the pth laser
     nodetuned_list = [(0,0,0),(1,0,1),(2,1,2),(3,2,3)]
     # system.N0 = np.array([*np.ones(system.levels.lNum),*np.zeros(system.levels.uNum)])/system.levels.lNum
-    system.calc_rateeqs(t_int=20e-6,dt=None,perfect_resonance=False,
-                        nodetuned_list=nodetuned_list,magn_remixing=False,
-                        velocity_dep=True,position_dep=False,calculated_by='YanGroupnew')
+    system.calc_rateeqs(t_int=20e-6,dt=None,perfect_resonance=False,method='LSODA',
+                        nodetuned_list=nodetuned_list,magn_remixing=True,
+                        velocity_dep=False,position_dep=False,calculated_by='YanGroupnew')
     
