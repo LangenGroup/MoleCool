@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v1.4.2
+v1.5.0
 
 This module contains all classes and functions to define a System including all ``Laser`` objects.
 
@@ -128,7 +128,8 @@ class Lasersystem:
 #%%
 class Laser:
     name = None #cooling / repumping laser
-    def __init__(self,lamb,P,pols,freq_shift=0,FWHM=None,w=None,k=[1,0,0],r_k=[0,0,0]):
+    def __init__(self,lamb,P,pols,freq_shift=0,FWHM=None,w=None,
+                 k=[1,0,0],r_k=[0,0,0],w_cylind=.0):
         """Sets up an Laser with its properties and can be included in the Lasersystem class.
         
         Note
@@ -180,14 +181,16 @@ class Laser:
             if w == None:
                 self.w      = (2*(pi*1.5e-3**2))**0.5
             else:
-                self.w = w #: 1/e^2 radius of the beam
+                self.w = w #: :math:`1/e^2` radius of the beam
             self.FWHM = 2*self.w / ( np.sqrt(2)/np.sqrt(np.log(2)) ) 
         else:
             self.FWHM = FWHM
             self.w = np.sqrt(2)/np.sqrt(np.log(2))*FWHM/2 # ~= 1.699*FWHM/2
         
-        #: float: :math: 2 P/(pi*w**2)
+        #: float: :math:`I =P/A` with the Area :math:`A=\pi w_1 w_2/2` of a 2dim Gaussian beam
         self.I      = 2*self.P/(pi*self.w**2) #self.P/(pi*1.5e-3)**2 ??? Laserwaistwidth 
+        if w_cylind != .0:
+            self.I = self.I*self.w/w_cylind 
         # Currently with **fixed** width of 1.5e-3
         #: float: angular frequency
         self.omega  = 2*pi*self.f
@@ -196,6 +199,7 @@ class Laser:
         """float: Energy of the photons of the laser."""
         self.k      = np.array(k)/np.linalg.norm(k) #unit vector
         self.r_k    = np.array(r_k) #point which is lying in the laserbeam
+        self.w_cylind = w_cylind
         
         if type(pols) == tuple and len(pols) == 2:
             pol1, pol2 = self._test_pol(pols[0]), self._test_pol(pols[1])

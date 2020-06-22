@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v1.4.4
+v1.5.0
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -221,6 +221,11 @@ class System:
         * ``self.Nscattrate`` : time dependent scattering rate,
         * ``self.photons``: totally scattered photons
         * ``self.args``: input arguments of the call of this function
+        * ``self.t`` : times at which the solution was calculated
+        * ``self.v`` : calculated velocities of the molecule at times `self.t`
+          (only given if velocity_dep == True)
+        * ``self.r`` : calculated positions of the molecule at times `self.t`
+          (only given if velocity_dep == True)
         
         Returns
         -------
@@ -235,6 +240,7 @@ class System:
                                 for la in self.lasers ])
         self.k      = np.array([ la.k*la.kabs for la in self.lasers ])
         self.w      = np.array([la.w for la in self.lasers ])
+        self.w_cylind = np.array([la.w_cylind for la in self.lasers ])
         self.r_k    = np.array([ np.array(la.r_k,dtype=float) for la in self.lasers ])
         
         if len(t_eval) != 0: self.t_eval = np.array(t_eval)
@@ -284,7 +290,7 @@ class System:
                 
                 for p in range(pNum):
                     la = self.lasers[p]
-                    self.delta[l,u,p]   = self.levels.freq_lu(l,u) - la.omega
+                    self.delta[l,u,p]   = -(self.levels.freq_lu(l,u) - la.omega)
                     #if nodetuning and abs(self.delta[l,u,p]) < 20e6*2*pi:
                     #    self.delta[l,u,p] = 0
                     if perfect_resonance:
@@ -319,8 +325,8 @@ class System:
             sol = solve_ivp(ode1_jit, (0,t_int), self.y0,
                     t_eval=self.t_eval, max_step = 10e-6, **kwargs,
                     args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
-                          self.delta,self.sp,self.w,self.k,self.r_k,self.m,
-                          tswitch,self.M,position_dep))
+                          self.delta,self.sp,self.w,self.w_cylind,
+                          self.k,self.r_k,self.m,tswitch,self.M,position_dep))
 
             self.v = sol.y[-6:-3]
             self.r = sol.y[-3:]
@@ -369,6 +375,16 @@ class System:
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Population sum $\sum N_i$')
         plt.plot(self.t*1e6, np.sum(self.N,axis=0), '-')
+    
+    def plot_dt(self):
+        if 'method' in self.args['kwargs']: method = self.args['kwargs']['method']
+        else: method = 'RK45'
+        plt.figure('dt: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
+        plt.xlabel('time $t$ in $\mu$s')
+        plt.ylabel('timestep d$t$ in s')
+        plt.plot(self.t[:-1]*1e6,np.diff(self.t),label=method)
+        plt.yscale('log')
+        plt.legend()
         
     def plot_v(self):
         plt.figure('v: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
@@ -463,16 +479,21 @@ def ode1(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,M,pos_de
 
 #%%
 @jit(nopython=True,parallel=False,fastmath=False)
-def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,M,pos_dep):    
+def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cylind,k,r_k,m,tswitch,M,pos_dep):    
     dydt = np.zeros(lNum+uNum+3+3)
     if floor(t/tswitch)%2 == 1: rx=rx1
     else: rx=rx2
     sp = sp_.copy()
     # position dependent Force on particle due to Gaussian shape of Laserbeam:
     if pos_dep:
-        for p in range(pNum):
-            d = np.linalg.norm(np.cross( y[-3:]-r_k[p] , k[p]/np.linalg.norm(k[p]) ))
-            sp[p] = sp[p] * np.exp(-2 * d**2 / ((w[p])**2) )
+        if w_cylind[0] != .0 :
+            for p in range(pNum):
+                sp[p] = sp[p] * np.exp(-2*( (y[-3]-r_k[p,0])**2/(w_cylind[p]**2)
+                                           +(y[-1]-r_k[p,2])**2/(w[p]**2)    ))
+        else:
+            for p in range(pNum):
+                d = np.linalg.norm(np.cross( y[-3:]-r_k[p] , k[p]/np.linalg.norm(k[p]) ))
+                sp[p] = sp[p] * np.exp(-2 * d**2 / ((w[p])**2) )
     
     # shape of k: (pNum,3)
     # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
@@ -574,7 +595,7 @@ def magn_remix(grs,magn_strength):
     ----------
     grs : :class:`~Levelsystem.Groundstates`
         groundstates for which the matrix is to be build.
-    magn_strenght : float
+    magn_strength : float
         measure of the magnetic field strength (i.e. the magnetic remixing
         matrix is multiplied by 10^magn_strength). Reasonable values are
         between 6 and 9.
@@ -590,7 +611,10 @@ def magn_remix(grs,magn_strength):
             if grs[i].name == 'Loss state' or grs[j].name == 'Loss state':
                 if grs[i].name == grs[j].name:
                     matr[i,j] = 1
-            elif grs[i].F == grs[j].F and grs[i].J == grs[j].J and abs(grs[i].mF-grs[j].mF) <= 1:
+            elif grs[i].nu      == grs[j].nu \
+                and grs[i].F    == grs[j].F \
+                and grs[i].J    == grs[j].J \
+                and abs(grs[i].mF-grs[j].mF) <= 1:
                 matr[i,j] = 1
     return 10**(magn_strength)*matr
 
@@ -643,33 +667,25 @@ if __name__ == '__main__':
     system.v0 = np.array([190,0,0])
     system.r0 = np.array([0,0,0])
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6,
-                                EOM_freq=39.33e6)#,k=[0,1,0],r_k=[10e-3,0,0])
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6,
-                                EOM_freq=39.33e6)#,k=[0,1,0],r_k=[10e-3,0,0])
-    # system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
+    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=16.7e6,
+                                EOM_freq=39.33e6,k=[0,1,0],r_k=[10e-3,0,0])
+    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=16.7e6,
+                                EOM_freq=39.33e6,k=[0,1,0],r_k=[10e-3,0,0])
+    # system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=16.7e6,
+                                # EOM_freq=39.33e6)
     # system.lasers.add_sidebands(900.238e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
     # system.lasers.add(859.830e-9,20e-3,pol)
     # system.lasers.add(895.699e-9,14e-3,pol)
     # system.lasers.add(897.961e-9,14e-3,pol)
     # system.lasers.add(900.238e-9,14e-3,pol)
     
-    system.levels.grstates.add_grstate(nu=0,N=1)    
-    system.levels.grstates.add_grstate(nu=1,N=1)
-    # system.levels.grstates.add_grstate(nu=2,N=1)
-    # system.levels.grstates.add_grstate(nu=3,N=1)
-    
-    system.levels.grstates.add_lossstate(nu=2)
-    
-    system.levels.exstates.add_exstate(nu=0,N=0,J=.5,p=+1)
-    # system.levels.exstates.add_exstate(nu=1,N=0,J=.5,p=+1)
-    # system.levels.exstates.add_exstate(nu=2,N=0,J=.5,p=+1)
+    system.levels.add_all_levels(nu_max=1)
     
     # nodetuned_list contains tuples (nu_gr,nu_ex,p) determining the ground-/
     # excited state nu being in perfect resonance with the pth laser
     nodetuned_list = [(0,0,0),(1,0,1),(2,1,2),(3,2,3)]
-    # system.N0 = np.array([*np.ones(system.levels.lNum),*np.zeros(system.levels.uNum)])/system.levels.lNum
-    system.calc_rateeqs(t_int=20e-6,dt=None,perfect_resonance=False,method='LSODA',
+    #system.N0 = np.array([*np.ones(system.levels.lNum),*np.zeros(system.levels.uNum)])/system.levels.lNum
+    system.calc_rateeqs(t_int=1000e-6,dt=None,perfect_resonance=False, method='LSODA',
                         nodetuned_list=nodetuned_list,magn_remixing=True,
                         velocity_dep=False,position_dep=False,calculated_by='YanGroupnew')
     

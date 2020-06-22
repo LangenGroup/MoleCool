@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v1.4.2
+v1.5.0
 
 This module contains all classes and functions to define a System including
 all ``Level`` objects.
@@ -45,6 +45,32 @@ class Levelsystem:
             return self.entries[index]
         #if indices are tuples instead (e.g. obj[1,3,2])
         return [self.entries[i] for i in index] 
+        
+    def add_all_levels(self,nu_max):
+        """
+        Function to add all ground and excited states with a loss state
+        in a convenient manner.
+
+        Parameters
+        ----------
+        nu_max : int
+            all ground states with vibrational levels :math:`\\nu\\le` `nu_max`
+            and respectively all excited states up to `(nu_max-1)` are added to
+            the subclasses :class:`Groundstates` and :class:`Excitedstates`.
+
+        Returns
+        -------
+        None.
+        """
+        for nu in range(nu_max+1):
+            self.grstates.add_grstate(nu=nu)      
+            
+        self.grstates.add_lossstate(nu=nu_max+1)
+        
+        if nu_max == 0: self.exstates.add_exstate(nu=0)
+        else:
+            for nu in range(nu_max):
+                self.exstates.add_exstate(nu=nu)
         
     def freq_lu(self,l,u):
         """Returns the angular frequency difference between a ground and an 
@@ -130,6 +156,22 @@ class Groundstates():
 
         """
         self.entries.append(Lossstate(nu))
+        
+    def print_magn_remix(self):
+        """Print out the magnetic remixing matrix of the ground states by the
+        usage of function :func:`System.magn_remix`.
+        """
+        from System import magn_remix
+        mat = magn_remix(self,0)
+        for l1 in range(self.lNum):
+            for l2 in range(self.lNum):
+                if l2 == (self.lNum-1): end = '\n'
+                else: 
+                    end = ''
+                if (l2+1) % 12 == 0: sep= '|'
+                else: sep = ''     
+                print(int(mat[l1,l2]),sep,end=end)
+            if (l1 +1) % 12 == 0: print(self.lNum*2*'_')
         
     def __getitem__(self,index):
         #if indeces are integers or slices (e.g. obj[3] or obj[2:4])
