@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v1.5.0
+v1.5.1
 
 This module contains all classes and functions to define a System including all ``Laser`` objects.
 
@@ -70,7 +70,7 @@ class Lasersystem:
         """
         self.entries.append( Laser( lamb, P, pols, **kwargs) ) 
         
-    def add_sidebands(self,lamb,P,pols,AOM_shift,EOM_freq,**kwargs):
+    def add_sidebands(self,lamb,P,pols,AOM_shift,EOM_freq,ratios=[0.8,1,1,0.8],**kwargs):
         """Adds four ``Lasers`` as sidebands (shifted by a certain AOM and EOM
         frequencies) instead of a single ``Laser`` object to the ``Lasersystem``.
         
@@ -79,7 +79,7 @@ class Lasersystem:
         lamb : float
             wavelength of the main transition.
         P : float
-            Power of the Laser.
+            Power of the Laser, i.e. sum of the powers of all sidebands.
         pols : str, tuple(str,str)
             polarization of the Laser beams.
         AOM_shift : float
@@ -88,6 +88,10 @@ class Lasersystem:
         EOM_freq : float
             starting from the AOM-shifted main frequency, 4 sideband Laserobjects
             are added with shifted frequencies `[-2,-1,1,2]*EOM_freq` (without 2 pi).
+        ratios : array_like, optional
+            ratios of the sidebands in the same order as the `EOM_freq` parameter.
+            (Will be normed to specify the individual sideband powers).
+            The default is [0.8,1,1,0.8].
         **kwargs : TYPE
             optional arguments  (see :class:`Laser`).
 
@@ -96,8 +100,8 @@ class Lasersystem:
         None.
 
         """
+        P_red       = np.array(ratios)/np.sum(ratios) *P
         EOM_freqs   = np.array([-2,-1,1,2])*EOM_freq
-        P_red       = np.array([0.8,1,1,0.8])*P
         for i in range(4):
             self.entries.append(Laser( lamb, P_red[i], pols,
                 freq_shift=AOM_shift+EOM_freqs[i], **kwargs) )
@@ -129,7 +133,7 @@ class Lasersystem:
 class Laser:
     name = None #cooling / repumping laser
     def __init__(self,lamb,P,pols,freq_shift=0,FWHM=None,w=None,
-                 k=[1,0,0],r_k=[0,0,0],w_cylind=.0):
+                 k=[1,0,0],r_k=[0,0,0],w_cylind=.0,beta=0.):
         """Sets up an Laser with its properties and can be included in the Lasersystem class.
         
         Note
@@ -155,12 +159,23 @@ class Laser:
         w : float, optional
             :math:`1/e^2` beam radius of the Gaussian intensity distribution.
             The default is None.
+        w_cylind : float, optional
+            :math:`1/e^2` beam radius of the Gaussian intensity distribution
+            along x direction for the specific configuration where the
+            laser beam is aligned in y axis direction and has a widened intensity
+            distribution along x axis with radius `w_cylind`. The distribution
+            along the z axis is given by the radius `w`.
+            The default is 0.0.
         k : list or array type of dimension 3, optional
             direction of the wave vector of the laserbeam. The inserted array
             is automatically normalized to unit vector. The default is [1,0,0].
         r_k : list or array type of dimension 3, optional
             a certain point which is located anywhere within the laserbeam.
             The default is [0,0,0].
+        beta : float, optional
+            When the frequency of the laser should be varied linearly in time,
+            then `beta` defines the chirping rate in Hz/s (without factor of 2 pi).
+            The default is 0.0.
 
         Raises
         ------
@@ -200,6 +215,7 @@ class Laser:
         self.k      = np.array(k)/np.linalg.norm(k) #unit vector
         self.r_k    = np.array(r_k) #point which is lying in the laserbeam
         self.w_cylind = w_cylind
+        self.beta   = beta
         
         if type(pols) == tuple and len(pols) == 2:
             pol1, pol2 = self._test_pol(pols[0]), self._test_pol(pols[1])
@@ -226,4 +242,4 @@ class Laser:
         #__str__ method is called when an object of a class is printed with print(obj)
         return 'lamb={:.2e}, P={:.2e}, f={:.2e}, pols={}, pol_switching={}'.format(
             self.lamb,self.P,self.f,(self.pol1,self.pol2),self.pol_switching)
-            
+                   

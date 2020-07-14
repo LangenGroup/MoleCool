@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v1.5.0
+v1.5.1
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -155,7 +155,7 @@ class System:
         self.r0 = np.array([]) #: initial position of the particle
         print("System is created with description: {}".format(self.description))
         
-    def calc_rateeqs(self,t_int=20e-6,dt=None,t_eval = [],
+    def calc_rateeqs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
                      perfect_resonance=False, nodetuned_list=[],
                      magn_remixing=False, magn_strength=8,
                      velocity_dep=False, position_dep=False,
@@ -168,6 +168,12 @@ class System:
         t_int : float, optional
             interaction time in which the molecule is exposed to the lasers.
             The default is 20e-6.
+        t_start : float, optional
+            starting time when the ode_solver starts the calculation. Useful
+            for the situation when e.g. all cooling lasers are shut off at a 
+            specific time t1, so that a new calculation with another laser
+            configuration (e.g. including only a probe laser) can be started
+            at t_start=t1 to continue the simulation. The default is 0.0.
         dt : float, optional
             time step of the output data. So in this case the ODE solver will
             decide at which time points to calculate the solution.
@@ -242,11 +248,12 @@ class System:
         self.w      = np.array([la.w for la in self.lasers ])
         self.w_cylind = np.array([la.w_cylind for la in self.lasers ])
         self.r_k    = np.array([ np.array(la.r_k,dtype=float) for la in self.lasers ])
+        self.beta   = np.array([la.beta for la in self.lasers ])
         
         if len(t_eval) != 0: self.t_eval = np.array(t_eval)
-        else:
+        else:   
             if dt != None and dt < t_int:
-                self.t_eval = np.arange(0,t_int,dt)
+                self.t_eval = np.linspace(t_start,t_start+t_int,int(t_int/dt)+1)
             else:
                 self.t_eval = None
                 
@@ -265,24 +272,6 @@ class System:
         else:
             self.y0      = self.N0
         
-        # if velocity_dep or position_dep:
-        #     if self.N0.ndim == 2 or self.v0.ndim == 2 or self.r0.ndim == 2:
-        #         y0_ = [self.N0,self.v0,self.r0]
-        #         y0_dims = np.zeros(3)
-        #         for i in range(3):
-        #             if y0_[i].ndim == 1:
-        #                 y0_[i] = y0_[i][:,None]
-        #             dims[i] = y0_[i].shape[0]
-        #         self.y0 = np.zeros((max(dims),lNum+uNum+3+3))
-        #         self.y0[:,:(lNum+uNum)]                 = y0_[0]
-        #         self.y0[:,(lNum+uNum):(lNum+uNum+3)]    = y0_[1]
-        #         self.y0[:,(lNum+uNum+3):]               = y0_[2]
-        #     else:
-        #         self.y0  = np.array([[*self.N0, *self.v0, *self.r0]])
-        # else:
-        #     self.y0      = self.N0
-        
-            
         for l in range(lNum):
             for u in range(uNum):
                 gr,ex       = self.levels.grstates[l],self.levels.exstates[u]
@@ -317,16 +306,16 @@ class System:
         if verbose: print('Solving ode...', end='')
         start_time = time.perf_counter()
         if not velocity_dep and not position_dep:
-            sol = solve_ivp(ode0_jit, (0,t_int), self.y0,
+            sol = solve_ivp(ode0_jit, (t_start,t_start+t_int), self.y0,
                     t_eval=self.t_eval, **kwargs,
                     args=(lNum,uNum,pNum,Gamma,self.r_,self.R1sum,self.R2sum,
                           tswitch,self.M))
         else:
-            sol = solve_ivp(ode1_jit, (0,t_int), self.y0,
+            sol = solve_ivp(ode1_jit, (t_start,t_start+t_int), self.y0,
                     t_eval=self.t_eval, max_step = 10e-6, **kwargs,
                     args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
                           self.delta,self.sp,self.w,self.w_cylind,
-                          self.k,self.r_k,self.m,tswitch,self.M,position_dep))
+                          self.k,self.r_k,self.m,tswitch,self.M,position_dep,self.beta))
 
             self.v = sol.y[-6:-3]
             self.r = sol.y[-3:]
@@ -479,7 +468,7 @@ def ode1(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,M,pos_de
 
 #%%
 @jit(nopython=True,parallel=False,fastmath=False)
-def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cylind,k,r_k,m,tswitch,M,pos_dep):    
+def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cylind,k,r_k,m,tswitch,M,pos_dep,beta):    
     dydt = np.zeros(lNum+uNum+3+3)
     if floor(t/tswitch)%2 == 1: rx=rx1
     else: rx=rx2
@@ -494,11 +483,11 @@ def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cylind,k,r_k,m,tsw
             for p in range(pNum):
                 d = np.linalg.norm(np.cross( y[-3:]-r_k[p] , k[p]/np.linalg.norm(k[p]) ))
                 sp[p] = sp[p] * np.exp(-2 * d**2 / ((w[p])**2) )
-    
+    delta_ = delta + 2*pi*beta*t #frequency chirping
     # shape of k: (pNum,3)
     # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
     # R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
-    R = Gamma/2 * (rx*sp) / ( 1+4*( delta - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/Gamma**2 )    
+    R = Gamma/2 * (rx*sp) / ( 1+4*( delta_ - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/Gamma**2 )    
     # sum R over pNum
     R_sum = np.sum(R,axis=2)
     
@@ -557,7 +546,7 @@ def save_object(obj,filename=None,maxsize=20e3):
     if type(obj).__name__ == 'System':
         maxs = maxsize
         if obj.t.size > 2*maxs:
-            var_list = [obj.N,obj.t,obj.Nscatt,obj.Nscattrate]
+            var_list = [obj.N,obj.t,obj.Nscatt,obj.Nscattrate,obj.v,obj.r]
             for i,var in enumerate(var_list):
                 sh1 = int(var.shape[-1])
                 n1 = int(sh1 // maxs)
@@ -565,7 +554,7 @@ def save_object(obj,filename=None,maxsize=20e3):
                     var = var[:,:sh1-(sh1%n1)].reshape(var.shape[0],-1, n1).mean(axis=-1)
                 else: var = var[:sh1-(sh1%n1)].reshape(-1, n1).mean(axis=-1)
                 var_list[i] = var
-            obj.N,obj.t,obj.Nscatt,obj.Nscattrate = var_list
+            obj.N,obj.t,obj.Nscatt,obj.Nscattrate,obj.v,obj.r = var_list
         #self.N = np.array(self.N,dtype='float16')
     with open(filename+'.pkl','wb') as output:
         pickle.dump(obj,output,-1)
