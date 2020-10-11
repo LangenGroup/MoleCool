@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v1.5.1
+v2.0.0
 
 This module contains all classes and functions to define a System including all ``Laser`` objects.
 
@@ -105,7 +105,11 @@ class Lasersystem:
         for i in range(4):
             self.entries.append(Laser( lamb, P_red[i], pols,
                 freq_shift=AOM_shift+EOM_freqs[i], **kwargs) )
-            
+    
+    def __delitem__(self,index):
+        #delete lasers with del system.lasers[<normal indexing>], or delete all del system.lasers[:]
+        del self.entries[index]
+        
     def __getitem__(self,index):
         #if indeces are integers or slices (e.g. obj[3] or obj[2:4])
         if isinstance(index, (int, slice)): 
@@ -132,7 +136,7 @@ class Lasersystem:
 #%%
 class Laser:
     name = None #cooling / repumping laser
-    def __init__(self,lamb,P,pols,freq_shift=0,FWHM=None,w=None,
+    def __init__(self,lamb,P,pols,pol_direction=None,freq_shift=0,FWHM=None,w=None,
                  k=[1,0,0],r_k=[0,0,0],w_cylind=.0,beta=0.):
         """Sets up an Laser with its properties and can be included in the Lasersystem class.
         
@@ -223,12 +227,34 @@ class Laser:
         elif type(pols) == str:
             pol1, pol2 = self._test_pol(pols), self._test_pol(pols)
             self.pol_switching = False
+            if pol_direction == None:
+                if pol1 == 'lin':       self.f_q = np.array([0,1.,0]) #q= 0; mF -> mF'= mF
+                elif pol1 == 'sigmam':    self.f_q = np.array([1.,0,0]) #q=-1; mF -> mF'= mF-1
+                elif pol1 == 'sigmap':    self.f_q = np.array([0,0,1.]) #q=+1; mF -> mF'= mF+1
+            else:
+                p = pol_direction
+                x = np.array([+1., 0,-1.])/np.sqrt(2)
+                y = np.array([+1., 0,+1.])*1j/np.sqrt(2)
+                z = np.array([ 0, +1, 0 ])
+                if len(p) == 1:
+                    if p == 'x': f_q = x
+                    if p == 'y': f_q = y
+                    if p == 'z': f_q = z
+                if len(p) == 2:
+                    if pol1 == 'sigmap':
+                        a1,a2 = -1., -1j
+                    elif pol1 == 'sigmam':
+                        a1,a2 = +1., -1j
+                    if p == 'xy':   f_q = a1*x + a2*y
+                    elif p == 'xz': f_q = a1*z + a2*x
+                    elif p == 'yz': f_q = a1*y + a2*z
+                self.f_q = f_q / np.linalg.norm(f_q)
         else:
             raise Exception("Wrong datatype or length of <pol>: either tuple((2)) or str allowed")
         self.pol1,self.pol2 = pol1,pol2
         
     def _test_pol(self,pol):
-        pol_list = ['lin','sigmap','sigmam']
+        pol_list = ['lin','sigmap','sigmam','x','y','z','xy','xz','yz']
         if pol in pol_list:
             return pol
         else:
