@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v2.0.0
+v2.1.0
 
 This module contains all classes and functions to define a System including
 all ``Level`` objects.
@@ -168,12 +168,6 @@ class Levelsystem:
             print('WARNING: there is no dipole matrix or reduced dipole matrix available! So a reduced matrix has been created only with ones:')
             print(self._dMat_red)
         return self._dMat_red
-    dMat = property(get_dMat)
-    dMat_red = property(get_dMat_red)
-    # def set_dMat_red(self,x):
-    #     # self._dMat = None
-    #     self._dMat_red = x
-    # dMat_red = property(get_dMat_red,set_dMat_red)
 
     def get_vibrbranch(self):
         if np.all(self._vibrbranch) != None: return self._vibrbranch
@@ -222,14 +216,23 @@ class Levelsystem:
                                      ]
         return self._gfac
     
+    dMat        = property(get_dMat)
+    dMat_red    = property(get_dMat_red)
+    # def set_dMat_red(self,x):
+    #     # self._dMat = None
+    #     self._dMat_red = x
+    # dMat_red = property(get_dMat_red,set_dMat_red)
+    vibrbranch  = property(get_vibrbranch)
+    freq        = property(get_freq)
+    gfac        = property(get_gfac)
     #%%
-    def calc_dMat(self):
+    def calc_dMat(self,calculated_by='YanGroupNew'):
         #levels._dMat.xs((1.5,2,-1),level=('J','F','mF'),axis=0,drop_level=True).xs((0.5,1,-1),level=("J'","F'","mF'"),axis=1,drop_level=True)
         if np.all(self.__dMat_arr) != None: return self.__dMat_arr
         nu_max      = self.grstates.nu_max, self.exstates.nu_max
         vibrbranch  = self.get_vibrbranch().iloc[:nu_max[0]+1, :nu_max[1]+1]
         vibrbranch /= vibrbranch.sum(axis=0)
-        dMat        = self.get_dMat()
+        dMat        = self.get_dMat(calculated_by=calculated_by)
         dMat       /= np.sqrt((dMat**2).sum(axis=0))
         self.__dMat_arr = np.zeros((self.lNum,self.uNum,3)) #is this normalization needed or only at the end of this function
         for l,gr in enumerate(self.grstates):
@@ -248,7 +251,7 @@ class Levelsystem:
     
     def calc_branratios(self,calculated_by='YanGroupnew'):
         if np.all(self.__branratios_arr) != None: return self.__branratios_arr
-        self.__branratios_arr = (self.calc_dMat()**2).sum(axis=2)
+        self.__branratios_arr = (self.calc_dMat(calculated_by=calculated_by)**2).sum(axis=2)
         return self.__branratios_arr
     
     def calc_freq(self):

@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v2.0.0
+v2.1.0
 
 This module contains all classes and functions to define a System including all ``Laser`` objects.
 
@@ -136,8 +136,8 @@ class Lasersystem:
 #%%
 class Laser:
     name = None #cooling / repumping laser
-    def __init__(self,lamb,P,pols,pol_direction=None,freq_shift=0,FWHM=None,w=None,
-                 k=[1,0,0],r_k=[0,0,0],w_cylind=.0,beta=0.):
+    def __init__(self,lamb,P,pols,pol_direction=None,freq_shift=0,phi=0.0,
+                 FWHM=None,w=None, k=[1,0,0],r_k=[0,0,0],w_cylind=.0,beta=0.):
         """Sets up an Laser with its properties and can be included in the Lasersystem class.
         
         Note
@@ -220,6 +220,7 @@ class Laser:
         self.r_k    = np.array(r_k) #point which is lying in the laserbeam
         self.w_cylind = w_cylind
         self.beta   = beta
+        self.phi    = phi
         
         if type(pols) == tuple and len(pols) == 2:
             pol1, pol2 = self._test_pol(pols[0]), self._test_pol(pols[1])

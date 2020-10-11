@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.0.0
+v2.1.0
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -474,6 +474,8 @@ class System:
         self.G      = np.array([ la.I / ( pi*c*h*Gamma/(3*la.lamb**3) ) 
                                 for la in self.lasers ])**0.5
         self.f      = np.array([la.f_q for la in self.lasers])
+        self.k      = np.array([ la.k*la.kabs for la in self.lasers ])
+        self.phi    = np.array([la.phi for la in self.lasers])
         self.omega_k    = np.array([la.omega for la in self.lasers])
         #polarization switching time
         tswitch = 1/self.lasers.freq_pol_switch        
@@ -538,7 +540,7 @@ class System:
                 
         #___depenending on the position dependence two different ODE evaluation functions are called
         if velocity_dep or position_dep:
-            self.y0      = np.array([*self.N0, *self.v0, *self.r0])
+            self.y0      = N0_vec#np.array([*self.N0, *self.v0, *self.r0])
         else:
             self.y0      = N0_vec
         
@@ -552,6 +554,12 @@ class System:
                             args=(lNum,uNum,pNum,self.G,self.f,self.omega_eg/Gamma,
                                   self.omega_k/Gamma,betaB,self.dMat,self.muMat,
                                   self.M_indices))
+        else:
+            sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+                            self.y0, t_eval=T_eval, **kwargs,
+                            args=(lNum,uNum,pNum,self.G,self.f,self.omega_eg/Gamma,
+                                  self.omega_k/Gamma,betaB,self.dMat,self.muMat,
+                                  self.M_indices,self.k/Gamma,self.v0,self.phi))
         #execution time for the ODE solving
         self.exectime = time.perf_counter()-start_time
         if verbose: print(" execution time: {:.4f} seconds".format(self.exectime))
@@ -641,6 +649,74 @@ def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices):
                         dymat[a,b] -= 1j*G[k]/2/(2**0.5)*(
                             f[k,q+1] *np.exp(1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,b]
                             - np.conj(f[k,q+1]) *np.exp(-1j*T*(om_eg[b,c_]-om_k[k]))* dMat[b,c_,q+1]* ymat[a,lNum+c_])
+                for n in M_indices[0][b]:
+                    dymat[a,b] += 1j*(-1.)**q* betaB[q+1]* muMat[0][b,n,-q+1]* ymat[a,n]
+                for m in M_indices[0][a]:
+                    dymat[a,b] -= 1j*(-1.)**q* betaB[q+1]* muMat[0][m,a,-q+1]* ymat[m,b]
+                for c_ in range(uNum):
+                    for c__ in range(uNum):
+                        dymat[a,b] += dMat[a,c_,q+1]* dMat[b,c__,q+1]* np.exp(1j*T*(om_eg[a,c_]-om_eg[b,c__]))* ymat[lNum+c_,lNum+c__]
+    
+    dy_vec = np.zeros( N*(N+1) )
+    count = 0
+    for i in range(N):
+        for j in range(i,N):
+            dy_vec[count]   = dymat[i,j].real
+            dy_vec[count+1] = dymat[i,j].imag
+            count += 2
+
+    return dy_vec
+
+#%%
+@jit(nopython=True,parallel=False,fastmath=False)
+def ode1_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices,kvec,v,phi):
+    N       = lNum+uNum
+    dymat   = np.zeros((N,N),dtype=np.complex64)
+    
+    ymat    = np.zeros((N,N),dtype=np.complex64)
+    count   = 0
+    for i in range(N):
+        for j in range(i,N):
+            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
+            count += 2     
+    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
+    for index in range(N):
+        ymat[index,index] *=0.5
+    
+    for a in range(lNum):
+        for b in range(uNum):
+            for q in [-1,0,1]:
+                for k in range(pNum):
+                    for c in range(lNum):
+                        dymat[a,lNum+b] += 1j*G[k]*f[k,q+1]/2/(2**0.5) *np.exp(1j*(T*np.dot(kvec[k,:],v)+phi[k])) *np.exp(1j*T*(om_eg[c,b]-om_k[k]))* dMat[c,b,q+1]* ymat[a,c]
+                    for c_ in range(uNum):
+                        dymat[a,lNum+b] -= 1j*G[k]*f[k,q+1]/2/(2**0.5) *np.exp(1j*(T*np.dot(kvec[k,:],v)+phi[k])) *np.exp(1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,lNum+b]
+                for n in M_indices[1][b]:
+                    dymat[a,lNum+b] += 1j*(-1.)**q* betaB[q+1]* muMat[1][b,n,-q+1]* ymat[a,lNum+n]
+                for m in M_indices[0][a]:
+                    dymat[a,lNum+b] -= 1j*(-1.)**q* betaB[q+1]* muMat[0][m,a,-q+1]* ymat[m,lNum+b]
+            dymat[a,lNum+b] -= 0.5*ymat[a,lNum+b]
+    for a in range(uNum):
+        for b in range(a,uNum):
+            for q in [-1,0,1]:
+                for k in range(pNum):
+                    for c in range(lNum):
+                        dymat[lNum+a,lNum+b] += 1j*G[k]/2/(2**0.5)*(
+                            f[k,q+1] *np.exp(1j*(T*np.dot(kvec[k,:],v)+phi[k])) *np.exp(1j*T*(om_eg[c,b]-om_k[k]))* dMat[c,b,q+1]* ymat[lNum+a,c]
+                            - np.conj(np.exp(1j*(T*np.dot(kvec[k,:],v)+phi[k])) *f[k,q+1]) *np.exp(-1j*T*(om_eg[c,a]-om_k[k]))* dMat[c,a,q+1]* ymat[c,lNum+b])
+                for n in M_indices[1][b]:
+                    dymat[lNum+a,lNum+b] += 1j*(-1.)**q* betaB[q+1]* muMat[1][b,n,-q+1]* ymat[lNum+a,lNum+n]
+                for m in M_indices[1][a]:
+                    dymat[lNum+a,lNum+b] -= 1j*(-1.)**q* betaB[q+1]* muMat[1][m,a,-q+1]* ymat[lNum+m,lNum+b]
+            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]
+    for a in range(lNum):
+        for b in range(a,lNum):
+            for q in [-1,0,1]:
+                for k in range(pNum):
+                    for c_ in range(uNum):
+                        dymat[a,b] -= 1j*G[k]/2/(2**0.5)*(
+                            f[k,q+1] *np.exp(1j*(T*np.dot(kvec[k,:],v)+phi[k])) *np.exp(1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,b]
+                            - np.conj(np.exp(1j*(T*np.dot(kvec[k,:],v)+phi[k])) *f[k,q+1]) *np.exp(-1j*T*(om_eg[b,c_]-om_k[k]))* dMat[b,c_,q+1]* ymat[a,lNum+c_])
                 for n in M_indices[0][b]:
                     dymat[a,b] += 1j*(-1.)**q* betaB[q+1]* muMat[0][b,n,-q+1]* ymat[a,n]
                 for m in M_indices[0][a]:
