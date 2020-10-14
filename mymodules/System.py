@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.1.0
+v2.2.0
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -445,7 +445,7 @@ class System:
         plt.xlabel('Frequency $f$ in MHz')
         plt.ylabel('Power spectrum of the FFT')
     
-    def calc_Rabi_freqs(self):
+    def calc_Rabi_freqs(self,print_all=False):
         #calculates detuning-weighted, averaged Rabi frequencies for every laser (with 2*pi included)
         Gamma = self.levels.exstates.Gamma
         Rabi_freqs = []
@@ -455,6 +455,7 @@ class System:
             weights = weights*np.sign(Rabi_freqs_arr) * (np.dot(self.dMat, self.f[k,:]))**2
             # print(Rabi_freqs_arr,'\n',weights)
             Rabi_freqs.append( (Rabi_freqs_arr*weights).sum()/weights.sum() )
+            if print_all: print(Rabi_freqs_arr/2/pi*1e-6)
         self.Rabi_freqs = np.array(Rabi_freqs)
         return self.Rabi_freqs
     
@@ -462,6 +463,7 @@ class System:
     def calc_OBEs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
                   perfect_resonance=False, nodetuned_list=[],
                   magn_remixing=False, magn_strength=8,
+                  freq_clip_TH=500, steadystate=False,
                   velocity_dep=False, position_dep=False,
                   calculated_by='Lucas',verbose=True,**kwargs):
         
@@ -483,9 +485,21 @@ class System:
         #___parameters belonging to the levels (and partially to the lasers)
         self.m      = self.levels.mass 
         #electric dipole matrix
-        self.dMat = self.levels.calc_dMat()
+        self.dMat   = self.levels.calc_dMat()
         #frequency differences between the ground and excited states
-        self.omega_eg   = self.levels.calc_freq()
+        self.omega_eg = self.levels.calc_freq()
+        #change the intensity factor G_k when Rabi frequency is provided 
+        for k,la in enumerate(self.lasers):
+            Rabi = la.freq_Rabi
+            if Rabi != None:
+                ratio = Rabi/self.calc_Rabi_freqs()[k]
+                self.G[k]           *= ratio
+                self.lasers[k].I    *= ratio**2       
+        #coefficients h to neglect highly-oscillating terms of the OBEs (with frequency threshold freq_clip_TH)
+        h_gek  = np.abs(self.omega_eg[:,:,None]-self.omega_k[None,None,:])
+        h_gek  = np.where(h_gek  < freq_clip_TH*Gamma, 1.0, 0.0)
+        h_gege = np.abs(self.omega_eg[:,:,None,None]-self.omega_eg[None,None,:,:])
+        h_gege = np.where(h_gege < freq_clip_TH*Gamma, 1.0, 0.0)
         
         #___magnetic remixing of the ground states and excited states
         if magn_remixing:
@@ -509,15 +523,6 @@ class System:
                             if gr.nu == nu_gr and ex.nu == nu_ex and p == p_:
                                 self.omega_eg[l,u] = self.omega_k[p]
         
-        #___determine the time points at which the ODE solver should evaluate the equations    
-        if len(t_eval) != 0: self.t_eval = np.array(t_eval)
-        else:   
-            if dt != None and dt < t_int:
-                self.t_eval = np.linspace(t_start,t_start+t_int,int(t_int/dt)+1)
-            else:
-                self.t_eval, T_eval = None, None
-        if np.all(self.t_eval) != None: T_eval = self.t_eval * Gamma
-        
         #___specify the initial (normalized) occupations of the levels
         N = lNum + uNum
         N0mat = np.zeros((N,N),dtype=np.complex64)
@@ -528,58 +533,96 @@ class System:
             for i in N0_indices:
                 self.N0[i] = 1.0
         self.N0 /= self.N0.sum()
-        #transform these initial values into the density matrix elements
-        N0mat[(np.arange(N),np.arange(N))] = self.N0   
-        N0_vec = np.zeros( N*(N+1) )
-        count = 0
-        for i in range(N):
-            for j in range(i,N):
-                N0_vec[count]   = N0mat[i,j].real
-                N0_vec[count+1] = N0mat[i,j].imag
-                count += 2
-                
-        #___depenending on the position dependence two different ODE evaluation functions are called
-        if velocity_dep or position_dep:
-            self.y0      = N0_vec#np.array([*self.N0, *self.v0, *self.r0])
-        else:
-            self.y0      = N0_vec
+        #transform these initial values into the density matrix elements N0mat
+        N0mat[(np.arange(N),np.arange(N))] = self.N0
         
-        # ---------------Ordinary Differential Equation solver----------------
-        # solve initial value problem of the ordinary first order differential equation with scipy
         if verbose: print('Solving ode with OBEs...', end='')
         start_time = time.perf_counter()
-        if not velocity_dep and not position_dep:
-            sol = solve_ivp(ode0_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
-                            self.y0, t_eval=T_eval, **kwargs,
-                            args=(lNum,uNum,pNum,self.G,self.f,self.omega_eg/Gamma,
-                                  self.omega_k/Gamma,betaB,self.dMat,self.muMat,
-                                  self.M_indices))
-        else:
-            sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
-                            self.y0, t_eval=T_eval, **kwargs,
-                            args=(lNum,uNum,pNum,self.G,self.f,self.omega_eg/Gamma,
-                                  self.omega_k/Gamma,betaB,self.dMat,self.muMat,
-                                  self.M_indices,self.k/Gamma,self.v0,self.phi))
-        #execution time for the ODE solving
+        
+        #___if steady state is wanted, multiple calculation steps of the OBEs
+        #___have to be performed while the occupations between this steps are compared
+        for step in range(1000):    
+            #___determine the time points at which the ODE solver should evaluate the equations    
+            if len(t_eval) != 0:
+                self.t_eval = np.array(t_eval)
+            else:   
+                if dt != None and dt < t_int:
+                    self.t_eval = np.linspace(t_start,t_start+t_int,int(t_int/dt)+1)
+                else:
+                    self.t_eval, T_eval = None, None
+            if np.all(self.t_eval) != None:
+                T_eval = self.t_eval * Gamma
+            
+            #___transform the initial density matrix N0mat in a vector
+            N0_vec = np.zeros( N*(N+1) )
+            count = 0
+            for i in range(N):
+                for j in range(i,N):
+                    N0_vec[count]   = N0mat[i,j].real
+                    N0_vec[count+1] = N0mat[i,j].imag
+                    count += 2
+                    
+            #___depenending on the position dependence two different ODE evaluation functions are called
+            if velocity_dep or position_dep:
+                self.y0      = N0_vec#np.array([*self.N0, *self.v0, *self.r0])
+            else:
+                self.y0      = N0_vec
+            
+            # ---------------Ordinary Differential Equation solver----------------
+            # solve initial value problem of the ordinary first order differential equation with scipy
+            if not velocity_dep and not position_dep:
+                sol = solve_ivp(ode0_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+                                self.y0, t_eval=T_eval, **kwargs,
+                                args=(lNum,uNum,pNum,self.G,self.f,self.omega_eg/Gamma,
+                                      self.omega_k/Gamma,betaB,self.dMat,self.muMat,
+                                      self.M_indices,h_gek,h_gege))
+            else:
+                sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+                                self.y0, t_eval=T_eval, **kwargs,
+                                args=(lNum,uNum,pNum,self.G,self.f,self.omega_eg/Gamma,
+                                      self.omega_k/Gamma,betaB,self.dMat,self.muMat,
+                                      self.M_indices,self.k/Gamma,self.v0,self.phi))
+            
+            #___transform the solution vectors back to the density matrix ymat
+            y_vec = sol.y
+            #: solution of the time dependent density matrix elements
+            self.ymat    = np.zeros((N,N,y_vec.shape[-1]),dtype=np.complex64)
+            count   = 0
+            for i in range(N):
+                for j in range(i,N):
+                    self.ymat[i,j,:] = y_vec[count] + 1j* y_vec[count+1]
+                    count += 2     
+            self.ymat    += np.conj(np.transpose(self.ymat,axes=(1,0,2))) #is diagonal remaining purely real or complex?
+            self.ymat[(np.arange(N),np.arange(N))] *=0.5
+            #: solution of the time dependent populations N
+            self.N = np.real(self.ymat[(np.arange(N),np.arange(N))])
+            #: array of the times at which the solutions are calculated
+            self.t = sol.t/Gamma
+            
+            if not steadystate: break
+            if step == 0:
+                length  = int(y_vec.shape[-1]/20)
+            else:
+                length  = int(y_vec.shape[-1]/2)
+            m1      = self.N[:, -(2*length):-length].mean(axis=1)
+            m2      = self.N[:, -length:           ].mean(axis=1)
+            # print('diff & prop',np.all(np.abs(m1-m2)*1e2<0.01),np.all(np.abs(1-m1/m2)*1e2 <5))
+            # print('prop\n',np.all(np.abs(1-m1/m2)*1e2 <5))
+            #___check if conditions for steady state are fulfilled
+            if np.all(np.abs(m1-m2)*1e2 < 0.01) and np.all(np.abs(1-m1/m2)*1e2 < 5):
+                break
+            else:
+                N0mat   = self.ymat[:,:,-1]
+                t_start = self.t[-1]
+                t_int   = self.t[-1] - self.t[-(2*length)]
+        if verbose: print(' calculation steps: ',step)
+        
+        #___execution time for the ODE solving
         self.exectime = time.perf_counter()-start_time
         if verbose: print(" execution time: {:.4f} seconds".format(self.exectime))
         self.calcmethod = 'OBEs'
         
         #___compute several physical variables using the solution of the ODE
-        #: array of the times at which the solutions are calculated
-        self.t = sol.t/Gamma
-        #: solution of the time dependent density matrix elements
-        self.ymat    = np.zeros((N,N,self.t.size),dtype=np.complex64)
-        y_vec = sol.y
-        count   = 0
-        for i in range(N):
-            for j in range(i,N):
-                self.ymat[i,j,:] = y_vec[count] + 1j* y_vec[count+1]
-                count += 2     
-        self.ymat    += np.conj(np.transpose(self.ymat,axes=(1,0,2))) #is diagonal remaining purely real or complex?
-        self.ymat[(np.arange(N),np.arange(N))] *=0.5
-        #: solution of the time dependent populations N
-        self.N = np.real(self.ymat[(np.arange(N),np.arange(N))])
         #: time dependent scattering rate
         self.Nscattrate = Gamma*np.sum(self.N[lNum:,:], axis=0)
         #: time dependent scattering number
@@ -601,7 +644,7 @@ class System:
 
 #%%
 @jit(nopython=True,parallel=False,fastmath=False)
-def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices):
+def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices,h_gek,h_gege):
     N       = lNum+uNum
     dymat   = np.zeros((N,N),dtype=np.complex64)
     
@@ -620,9 +663,9 @@ def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices):
             for q in [-1,0,1]:
                 for k in range(pNum):
                     for c in range(lNum):
-                        dymat[a,lNum+b] += 1j*G[k]*f[k,q+1]/2/(2**0.5) *np.exp(1j*T*(om_eg[c,b]-om_k[k]))* dMat[c,b,q+1]* ymat[a,c]
+                        dymat[a,lNum+b] += 1j*G[k]*f[k,q+1]/2/(2**0.5) *h_gek[c,b,k]*np.exp(1j*T*(om_eg[c,b]-om_k[k]))* dMat[c,b,q+1]* ymat[a,c]
                     for c_ in range(uNum):
-                        dymat[a,lNum+b] -= 1j*G[k]*f[k,q+1]/2/(2**0.5) *np.exp(1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,lNum+b]
+                        dymat[a,lNum+b] -= 1j*G[k]*f[k,q+1]/2/(2**0.5) *h_gek[a,c_,k]*np.exp(1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,lNum+b]
                 for n in M_indices[1][b]:
                     dymat[a,lNum+b] += 1j*(-1.)**q* betaB[q+1]* muMat[1][b,n,-q+1]* ymat[a,lNum+n]
                 for m in M_indices[0][a]:
@@ -634,8 +677,8 @@ def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices):
                 for k in range(pNum):
                     for c in range(lNum):
                         dymat[lNum+a,lNum+b] += 1j*G[k]/2/(2**0.5)*(
-                            f[k,q+1] *np.exp(1j*T*(om_eg[c,b]-om_k[k]))* dMat[c,b,q+1]* ymat[lNum+a,c]
-                            - np.conj(f[k,q+1]) *np.exp(-1j*T*(om_eg[c,a]-om_k[k]))* dMat[c,a,q+1]* ymat[c,lNum+b])
+                            f[k,q+1] *h_gek[c,b,k]*np.exp(1j*T*(om_eg[c,b]-om_k[k]))* dMat[c,b,q+1]* ymat[lNum+a,c]
+                            - np.conj(f[k,q+1]) *h_gek[c,a,k]*np.exp(-1j*T*(om_eg[c,a]-om_k[k]))* dMat[c,a,q+1]* ymat[c,lNum+b])
                 for n in M_indices[1][b]:
                     dymat[lNum+a,lNum+b] += 1j*(-1.)**q* betaB[q+1]* muMat[1][b,n,-q+1]* ymat[lNum+a,lNum+n]
                 for m in M_indices[1][a]:
@@ -647,15 +690,15 @@ def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices):
                 for k in range(pNum):
                     for c_ in range(uNum):
                         dymat[a,b] -= 1j*G[k]/2/(2**0.5)*(
-                            f[k,q+1] *np.exp(1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,b]
-                            - np.conj(f[k,q+1]) *np.exp(-1j*T*(om_eg[b,c_]-om_k[k]))* dMat[b,c_,q+1]* ymat[a,lNum+c_])
+                            f[k,q+1] *h_gek[a,c_,k]*np.exp(1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,b]
+                            - np.conj(f[k,q+1]) *h_gek[b,c_,k]*np.exp(-1j*T*(om_eg[b,c_]-om_k[k]))* dMat[b,c_,q+1]* ymat[a,lNum+c_])
                 for n in M_indices[0][b]:
                     dymat[a,b] += 1j*(-1.)**q* betaB[q+1]* muMat[0][b,n,-q+1]* ymat[a,n]
                 for m in M_indices[0][a]:
                     dymat[a,b] -= 1j*(-1.)**q* betaB[q+1]* muMat[0][m,a,-q+1]* ymat[m,b]
                 for c_ in range(uNum):
                     for c__ in range(uNum):
-                        dymat[a,b] += dMat[a,c_,q+1]* dMat[b,c__,q+1]* np.exp(1j*T*(om_eg[a,c_]-om_eg[b,c__]))* ymat[lNum+c_,lNum+c__]
+                        dymat[a,b] += dMat[a,c_,q+1]* dMat[b,c__,q+1] *h_gege[a,c_,b,c__]*np.exp(1j*T*(om_eg[a,c_]-om_eg[b,c__]))* ymat[lNum+c_,lNum+c__]
     
     dy_vec = np.zeros( N*(N+1) )
     count = 0
