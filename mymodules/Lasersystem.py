@@ -4,9 +4,10 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v2.2.0
+v2.3.0
 
-This module contains all classes and functions to define a System including all ``Laser`` objects.
+This module contains all classes and functions to define a System including
+multiple :class:`Laser` objects.
 
 Example
 -------
@@ -23,8 +24,8 @@ But first start python and import the module::
     
 Tip
 ---
-Every object of :class:`Lasersystem` or :class:`Laser` class can be printed
-to display all attributes via:
+Every object of the classes :class:`Lasersystem` or :class:`Laser` class can
+be printed to display all attributes via:
     
     >>> print(lasers)
     >>> print(lasers[0])
@@ -34,26 +35,40 @@ from scipy.constants import c,h,hbar,pi,g
 
 #%%
 class Lasersystem:
-    """System consisting of :py:class:`Lasersystem.Laser` objects and methods to add them properly.
-    
-    Example
-    -------
-    >>> lasers = Lasersystem()
-    >>> lasers.add_sidebands(860e-9,20e-3,'lin',-20e6,39e6)
-    >>> print(lasers)
-    
-    
-    """
-    def __init__(self):
-        """an empty `self.entries` list is created to store all :class:`Laser`
-        objects.
+    def __init__(self,freq_pol_switch=5e6):
+        """System consisting of :py:class:`Lasersystem.Laser` objects
+        and methods to add them properly.
+        These respective objects can be retrieved and also deleted by using the
+        normal item indexing of a :class:`Lasersystem`'s object:
+            
+            >>> lasers = Lasersystem()
+            >>> lasers.add(lamb=860e-9,P=20e-3,pols='lin')
+            >>> lasers.add(lamb=890e-9,I=1000,FWHM=2e-3)            
+            >>> laser1 = lasers[0] # call first Laser object included in lasers
+            >>> del lasers[-1] # delete last added Laser object
+        
+        Within the command in the first line an empty `self.entries` list is
+        created to store all :class:`Laser` objects.
+        
+        Example
+        -------
+        >>> lasers = Lasersystem()
+        >>> lasers.add_sidebands(lamb=860e-9,P=20e-3,pols='lin',AOM_shift=20e6,EOM_freq=39e6)
+        >>> print(lasers)
+
+        Parameters
+        ----------
+        freq_pol_switch : float, optional
+            Specifies the frequency (without 2pi) with which the polarization is
+            switched if the polarization switching is enabled. The default is 5e6.
         """
         self.entries = []
-        #: Polarization switching frequency. Default is 5e6.
-        self.freq_pol_switch = 5e6 
+        #: float: Polarization switching frequency. Default is 5e6.
+        self.freq_pol_switch = freq_pol_switch 
 
-    def add(self,lamb,P,pols,**kwargs):
-        """
+    def add(self,lamb=860e-9,P=20e-3,pols='lin',**kwargs):
+        """adds an instance of :class:`Laser` to this class. 
+        
         Note
         ----
         Is the same as:
@@ -61,25 +76,24 @@ class Lasersystem:
         
         Parameters
         ----------
-        Same as in the ``__init__`` method of the class :class:`Laser` (further information)
-        
-        Returns
-        -------
-        None.
-
+        **kwargs
+            Arbitrary keyword arguments. Same as in the ``__init__`` method of
+            the class :class:`Laser` (further information)
         """
-        self.entries.append( Laser( lamb, P, pols, **kwargs) ) 
+        self.entries.append( Laser( lamb=lamb, P=P, pols=pols, **kwargs) ) 
         
-    def add_sidebands(self,lamb,P,pols,AOM_shift,EOM_freq,ratios=[0.8,1,1,0.8],**kwargs):
+    def add_sidebands(self,lamb=860e-9,P=20e-3,pols='lin',AOM_shift=19.0e6,
+                      EOM_freq=39.33e6,ratios=[0.8,1,1,0.8],**kwargs):
         """Adds four ``Lasers`` as sidebands (shifted by a certain AOM and EOM
         frequencies) instead of a single ``Laser`` object to the ``Lasersystem``.
         
         Parameters
         ----------
-        lamb : float
+        lamb : :py:obj:`float`
             wavelength of the main transition.
-        P : float
+        P : `float`
             Power of the Laser, i.e. sum of the powers of all sidebands.
+            Alternativley the sum of the intensities can be provided.
         pols : str, tuple(str,str)
             polarization of the Laser beams.
         AOM_shift : float
@@ -92,21 +106,24 @@ class Lasersystem:
             ratios of the sidebands in the same order as the `EOM_freq` parameter.
             (Will be normed to specify the individual sideband powers).
             The default is [0.8,1,1,0.8].
-        **kwargs : TYPE
+        **kwargs
             optional arguments  (see :class:`Laser`).
-
-        Returns
-        -------
-        None.
-
         """
-        P_red       = np.array(ratios)/np.sum(ratios) *P
-        EOM_freqs   = np.array([-2,-1,1,2])*EOM_freq
-        for i in range(4):
-            self.entries.append(Laser( lamb, P_red[i], pols,
-                freq_shift=AOM_shift+EOM_freqs[i], **kwargs) )
+        EOM_freqs   = np.array([-2,-1,1,2])*np.expand_dims(EOM_freq,axis=-1).T
+        if 'I' in kwargs:
+            I_red   = np.array(ratios)/np.sum(ratios) * np.expand_dims(kwargs['I'],axis=-1)
+            del kwargs['I']
+            for i in range(4):
+                self.entries.append(Laser( lamb=lamb, I=(I_red.T)[i], pols=pols,
+                    freq_shift=AOM_shift+EOM_freqs[i], **kwargs) )
+        else:
+            P_red   = np.array(ratios)/np.sum(ratios) * np.expand_dims(P,axis=-1)
+            for i in range(4):
+                self.entries.append(Laser( lamb=lamb, P=(P_red.T)[i], pols=pols,
+                    freq_shift=AOM_shift+EOM_freqs[i], **kwargs) )
     
     def __delitem__(self,index):
+        """delete lasers using del system.lasers[<normal indexing>], or delete all del system.lasers[:]"""
         #delete lasers with del system.lasers[<normal indexing>], or delete all del system.lasers[:]
         del self.entries[index]
         
@@ -121,8 +138,7 @@ class Lasersystem:
         """__str__ method is called when an object of a class is printed with print(obj)"""
         for i in range(self.pNum):
             la = self.entries[i]
-            #print('Laserbeam {:2d}: lamb={:.2e}, P={:.2e}, f={:.2e}, pols={}, pol_switching={}'.format(i,la.lamb,la.P,la.f,(la.pol1,la.pol2),la.pol_switching))
-            print('Laserbeam {:2d}: {}'.format(i,la))
+            print('>>> Laserbeam {:2d}: {}'.format(i,la))
         return self.description
     @property
     def description(self):
@@ -136,9 +152,11 @@ class Lasersystem:
 #%%
 class Laser:
     name = None #cooling / repumping laser
-    def __init__(self,lamb,P,pols,pol_direction=None,freq_shift=0,phi=0.0,freq_Rabi=None,
-                 FWHM=None,w=None, k=[1,0,0],r_k=[0,0,0],w_cylind=.0,beta=0.):
-        """Sets up an Laser with its properties and can be included in the Lasersystem class.
+    def __init__(self,lamb=860e-9,freq_shift=0,pols='lin',pol_direction=None,
+                 P=20e-3,I=None,FWHM=5e-3,w=None,w_cylind=.0, freq_Rabi=None,
+                 k=[0,0,1],r_k=[0,0,0],beta=0.,phi=0.0):
+        """Containing all properties of a laser which can be assembled in the
+        Lasersystem class.
         
         Note
         ----
@@ -146,23 +164,38 @@ class Laser:
         
         Parameters
         ----------
-        lamb : float
-            wavelength lambda.
-        P : float
-            Laser power in W
-        pols : str, tuple(str,str)
+        lamb : float, optional
+            wavelength lambda. The default is 860e-9.
+        freq_shift : float, optional
+            Shift of the laser's frequency (without 2 pi) additional to the
+            frequency determined by Parameter lamb. The default is 0.0.
+        pols : str, tuple(str,str), optional
             polarization of the laserbeam. Can be either 'lin', 'sigmap' or
             'sigmam' for linear or circular polarized light of the laser.
             For polarization switching a tuple of two polarizations is needed.
-        freq_shift : float, optional
-            Shift of the laserfrequency (without 2 pi) additional to the
-            frequency determined by Parameter lamb. The default is 0.0.
+            The default is 'lin'.
+        pol_direction : str, optional
+            optional addition to the ``pols`` parameter to be considered in the
+            OBEs calculation. Can be either 'x','y','z' for linear polarization
+            or 'xy','xz','yz' for circular polarization. Given the default value
+            None the linear polarization is aong the quantization axis 'z'
+            and the circular ones in 'xy'.
+        P : float, optional
+            Laser power in W. The default is 20e-3.
+        I : float, optional
+            Intensity of the laser beam. When specified a given power P is
+            ignored. The default is None.
         FWHM : float, optional
-            FullWidthHalfMaximum of the Gaussian intensity distribution of the
-            laserbeam. The default is None.
+            FWHM (full width at half maximum) of the Gaussian intensity
+            distribution of the laserbeam. When this value is adjusted after
+            the initialization of the object the w value is automatically
+            corrected but to further adjust the intensity the power has to be
+            set again. The default is 5e-3.
         w : float, optional
             :math:`1/e^2` beam radius of the Gaussian intensity distribution.
-            The default is None.
+            When this value is adjusted after the initialization of the object
+            the FWHM value is automatically corrected but to further adjust the
+            intensity the power has to be set again. The default is None.
         w_cylind : float, optional
             :math:`1/e^2` beam radius of the Gaussian intensity distribution
             along x direction for the specific configuration where the
@@ -170,9 +203,15 @@ class Laser:
             distribution along x axis with radius `w_cylind`. The distribution
             along the z axis is given by the radius `w`.
             The default is 0.0.
+        freq_Rabi : float, optional
+            Rabi frequency in terms of angular frequency 2 pi. The appropriate
+            intensity is first set to an arbitrary value since it is adjusted
+            later during the calculation where the levels are involved.
+            The default is None.            
         k : list or array type of dimension 3, optional
-            direction of the wave vector of the laserbeam. The inserted array
-            is automatically normalized to unit vector. The default is [1,0,0].
+            direction of the wave vector :math:`\hat{k}` of the laserbeam.
+            The inserted array is automatically normalized to unit vector.
+            The default is [0,0,1].
         r_k : list or array type of dimension 3, optional
             a certain point which is located anywhere within the laserbeam.
             The default is [0,0,0].
@@ -180,49 +219,48 @@ class Laser:
             When the frequency of the laser should be varied linearly in time,
             then `beta` defines the chirping rate in Hz/s (without factor of 2 pi).
             The default is 0.0.
+        phi : float, optional
+            phase offset of the laser's electric field in rad (important e.g.
+            for standing waves). The default is 0.0.
 
         Raises
         ------
         Exception
             When the given type of the ``pols`` Parameter is not accepted.
 
-        Returns
-        -------
-        None.
         """
-        self.f      = c/lamb + freq_shift
-        self.lamb   = c/self.f
-        #: absolute value of the wave vector (=2*pi/lambda = omega/c)
-        self.kabs   = 2*pi/self.lamb
-        # since k is a unit vector
-        self.P      = P  
-        if FWHM == None:
-            if w == None:
-                self.w      = (2*(pi*1.5e-3**2))**0.5
-            else:
-                self.w = w #: :math:`1/e^2` radius of the beam
-            self.FWHM = 2*self.w / ( np.sqrt(2)/np.sqrt(np.log(2)) ) 
-        else:
-            self.FWHM = FWHM
-            self.w = np.sqrt(2)/np.sqrt(np.log(2))*FWHM/2 # ~= 1.699*FWHM/2
-        
-        #: float: :math:`I =P/A` with the Area :math:`A=\pi w_1 w_2/2` of a 2dim Gaussian beam
-        self.I      = 2*self.P/(pi*self.w**2) #self.P/(pi*1.5e-3)**2 ??? Laserwaistwidth 
-        if w_cylind != .0:
-            self.I = self.I*self.w/w_cylind 
-        # Currently with **fixed** width of 1.5e-3
-        #: float: angular frequency
-        self.omega  = 2*pi*self.f
-        #: Energy f*h
-        self.E      = self.f * h
-        """float: Energy of the photons of the laser."""
-        self.k      = np.array(k)/np.linalg.norm(k) #unit vector
-        self.r_k    = np.array(r_k) #point which is lying in the laserbeam
+        #: float: angular frequency :math:`\omega`
+        self.omega      = 2*pi*(c/lamb + freq_shift)
         self.w_cylind = w_cylind
-        self.beta   = beta
-        self.phi    = phi
-        self.freq_Rabi = freq_Rabi #Rabi frequency in terms of angular frequency 2 pi
+        #___definition of the beam width:
+        #   if a 1/e^2 radius is given. It is used for further calculations. Otherwise the FWHM value is used.
+        if np.all(w):
+            self.w = w # old **default** value: (2*(pi*1.5e-3**2))**0.5 --> arbitrary value to compare to old MATLAB rate equations
+        elif np.all(FWHM):
+            self.FWHM = FWHM
+        #___intensity definition or calculation via P and beam widths w & w_cylind:
+        #: Rabi frequency in terms of angular frequency 2 pi
+        self.freq_Rabi = freq_Rabi
+        if np.all(freq_Rabi):
+            self.I  = 1.0 #arbitrarily setting initial value for intensity since it is adjusted later during the calculation where the levels are involved.
+            self._P = None
+        # intensity I is important quantity for calculations instead of the power P.
+        elif np.all(I):
+            self.I  = I
+            self._P = None
+        else:
+            self.P  = P #calculation of the intensity using the power and beam widths.
         
+        #: unit wavevector :math:`\hat{k}`
+        self.k      = np.array(k)/np.expand_dims(np.linalg.norm(k,axis=-1),axis=-1) #unit vector
+        #: any point which is passed by the laser wave vector (i.e. the point lying in the propagation line of the laser)
+        self.r_k    = np.array(r_k) #point which is lying in the laserbeam
+        #: laser chirping rate for linear varying the laser frequency in time
+        self.beta   = beta
+        #: phase offset of the laser's electric field (important e.g. for standing waves)
+        self.phi    = phi
+        
+        #___define the laser polarizations (and polarization direction)
         if type(pols) == tuple and len(pols) == 2:
             pol1, pol2 = self._test_pol(pols[0]), self._test_pol(pols[1])
             self.pol_switching = True
@@ -261,13 +299,76 @@ class Laser:
             return pol
         else:
             raise Exception("'{}' is not valid, pol can only be '{}','{}', or '{}'".format(pol,*pol_list))
-    
-        #set_I()
-        #self.Is     = pi*c*h*Gamma/(3*lamb**3)
-        #self.s      = self.I/self.Is
-        
+            
     def __str__(self):
         #__str__ method is called when an object of a class is printed with print(obj)
-        return 'lamb={:.2e}, P={:.2e}, f={:.2e}, pols={}, pol_switching={}'.format(
-            self.lamb,self.P,self.f,(self.pol1,self.pol2),self.pol_switching)
-                   
+        list1=dir(self).copy()
+        out = ''
+        for el in list1.copy():
+            if el[0]=='_': list1.remove(el)
+        for el in list1:
+            out+='{}='.format(el)
+            value = self.__getattribute__(el)
+            if isinstance(value,(float,np.float64)): out+= '{:.2e}, '.format(value)
+            elif isinstance(value,(list,np.ndarray)) and len(value) >5: out+= '{}..., '.format(value[:5])
+            else: out+= '{}, '.format(value)
+        #'lamb={:.2e}, I={:.2e}, P={:.2e}, FWHM={:.2e} ,f={:.2e}, pols={}, pol_switching={}'.format(self.lamb,self.I,self.P,self.FWHM,(self.pol1,self.pol2),self.pol_switching)    
+        return out[:-2]
+    
+    @property
+    def w(self):
+        """calculates the 1/e^2 beam radius"""
+        return self._w
+    @w.setter
+    def w(self,w):
+        self._w = w
+        self._FWHM = 2*w / ( np.sqrt(2)/np.sqrt(np.log(2)) )
+    @property
+    def FWHM(self):
+        """calculates the  FWHM (full width at half maximum) of the Gaussian
+        intensity distribution of the laserbeam
+        """
+        return self._FWHM
+    @FWHM.setter
+    def FWHM(self,FWHM):
+        self._FWHM = FWHM
+        self._w = np.sqrt(2)/np.sqrt(np.log(2))*FWHM/2 # ~= 1.699*FWHM/2
+    @property
+    def P(self):
+        """calculates the Power of the single beam"""
+        if np.all(self._P): return self._P
+        else:
+            if np.any(np.array(self.w_cylind) != 0.0):
+                return self.I*(pi*self.w*self.w_cylind)/2
+            else: return self.I*(pi*self.w**2)/2
+    @P.setter
+    def P(self,P):
+        """When the power P is set to a value the intensity is automatically
+        calculated using the beam widths."""
+        self._P = P
+        if np.any(np.array(self.w_cylind) != 0.0):
+            self.I  = 2*self.P/(pi*self.w*self.w_cylind)
+        else:
+            #: float: :math:`I =P/A` with the Area :math:`A=\pi w_1 w_2/2` of a 2dim Gaussian beam
+            self.I  = 2*self.P/(pi*self.w**2)
+    @property
+    def kabs(self):
+        """calculates the absolute value of the wave vector
+        (:math:`= 2 \pi/\lambda = \omega/c`)
+        in :math:`\\text{rad}/\\text{m}`.
+        
+        Note:
+            ``self.k`` is a unit vector and defines the direction of the wave vector"""
+        return self.omega/c
+    @property
+    def lamb(self):
+        """calculates the wavelength of the single laser"""
+        return 2*pi*c/self.omega
+    @property
+    def f(self):
+        """calculates the frequency (non-angular)"""
+        return self.omega/(2*pi)
+    @property
+    def E(self):
+        """Energy of the laser's photons."""
+        return self.omega * hbar

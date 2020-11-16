@@ -36,7 +36,7 @@ extensions = [ 'sphinx.ext.autodoc',
 # This prevents the import of those modules by Sphinx and thereby reduces
 # the overhead and makes sure that the documentation can be generated on 
 # machines where those modules are not present. 
-autodoc_mock_imports=['numpy','matplotlib','scipy','numba']
+autodoc_mock_imports=['numpy','matplotlib','scipy','numba','pandas']
 
 autoclass_content = "both"
 

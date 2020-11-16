@@ -1,5 +1,5 @@
 ExampleNumPyStyle module
-============================
+========================
 
 .. automodule:: ExampleNumPyStyle
    :members:

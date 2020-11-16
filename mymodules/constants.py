@@ -4,15 +4,33 @@ Created on Wed May 13 18:27:42 2020
 
 @author: fkogel
 
-v2.0.0
+v2.3.0
 
-Module with the BaF specific data to be able to perform molecule specific calculations.
+Module containing specific contants of certain molecules, atoms or more general
+systems. Theses constants will be imported within the classes
+:py:class:`~Lasersystem.Lasersystem` and :class:`~Levelsystem.Levelsystem` to
+be used in following calculations.
+
+This module is constructed in such way so that it can be modified or extended
+by other users to hold the constants for their specific level system.
+Here, there is a function for every important quantity which all take a string
+``name`` as input value. So e.g. if one want to get the electric dipole matrix
+belonging to `BaF` the function call:
+    
+    >>> dMat('BaF')
+    
+returns the matrix values with the respective row and column labels.
+But for nicely displaying these constants and matrices please use the respective
+functions in the class :class:`~Levelsystem.Levelsystem`, e.g. for the electric
+dipole matrix :func:`~Levelsystem.Levelsystem.get_dMat`.
 """
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g,u
 import _pickle as pickle
 #%%
 def dMat(name):
+    """returns the electric dipole matrix of the electric dipole transition operator.
+    """
     if name == 'BaF':
         # decay ex -> gr: dipole_matrix_new1, gr -> ex: dipole_matrix_new2
         with open('dipole_matrix_new1'+'.pkl','rb') as input:
@@ -48,6 +66,8 @@ def dMat(name):
     return array, row_labels, column_labels
 
 def dMat_red(name):
+    """returns the reduced electric dipole matrix of the electric dipole transition operator.
+    """
     if name == 'Lambda-system':
         array = [[1],
                  [1]]
@@ -67,6 +87,9 @@ def dMat_red(name):
     return array, row_labels, column_labels
 
 def vibrbranch(name):
+    """returns the vibrational branching ratios for transitions between
+    vibrational ground and excited state transitions of a certain electrical transition.
+    """
     # index of column:  vibrational quantum number nu' of the excited state
     # index of row:     vibrational quantum number nu  of the ground state
     # --> Each column should add to 1 approximately
@@ -82,6 +105,9 @@ def vibrbranch(name):
     return array
     
 def freq(name):
+    """Function for wavelengths and hyperfine frequencies of the transitions
+    between all levels.
+    """
     if name == 'BaF':
         # wavelengths of vibrational levels: cols: A(v') states, rows:X(v'') states
         lambda_vibr = [[859.830, 828.903, 800.360],
@@ -92,18 +118,20 @@ def freq(name):
         # Energies of excited levels are not resolved, and thus assumed to be equal
         hyperfine_gr_labels = [[0.5,      0.5,     1.5,     1.5],   #-> J
                                [1,        0,       1,       2  ]]   #-> F
-        hyperfine_gr        = [-94.9467, -67.1338, 22.7147, 56.7660]
+        hyperfine_gr        = [-94.9467, -67.1338, 22.7147, 56.7660] #->values in MHz (non-angular frequencies)
         
         hyperfine_ex_labels = [[0.5,     0.5],   #-> J'
                                [0,       1  ]]   #-> F'
-        hyperfine_ex        =  [0.0,     0.0]
+        hyperfine_ex        =  [0.0,     0.0]    #-> values in MHz (non-angular frequencies)
         
-        # rotational_gr       = [0.0, 12947.890, 38843.552, 77686.706]
+        # rotational_gr       = [0.0, 12947.890, 38843.552, 77686.706] doesn't work yet!!!
     else:
         return None
     return lambda_vibr, (hyperfine_gr,hyperfine_gr_labels), (hyperfine_ex,hyperfine_ex_labels)
         
 def gfac(name):
+    """Function for the magnetic g-factors of the ground and excited states.
+    """
     if name == 'BaF':
         #mixed g factors of BaF (see Erratum: Structure, branching.. of Chen, Tao; Bu, Wenhao; Yan, Bo)
         # first key: J, second key: F of ground states and excited states
@@ -119,6 +147,9 @@ def gfac(name):
     return (array_gr, row_labels_gr), (array_ex, row_labels_ex)
 
 def Gamma(name):
+    """Function for the natural decay rate or linewidth :math:`\Gamma` of the
+    excited state (:math:`A^2\Pi` for BaF) as angular frequency.
+    """
     if name == 'BaF':
         Gamma = 2*pi*2.8421e6
     elif name == 'CaF':
@@ -128,6 +159,8 @@ def Gamma(name):
     return Gamma
 
 def mass(name):
+    """returns the mass (e.g. for the :math:`^{138}Ba^{19}F` molecule).
+    """
     if name == 'BaF':
         mass = (138+19)*u
     elif name == 'CaF':
@@ -137,6 +170,8 @@ def mass(name):
     return mass
 
 def branratios(name,calculated_by='YanGroupnew'):
+    """Returns the vibrational branching ratio between the ground and excited states.
+    """
     if name == 'BaF':
         row_labels = [[0.5, 0.5, 0.5, 0.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5], #-> J
                       [0  ,   1,   1,   1,   1,   1,   1,   2,   2,   2,   2,   2], #-> F
