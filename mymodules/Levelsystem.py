@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v2.3.0
+v2.3.1
 
 This module contains all classes and functions to define a System including
 multiple :class:`Level` objects.
@@ -687,12 +687,12 @@ class Groundstates():
             del self.entries[index]
         else: print('There is no loss state included to be deleted')
         
-    def print_magn_remix(self):
+    def print_remix_matrix(self):
         """Print out the magnetic remixing matrix of the ground states by the
         usage of function :func:`System.magn_remix`.
         """
-        from System import magn_remix
-        mat = magn_remix(self,0)
+        from System import Bfield
+        mat = Bfield().get_remix_matrix(self,0)
         for l1 in range(self.lNum):
             for l2 in range(self.lNum):
                 if l2 == (self.lNum-1): end = '\n'

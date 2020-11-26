@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v2.3.0
+v2.3.1
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -245,7 +245,7 @@ class Laser:
             self.I  = 1.0 #arbitrarily setting initial value for intensity since it is adjusted later during the calculation where the levels are involved.
             self._P = None
         # intensity I is important quantity for calculations instead of the power P.
-        elif np.all(I):
+        elif np.any(I):
             self.I  = I
             self._P = None
         else:

@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.3.0
+v2.3.1
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -144,6 +144,7 @@ class System:
         """
         self.lasers = Lasersystem()
         self.levels = Levelsystem(load_constants=load_constants)
+        self.Bfield = Bfield()
         #self.particles = Particlesystem()
         if description == None:
             self.description = os.path.basename(sys.argv[0])[:-3]
@@ -152,7 +153,6 @@ class System:
         self.N0 = np.array([]) #: initial population of all levels
         self.v0     = np.array([0.,0.,0.]) #: initial velocity of the particle
         self.r0     = np.array([0.,0.,0.]) #: initial position of the particle
-        self.betaB  = np.array([0.,0.,0.]) #: initial magnetic field
         print("System is created with description: {}".format(self.description))
         
     def calc_rateeqs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
@@ -297,7 +297,7 @@ class System:
         self.R1sum, self.R2sum = np.sum(self.R1,axis=2), np.sum(self.R2,axis=2)
         
         #___magnetic remixing of the ground states. An empty array is left for no B-field 
-        if magn_remixing: self.M = magn_remix(self.levels.grstates,magn_strength)
+        if magn_remixing: self.M = self.Bfield.get_remix_matrix(self.levels.grstates,remix_strength=magn_strength)
         else: self.M = np.array([[],[]])
         
         #___specify the initial (normalized) occupations of the levels
@@ -499,16 +499,20 @@ class System:
                 # *np.exp(1j*self.phi[:,None,None,None,None,None]+1j*T*(self.om_eg[None,None,:,:,None,None]-self.om_k[:,None,None,None,None,None])) *np.transpose(self.h_gek,axes=(2,0,1))[:,None,:,:,None,None]\
                 # *np.transpose(self.dMat,axes=(2,0,1))[None,:,:,:,None,None]*np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,:],axes=(1,0,2))[None,None,:,:,None,:] \
                 # *1j*self.k[:,None,None,None,:,None] *self.f[:,:,None,None,None,None] ).sum(axis=(0,1,2,3))
-            F = 2*hbar*Gamma*np.real( np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,:],axes=(1,0,2))[:,:,None,None,:] \
-                                     *self.Gfd[:,:,:,None,None]*np.exp(1j*T[None,None,None,None,:]*self.om_gek[:,:,:,None,None]) \
+            size    = T.size
+            F       = np.zeros((3,size))
+            for i,t1 in enumerate(range(0,size,size//50)):
+                t2  = t1 + size//50
+                if t2 > size: t2 = size
+                F[:,t1:t2]  += 2*hbar*Gamma*np.real(np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,t1:t2],axes=(1,0,2))[:,:,None,None,:] \
+                                     *self.Gfd[:,:,:,None,None]*np.exp(1j*T[None,None,None,None,t1:t2]*self.om_gek[:,:,:,None,None]) \
                                      *self.k[None,None,:,:,None] ).sum(axis=(0,1,2))
         return F
     
     #%%
     def calc_OBEs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
                   perfect_resonance=False, nodetuned_list=[],
-                  magn_remixing=False, magn_strength=8,
-                  freq_clip_TH=500, steadystate=False,
+                  magn_remixing=False, freq_clip_TH=500, steadystate=False,
                   velocity_dep=False, position_dep=False, rounded=False,
                   calculated_by='Lucas',verbose=True,
                   mp=False,return_fun=None,**kwargs):
@@ -527,7 +531,7 @@ class System:
         self.omega_eg = self.levels.calc_freq()
         self.om_eg       = self.omega_eg/Gamma
         if rounded:
-            self.om_eg   = np.around(self.om_eg,-int(rounded))
+            self.om_eg   = np.around(self.om_eg/rounded)*rounded
         #magnetic dipole matrix of the magnetic dipole operator mu
         self.muMat = self.levels.calc_muMat()
         #indices for the magnetic zeeman sublevels. Needed for magnetic remixing
@@ -549,7 +553,7 @@ class System:
         self.phi    = np.array([la.phi for la in self.lasers])
         self.omega_k= np.array([la.omega for la in self.lasers])
         if rounded: #maybe save these variables directly as self.omega_k???
-            self.om_k    = np.around(self.omega_k/Gamma, -int(rounded)) - np.around(np.dot(self.k,self.v0)/Gamma, -int(rounded))
+            self.om_k    = np.around(self.omega_k/Gamma/rounded)*rounded - np.around(np.dot(self.k,self.v0)/Gamma/rounded)*rounded
         else: self.om_k  = (self.omega_k-np.dot(self.k,self.v0))/Gamma
         #polarization switching time
         tswitch = 1/self.lasers.freq_pol_switch        
@@ -566,7 +570,7 @@ class System:
         self.h_gek=h_gek #leave this here??
         #___magnetic remixing of the ground states and excited states
         if magn_remixing:
-            betaB  = self.betaB
+            betaB  = self.Bfield.Bvec_sphbasis/(hbar*self.levels.exstates.Gamma/self.Bfield.mu_B)
         else:
             betaB  = np.array([0.,0.,0.])
                     
@@ -672,7 +676,7 @@ class System:
             # print('diff & prop',np.all(np.abs(m1-m2)*1e2<0.01),np.all(np.abs(1-m1/m2)*1e2 <5))
             # print('prop\n',np.all(np.abs(1-m1/m2)*1e2 <5))
             #___check if conditions for steady state are fulfilled
-            if np.all(np.abs(m1-m2)*1e2 < 0.01) and np.all(np.abs(1-m1/m2)*1e2 < 5):
+            if np.all(np.abs(m1-m2)*1e2 < 0.1) and np.all(np.abs(1-m1/m2)*1e2 < 50):
                 break
             else:
                 N0mat   = self.ymat[:,:,-1]
@@ -683,7 +687,7 @@ class System:
         self.exectime = time.perf_counter()-start_time
         if verbose: print(" execution time: {:2.4f} seconds, (t_start, t_end) = ({}s, {}s)".format(self.exectime,mp_time0,time.gmtime()[5]))
         
-        #___compute several physical variables using the solution of the ODE
+        #___compute several physical variables using the solution of the ODE #as properties?
         #: time dependent scattering rate
         self.Nscattrate = Gamma*np.sum(self.N[lNum:,:], axis=0)
         #: time dependent scattering number
@@ -697,15 +701,71 @@ class System:
                 print('WARNING: the sum of the occupations does not remain stable! Deviation: {:.2E}'.format(dev))
         if return_fun: return return_fun(self)#{'N':self.N[-1,-1]}#[self.__dict__[key] for key in return_val]
     
-    def add_magnfield(self,strength,direction=[0,0,1]):
+    def add_magnfield(self,strength,direction=[0,0,1]): #old function. could be deleted?
+        self.Bfield.turnon(strength=strength,direction=direction)
+
+#%%
+class Bfield:
+    def __init__(self):
+        self.reset()
+        self.mu_B = physical_constants['Bohr magneton'][0]
+    def turnon(self,strength=5e-4,direction=[0,0,1],remix_strength=None):
         if np.any(strength >= 10e-4):
             print('WARNING: linear Zeeman shifts are only a good approx for B<10G.')
-        ex,ey,ez = np.array(direction).T / np.linalg.norm(direction,axis=-1)
+        self.strength = strength
+        self.direction = np.array(direction)
+        # self.remix_strength = remix_strength
+    def turnon_earth(self,vertical='z',towardsNorthPole='x'):
+        axes = {'x' : 0, 'y' : 1, 'z' : 2}
+        vec = np.zeros(3)
+        vec[axes[vertical]]         = 44e-6
+        vec[axes[towardsNorthPole]] = 20e-6
+        self.turnon(strength=np.linalg.norm(vec),direction=vec)
+    def reset(self):
+        self.strength, self.direction = 0.0, [0,0,1]
+        self._remix_matrix = np.array([[],[]])
+    def get_remix_matrix(self,grs,remix_strength=None):
+        """returns a matrix to remix all adjacent ground hyperfine levels
+        by a magnetic field with certain field strength. The default is False.
+    
+        Parameters
+        ----------
+        grs : :class:`~Levelsystem.Groundstates`
+            groundstates for which the matrix is to be build.
+        remix_strength : float
+            measure of the magnetic field strength (i.e. the magnetic remixing
+            matrix is multiplied by 10^remix_strength). Reasonable values are
+            between 6 and 9.
+        
+        Returns
+        -------
+        array
+            magnetic remixing matrix.
+        """
+        matr = np.zeros((grs.lNum,grs.lNum))
+        for i in range(grs.lNum):
+            for j in range(grs.lNum):
+                if grs[i].name == 'Loss state' or grs[j].name == 'Loss state':
+                    if grs[i].name == grs[j].name:
+                        matr[i,j] = 1
+                elif grs[i].nu      == grs[j].nu \
+                    and grs[i].F    == grs[j].F \
+                    and grs[i].J    == grs[j].J \
+                    and abs(grs[i].mF-grs[j].mF) <= 1:
+                    matr[i,j] = 1
+        self._remix_matrix = 10**(remix_strength)*matr
+        return self._remix_matrix #if remix_strength ==None: estimate it with strength & if strength=0 return empty matrix?
+        
+    @property
+    def Bvec_sphbasis(self):
+        strength, direction = self.strength, self.direction
+        ex,ey,ez = direction.T / np.linalg.norm(direction,axis=-1)
         eps = np.array([+(ex - 1j*ey)/np.sqrt(2), ez, -(ex + 1j*ey)/np.sqrt(2)])
         if type(strength)   == np.ndarray: strength = strength[:,None,None]
         if type(ex)         == np.ndarray: eps = (eps.T)[None,:]
-        self.betaB = eps*strength/ ( hbar*self.levels.exstates.Gamma/physical_constants['Bohr magneton'][0])
-    
+        self._Bvec_sphbasis = eps*strength#/ (hbar*self.levels.exstates.Gamma/self.mu_B)
+        return self._Bvec_sphbasis
+        
 #%%
 def multiproc(obj,kwargs):
     #___problem solving with keyword arguments
@@ -716,11 +776,13 @@ def multiproc(obj,kwargs):
     del kwargs['kwargs']
     
     #no looping through magnetic field strength or direction for rateeqs so far
-    if obj.calcmethod == 'rateeqs': obj.betaB = np.array([0.,0.,0.])
+    if obj.calcmethod == 'rateeqs': obj.Bfield.reset()
     
-    #___expand dimensions of betaB, v0, r0 in order to be able to loop through them    
-    if obj.betaB.ndim == 1: betaB_arr = obj.betaB[None,None,:]
-    else:                   betaB_arr = obj.betaB
+    #___expand dimensions of strength, direction, v0, r0 in order to be able to loop through them    
+    if obj.Bfield.strength.ndim == 0:   strengths = [obj.Bfield.strength]
+    else:                               strengths = obj.Bfield.strength
+    if obj.Bfield.direction.ndim == 1:  directions = [obj.Bfield.direction]
+    else:                               directions = obj.Bfield.direction    
     if obj.r0.ndim == 1:    r0_arr = obj.r0[None,:]
     else:                   r0_arr = obj.r0
     if obj.v0.ndim == 1:    v0_arr = obj.v0[None,:]
@@ -765,19 +827,19 @@ def multiproc(obj,kwargs):
                 recursive(_laser_iters[1:],index)
     
     #___Parallelizing using Pool.apply()
-    pool = mp.Pool(mp.cpu_count()) #Init multiprocessing.Pool()
+    pool = mp.Pool(mp.cpu_count()-1) #Init multiprocessing.Pool()
     result_objects = []
-    iters_dict = {'strength': betaB_arr.shape[0],
-                  'direction': betaB_arr.shape[1],
+    iters_dict = {'strength': len(strengths),
+                  'direction': len(directions),
                   'r0':len(r0_arr),
                   'v0':len(v0_arr),
                   **laser_iters_N}
     #if v0_arr and r0_arr have the same length they should be varied at the same time and not all combinations should be calculated.
     if len(r0_arr) == len(v0_arr) and len(r0_arr) > 1: del iters_dict['v0']
     #___looping through all iterable parameters of system and laser
-    for b1,betaB_arr2 in enumerate(betaB_arr):
-        for b2,betaB in enumerate(betaB_arr2):
-            obj.betaB = betaB # betaB_arr[b1,b2,:]
+    for b1,strength in enumerate(strengths):
+        for b2,direction in enumerate(directions):
+            obj.Bfield.turnon(strength,direction)
             for b3,r0 in enumerate(r0_arr):
                 obj.r0 = r0
                 for b4,v0 in enumerate(v0_arr):
@@ -818,6 +880,16 @@ def multiproc(obj,kwargs):
                         # result_objects.append(pool.apply_async(np.sum,args=(np.arange(3),)))
                         # result_objects.append(mp_calc(obj,betaB[c1,c2,:],**kwargs)) # --> without Pool parallelization
                     # result_objects.append(pool.apply_async(deepcopy(obj).calc_OBEs,kwds=(kwargs)))
+#%%
+def ode_MC(t,y,a,position_dep):
+    dy      = np.zeros(6)
+    if position_dep:
+        dy[:3] = a(y[:3],y[3:6])
+    else:
+        dy[3] = a(y[3])
+    dy[3:6] = y[:3]
+    return dy
+
 #%%
 @jit(nopython=True,parallel=False,fastmath=True)
 def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices,h_gek,h_gege,phi):
@@ -1149,38 +1221,6 @@ def open_object(filename):
     with open(filename+'.pkl','rb') as input:
         output = pickle.load(input)
     return output
-
-#%%
-def magn_remix(grs,magn_strength):
-    """returns a matrix to remix all adjacent ground hyperfine levels
-    by a magnetic field with certain field strength. The default is False.
-
-    Parameters
-    ----------
-    grs : :class:`~Levelsystem.Groundstates`
-        groundstates for which the matrix is to be build.
-    magn_strength : float
-        measure of the magnetic field strength (i.e. the magnetic remixing
-        matrix is multiplied by 10^magn_strength). Reasonable values are
-        between 6 and 9.
-    
-    Returns
-    -------
-    array
-        magnetic remixing matrix.
-    """
-    matr = np.zeros((grs.lNum,grs.lNum))
-    for i in range(grs.lNum):
-        for j in range(grs.lNum):
-            if grs[i].name == 'Loss state' or grs[j].name == 'Loss state':
-                if grs[i].name == grs[j].name:
-                    matr[i,j] = 1
-            elif grs[i].nu      == grs[j].nu \
-                and grs[i].F    == grs[j].F \
-                and grs[i].J    == grs[j].J \
-                and abs(grs[i].mF-grs[j].mF) <= 1:
-                matr[i,j] = 1
-    return 10**(magn_strength)*matr
 
 #%%
 def selrule(gr,ex,pol):
