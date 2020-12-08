@@ -4,107 +4,95 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.3.1
+v2.4.0
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
-via the rate equations.
+via the rate equations or Optical Bloch equations (OBEs).
 
 Examples
 --------
 Example for setting up a level and laser system with the cooling and 3 repumping
 lasers and calculating the dynamics::
     
-    system = System(description='Test-Lasersystem')
+    from System import *
+    system = System(description='Test',load_constants='BaF')
     
-    #pol     = 'lin'
-    #pol     = 'sigmap'
-    pol     = ('sigmap','sigmam')
-    system.lasers.freq_pol_switch = 5e6
+    # set up the lasers each with four sidebands
+    for lamb in np.array([859.830, 895.699, 897.961, 900.238])*1e-9:
+        system.lasers.add_sidebands(lamb=lamb,P=20e-3,pols='lin',AOM_shift=20e6,EOM_freq=39.33e6)
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
-    system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
-    system.lasers.add_sidebands(900.238e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
-    # use the following lasers without sidebands when `perfect_resonance`
-    # input argument of the `calc_rateeqs` function is set to `True`.
-    # system.lasers.add(859.830e-9,20e-3,pol)
-    # system.lasers.add(895.699e-9,14e-3,pol)
-    # system.lasers.add(897.961e-9,14e-3,pol)
-    # system.lasers.add(900.238e-9,14e-3,pol)
+    # include all vibrational levels up to the ground state vibrational level nu=3
+    system.levels.add_all_levels(nu_max=3)
+    system.levels.print_properties()
     
-    system.levels.grstates.add_grstate(nu=0,N=1)
-    system.levels.grstates.add_grstate(nu=1,N=1)
-    system.levels.grstates.add_grstate(nu=2,N=1)
-    system.levels.grstates.add_grstate(nu=3,N=1)
-    
-    system.levels.grstates.add_lossstate(nu=4)
-    
-    system.levels.exstates.add_exstate(nu=0,N=0,J=.5,p=+1)
-    system.levels.exstates.add_exstate(nu=1,N=0,J=.5,p=+1)
-    system.levels.exstates.add_exstate(nu=2,N=0,J=.5,p=+1)
-    
-    # nodetuned_list contains tuples (nu_gr,nu_ex,p) determining the ground-/
-    # excited state nu being in perfect resonance with the pth laser
-    nodetuned_list = [(0,0,0),(1,0,1),(2,1,2),(3,2,3)]
-    # system.N0 = np.array([*np.ones(system.levels.lNum),*np.zeros(system.levels.uNum)])
-    system.calc_rateeqs(t_int=20e-6,perfect_resonance=False,nodetuned_list=nodetuned_list)
+    # calculate dynamics with rate equations
+    system.calc_rateeqs(t_int=20e-6,magn_remixing=False,method='LSODA')
+    # plot populations and force
+    system.plot_N(smallspacing=1e-5)
+    system.plot_F()
     
 Example for a Molecule with a initial velocity and position of :math:`v_x=200m/s`
 and :math:`r_x=-2mm` which is transversely passing two cooling lasers with
 a repumper each in the distance :math:`4mm`::
     
-    system = System(description='Test-Lasersystem')
+    from System import *
+    system = System(description='Test2',load_constants='BaF')
     
-    pol     = 'lin'
-    system.lasers.freq_pol_switch = 5e6
+    # specify initial velocity and position of the molecule
     system.v0 = np.array([200,0,0])
     system.r0 = np.array([-2e-3,0,0])
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6,k=[0,1,0])
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6,k=[0,1,0])
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6,k=[0,1,0],r_k=[4e-3,0,0])
-    system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6,k=[0,1,0],r_k=[4e-3,0,0])
-        
-    system.levels.grstates.add_grstate(nu=0,N=1)    
-    system.levels.grstates.add_grstate(nu=1,N=1)
+    # set up the cooling laser and first repumper with their wave vectors k and positions r_k
+    FWHM,P = 1e-3,5e-3
+    system.lasers.add_sidebands(lamb=859.830e-9,P=P,FWHM=FWHM,k=[0,1,0])
+    system.lasers.add_sidebands(lamb=895.699e-9,P=P,FWHM=FWHM,k=[0,1,0])
+    system.lasers.add_sidebands(lamb=859.830e-9,P=P,FWHM=FWHM,k=[0,1,0],r_k=[4e-3,0,0])
+    system.lasers.add_sidebands(lamb=895.699e-9,P=P,FWHM=FWHM,k=[0,1,0],r_k=[4e-3,0,0])
     
-    system.levels.grstates.add_lossstate(nu=2)
+    # include first two vibrational levels of electronic ground state and the
+    # first vibrational level of the excited state
+    system.levels.add_all_levels(nu_max=1)
     
-    system.levels.exstates.add_exstate(nu=0,N=0,J=.5,p=+1)
+    # calculate dynamics with velocity and position dependence of the laser beams and molecules
+    system.calc_rateeqs(t_int=40e-6,magn_remixing=False,
+                        velocity_dep=True,position_dep=True,method='LSODA')
     
-    # nodetuned_list contains tuples (nu_gr,nu_ex,p) determining the ground-/
-    # excited state nu being in perfect resonance with the pth laser
-    nodetuned_list = [(0,0,0),(1,0,1),(2,1,2),(3,2,3)]
-    system.calc_rateeqs(t_int=40e-6,perfect_resonance=False,
-                        nodetuned_list=nodetuned_list,magn_remixing=False,
-                        velocity_dep=True,position_dep=True)
+    # plot scattering rate, scattered photons, velocity and position
     system.plot_Nscattrate()
     system.plot_Nscatt()
+    system.plot_v()
+    system.plot_r()
+    system.plot_F()
 """
 import numpy as np
 from scipy.integrate import solve_ivp, cumtrapz
 from scipy.constants import c,h,hbar,pi,g,u,physical_constants
+from scipy.constants import k as k_B
 from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
 from Lasersystem import *
 from Levelsystem import *
+import constants
 from math import floor
 import _pickle as pickle
 import time
 from numba import jit, prange
 import sys, os
-import multiprocessing as mp
+import multiprocessing
 from copy import deepcopy
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pl
 # plt.rcParams['errorbar.capsize']=3
 # plt.rc('text', usetex=True)
 # plt.rc('font', family='serif')
-# plt.rc('figure', figsize=(6.0,3.4))
-# plt.rc('savefig', pad_inches=0.02, bbox='tight')
+# plt.rc('figure', figsize=(7,4.35))
+# plt.rcParams['figure.constrained_layout.use'] = True
+# plt.rc('savefig', pad_inches=0.05, bbox='tight')
 # plt.rc('axes', grid = True)
 # plt.rc('grid', linestyle ='dashed', linewidth=0.5, alpha=0.7)
+# plt.rc('lines', lw=1)
 # plt.rcParams['axes.formatter.use_locale'] = True
 
 np.set_printoptions(precision=4,suppress=True)
@@ -136,11 +124,11 @@ class System:
             A short description of this System can be added. If not provided,
             the attribute is set to the name of the respective executed main
             python file.
-
-        Returns
-        -------
-        None.
-
+        load_constants : str, optional
+            Name of a certain molecule, atom or more general system whose
+            respective level constants to be loaded or imported by the class
+            :class:`~Levelsystem.Levelsystem` via the constants defined in the
+            module :py:class:`constants`. The default is 'BaF'.
         """
         self.lasers = Lasersystem()
         self.levels = Levelsystem(load_constants=load_constants)
@@ -153,6 +141,12 @@ class System:
         self.N0 = np.array([]) #: initial population of all levels
         self.v0     = np.array([0.,0.,0.]) #: initial velocity of the particle
         self.r0     = np.array([0.,0.,0.]) #: initial position of the particle
+        self.steadystate = {'t_ini'       : None,
+                            'maxiters'    : 100,
+                            'condition'   : [0.1,50],
+                            'period'      : None}
+        self.multiprocessing = {'processes' : multiprocessing.cpu_count()-1,#None
+                                'maxtasksperchild' : None}
         print("System is created with description: {}".format(self.description))
         
     def calc_rateeqs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
@@ -237,7 +231,6 @@ class System:
         Returns
         -------
         None.
-
         """
         self.calcmethod = 'rateeqs'
         #___input arguments of this called function
@@ -367,6 +360,7 @@ class System:
     def plot_all(self):
         self.plot_N(); self.plot_Nscatt(); self.plot_Nscattrate(); self.plot_Nsum()
     def plot_N(self,figname=None,figsize=(12,5),smallspacing=0.001):
+        """plot populations of all levels over time."""
         if figname == None:
             plt.figure('N ({}): {}, {}, {}'.format(
                 self.calcmethod,self.description,self.levels.description,
@@ -380,11 +374,11 @@ class System:
         for i,grstate in enumerate(self.levels.grstates):
             if grstate.name == 'Loss state':
                 label = 'Loss state'
-                color = np.array([0,0,0,1])
+                ls,color = '-',np.array([0,0,0,1])
             else:
                 label='$g: J={:1.1f}, F={:1.1f}, mF={:+1.1f}$'.format(grstate.J,grstate.F,grstate.mF)
-            if grstate.nu == 0: ls,color = '-',colors_l[i]
-            else: ls,color = '--',[*colors_l,*colors_l,*colors_l,*colors_l][i]
+                if grstate.nu == 0: ls,color = '-',colors_l[i]
+                else: ls,color = '--',[*colors_l,*colors_l,*colors_l,*colors_l,*colors_l][i]
             plt.plot(self.t*1e6,self.N[i,:]+smallspacing*i, label=label,c=color,ls=ls)
         for i,exstate in enumerate(self.levels.exstates):
             label =   '$e: J={:1.1f}, F={:1.1f}, mF={:+1.1f}$'.format(exstate.J,exstate.F,exstate.mF)
@@ -393,27 +387,33 @@ class System:
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Populations $N$')
         plt.legend(loc='center left', bbox_to_anchor=(1, 0.5),fontsize='x-small',labelspacing=-0.0)
-        plt.tight_layout()  
+        # plt.tight_layout()  
         
     def plot_Nscatt(self):
+        """plot the scattered photon number over time (integral of `Nscattrate`)."""
         plt.figure('Nscatt: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Totally scattered photons')
         plt.plot(self.t*1e6, self.Nscatt, '-')
     
     def plot_Nscattrate(self):
+        """plot the photon scattering rate over time (derivative of `Nscatt`)."""
         plt.figure('Nscattrate: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Photon scattering rate $\gamma\prime$ in MHz')
         plt.plot(self.t*1e6, self.Nscattrate*1e-6, '-')
         
     def plot_Nsum(self):
+        """plot the population sum of all levels over time to ensure a small
+        numerical deviation of the ODE solver."""
         plt.figure('Nsum: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Population sum $\sum N_i$')
         plt.plot(self.t*1e6, np.sum(self.N,axis=0), '-')
     
     def plot_dt(self):
+        """plot the time steps at which the populations are calculated. If no `dt`
+        argument is given for the calulations they are chosen from the ODE solver."""
         if 'method' in self.args['kwargs']: method = self.args['kwargs']['method']
         else: method = 'RK45'
         plt.figure('dt: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
@@ -424,27 +424,39 @@ class System:
         plt.legend()
         
     def plot_v(self):
+        """plot the velocity over time for all three axes 'x','y', and'z'."""
         plt.figure('v: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
         plt.xlabel('time $t$ in $\mu$s')
-        plt.ylabel('velocity $v_x, v_y, v_z$ in m/s')
-        plt.plot(self.t*1e6, self.v[0,:], '-',label='$v_x$')
-        plt.plot(self.t*1e6, self.v[1,:], '-',label='$v_y$')
-        plt.plot(self.t*1e6, self.v[2,:], '-',label='$v_z$')
+        plt.ylabel('velocity $v$ in m/s')
+        ls_arr = ['-','--','-.']
+        for i,axis in enumerate(['x','y','z']):
+            plt.plot(self.t*1e6,self.v[i,:],label='$v_{}$'.format(axis),ls=ls_arr[i])
         plt.legend()
     
     def plot_r(self):
+        """plot the position over time for all three axes 'x','y', and'z'."""
         plt.figure('r: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
         plt.xlabel('time $t$ in $\mu$s')
-        plt.ylabel('position $r_x, r_y, r_z$ in m')
-        plt.plot(self.t*1e6, self.r[0,:], '-',label='$r_x$')
-        plt.plot(self.t*1e6, self.r[1,:], '-',label='$r_y$')
-        plt.plot(self.t*1e6, self.r[2,:], '-',label='$r_z$')
+        plt.ylabel('position $r$ in m')
+        ls_arr = ['-','--','-.']
+        for i,axis in enumerate(['x','y','z']):
+            plt.plot(self.t*1e6,self.r[i,:],label='$r_{}$'.format(axis),ls=ls_arr[i])
         plt.legend()
         
     def plot_FFT(self,only_sum=True,start_time=0.0):
+        """plot the fast Fourier transform (FFT) of the time-dependent populations.
+        
+        Parameters
+        ----------
+        only_sum : bool, optional
+            if True the sum of the FFTs of all populations is plottet. Otherwise
+            the distinct FFTs for all levels are shown. The default is True.
+        start_time : float between 0 and 1, optional
+            starting time in units of the interaction time `t_int` at which the
+            FFT is calculated. The default is 0.0.
+        """
         FT_sum = 0
         t_int = self.args['t_int']
-        # start_time = 0.5
         for i,st in enumerate(self.levels):
             FT = (np.fft.rfft(self.N[i,int(self.t.size*start_time):]).real)**2
             mean_zero = FT[int(FT.size/4):].mean()
@@ -464,7 +476,8 @@ class System:
         plt.ylabel('Power spectrum of the FFT')
     
     def calc_Rabi_freqs(self,print_all=False):
-        #calculates detuning-weighted, averaged Rabi frequencies for every laser (with 2*pi included)
+        """calculates detuning-weighted, averaged angular Rabi frequencies
+        for every laser (with 2*pi included)."""
         Gamma = self.levels.exstates.Gamma
         Rabi_freqs = []
         for k,la in enumerate(self.lasers):
@@ -477,12 +490,38 @@ class System:
         self.Rabi_freqs = np.array(Rabi_freqs)
         return self.Rabi_freqs
     
+    def plot_F(self,figname=None):
+        """plot the Force over time for all three axes 'x','y', and'z'."""
+        if figname == None:
+            plt.figure('F ({}): {}, {}, {}'.format(
+                self.calcmethod,self.description,self.levels.description,
+                self.lasers.description))
+        else: plt.figure(figname,figsize=figsize)
+        F = self.F/ (hbar*2*pi/860e-9*self.levels.exstates.Gamma/2)
+        ls_arr = ['-','--','-.']
+        for i,axis in enumerate(['x','y','z']):
+            plt.plot(self.t*1e6,F[i,:],label='$F_{}$'.format(axis),ls=ls_arr[i])
+        plt.xlabel('time $t$ in $\mu$s')
+        plt.ylabel('Force $F$ in $\hbar k \Gamma/2$')
+        plt.legend()
+    
     @property
     def F(self):
+        """calculate the force over time.
+
+        Returns
+        -------
+        F : np.ndarray, shape(3,ntimes)
+            Force array for all <ntimes> time points and three axes 'x','y','z'.
+        """
         if self.calcmethod == 'rateeqs':
-            lNum,uNum = self.levels.lNum, self.levels.uNum
-            N_lu = self.N[:lNum,:][:,None,:] - self.N[lNum:lNum+uNum,:][None,:,:]
-            F = hbar * np.sum( np.dot(self.R1,self.k)[:,:,:,None] * N_lu[:,:,None,:], axis=(0,1)) #+ g 
+            if not self.args['position_dep'] and not self.args['velocity_dep']:
+                lNum,uNum = self.levels.lNum, self.levels.uNum
+                N_lu = self.N[:lNum,:][:,None,:] - self.N[lNum:lNum+uNum,:][None,:,:]
+                F = hbar * np.sum( np.dot(self.R1,self.k)[:,:,:,None] * N_lu[:,:,None,:], axis=(0,1)) #+ g 
+            else:
+                F = np.zeros((3,self.t.size))
+                F[:,1:] = np.diff(self.v)/np.diff(self.t)*self.levels.mass
         if self.calcmethod == 'OBEs':
             Gamma   = self.levels.exstates.Gamma
             T       = Gamma*self.t
@@ -508,7 +547,80 @@ class System:
                                      *self.Gfd[:,:,:,None,None]*np.exp(1j*T[None,None,None,None,t1:t2]*self.om_gek[:,:,:,None,None]) \
                                      *self.k[None,None,:,:,None] ).sum(axis=(0,1,2))
         return F
-    
+    #%%
+    def calc_trajectory(self,t_int=20e-6,t_start=0.,dt=None,t_eval=[],
+                        position_dep=False,verbose=True,force_axis=None,
+                        interpol_kind='linear',**kwargs):
+        """for the calculation of Monte Carlo simulations of classical particles
+        which are propagated through a provided pre-calculated force profile
+        to be used as interpolated function"""
+        
+        # self.F_profile = {'F': results[0]['F'],
+        #                   'Ne' : results[0]['F'],'v':None,'I':None}
+        #t handling?
+        #__________________________________
+        def ode_MC1D(t,y,force_axis,position_dep):
+            dy      = np.zeros(6+1)
+            v_proj = np.sum(y[:3]*force_axis)
+            if position_dep:
+                dy[:3] = a(v_proj,y[3:6])*force_axis
+                dy[-1] = GNe(v_proj,y[3:6])
+            else:
+                dy[:3] = a(v_proj)*force_axis
+                dy[-1] = GNe(v_proj)
+            dy[3:6] = y[:3]
+            return dy
+        #__________________________________
+        v0_arr = np.atleast_2d(self.v0)
+        r0_arr = np.atleast_2d(self.r0)
+        if isinstance(t_int, float): t_int = np.ones(v0_arr.shape[0])*t_int   
+        self.sols = []
+        
+        if 'v' in self.F_profile:
+            v = self.F_profile['v']
+            if 'I' in self.F_profile: #or position_dep?
+                I = self.F_profile['I']
+                def I_ges(r):
+                    I_arr = np.zeros(self.lasers.pNum)
+                    for p,la in enumerate(self.lasers):
+                        if la.w_cylind != .0:
+                            if np.abs(r[0]-la.r_k[0]) > 5e-2:
+                                I_arr[p] = 0.0
+                            else:
+                                I_arr[p] = la.I * np.exp(-2*( (r[0]-la.r_k[0])**2/(la.w_cylind**2)
+                                                           +(r[1]-la.r_k[1])**2/(la.w**2)    ))
+                        else:
+                            d = np.linalg.norm(np.cross( r-la.r_k , la.k/np.linalg.norm(la.k) ))
+                            I_arr[p] = la.I * np.exp(-2 * d**2 / (la.w**2) )   
+                    return I_arr.sum() # change?
+                
+                from scipy.interpolate import RegularGridInterpolator
+                a_intp  = RegularGridInterpolator((v,I), self.F_profile['F']/self.levels.mass,
+                                                  method=interpol_kind,
+                                                  bounds_error=False,fill_value=None)
+                GNe_intp = RegularGridInterpolator((v,I), self.F_profile['Ne']*self.levels.exstates.Gamma,
+                                                   method=interpol_kind,
+                                                   bounds_error=False,fill_value=None)
+                self.a_intp=a_intp
+                def a(v,r): return a_intp(xi=(v,I_ges(r)))
+                def GNe(v,r): return GNe_intp(xi=(v,I_ges(r)))
+                force_axis = np.array(force_axis)/np.linalg.norm(force_axis)
+                for i,v0 in enumerate(v0_arr):
+                    y0 = np.array([*v0, *r0_arr[i],0.0])
+                    self.sols.append(solve_ivp(ode_MC1D, (0.,t_int[i]), y0, t_eval=None,
+                                               method='LSODA', args= (force_axis,True) ))
+            else:
+                from scipy.interpolate import interp1d
+                a   = interp1d(v, self.F_profile['F']/self.levels.mass, kind=interpol_kind)
+                GNe = interp1d(v, self.F_profile['Ne']*self.levels.exstates.Gamma, kind=interpol_kind)
+                force_axis = np.array(force_axis)/np.linalg.norm(force_axis)
+                for i,v0 in enumerate(v0_arr):
+                    y0 = np.array([*v0, *r0_arr[i],0.])
+                    self.sols.append(solve_ivp(ode_MC1D, (0.,t_int[i]), y0, t_eval=None,
+                                               method='LSODA', args= (force_axis,False) ))
+        elif position_dep: #Einius: here only position dependent magnetic force
+            pass
+        
     #%%
     def calc_OBEs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
                   perfect_resonance=False, nodetuned_list=[],
@@ -542,6 +654,13 @@ class System:
         #___start multiprocessing if desired
         if mp:
             self.results = multiproc(obj=deepcopy(self),kwargs=self.args)
+            if multiprocessing.cpu_count() > 16: save_object(self,maxsize=1e15)
+            try:
+                sys.path.append('../')
+                import subprocess, sending_email
+                hostname = subprocess.check_output('hostname').decode("utf-8")
+                sending_email.send_message('Calculation complete!','File {} at Server {}'.format(self.description,hostname))
+            except: pass
             return None
         mp_time0 = time.gmtime()[5]
         
@@ -573,6 +692,11 @@ class System:
             betaB  = self.Bfield.Bvec_sphbasis/(hbar*self.levels.exstates.Gamma/self.Bfield.mu_B)
         else:
             betaB  = np.array([0.,0.,0.])
+        #___coefficients for new defined differential equations
+        self.Gfd = h_gek * 1j*self.G[None,None,:]/2/(2**0.5)*np.exp(1j*self.phi[None,None,:]) * np.dot(self.dMat,self.f.T)
+        self.om_gek = self.om_eg[:,:,None]-self.om_k[None,None,:]
+        self.betamu = tuple(1j* np.dot(self.muMat[i], np.flip(betaB*np.array([-1,1,-1]))) for i in range(2))
+        self.dd = h_gege * (self.dMat[:,:,None,None,:]* self.dMat[None,None,:,:,:]).sum(axis=-1)
                     
         if perfect_resonance: #does not work properly --> have to be calculated before h_gek coeffs.
             # nodetuned_list contains tuples (nu_gr,nu_ex,p)
@@ -604,85 +728,44 @@ class System:
         
         #___if steady state is wanted, multiple calculation steps of the OBEs
         #___have to be performed while the occupations between this steps are compared
-        for step in range(1000):    
-            #___determine the time points at which the ODE solver should evaluate the equations    
-            if len(t_eval) != 0:
-                self.t_eval = np.array(t_eval)
-            else:   
-                if dt != None and dt < t_int:
-                    self.t_eval = np.linspace(t_start,t_start+t_int,int(t_int/dt)+1)
-                else:
-                    self.t_eval, T_eval = None, None
-            if np.all(self.t_eval) != None:
-                T_eval = self.t_eval * Gamma
-            
-            #___transform the initial density matrix N0mat in a vector
-            N0_vec = np.zeros( N*(N+1) )
-            count = 0
-            for i in range(N):
-                for j in range(i,N):
-                    N0_vec[count]   = N0mat[i,j].real
-                    N0_vec[count+1] = N0mat[i,j].imag
-                    count += 2
-                    
-            #___depenending on the position dependence two different ODE evaluation functions are called
-            if velocity_dep or position_dep:
-                self.y0      = N0_vec#np.array([*self.N0, *self.v0, *self.r0])
-            else:
-                self.y0      = N0_vec
-            
-            # ---------------Ordinary Differential Equation solver----------------
-            # solve initial value problem of the ordinary first order differential equation with scipy
-            if not velocity_dep and not position_dep:
-                sol = solve_ivp(ode0_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
-                                self.y0, t_eval=T_eval, **kwargs,
-                                args=(lNum,uNum,pNum,self.G,self.f,self.om_eg,self.om_k,
-                                      betaB,self.dMat,self.muMat,
-                                      self.M_indices,h_gek,h_gege,self.phi))
-            else:
-                Gfd = h_gek * 1j*self.G[None,None,:]/2/(2**0.5)*np.exp(1j*self.phi[None,None,:]) * np.dot(self.dMat,self.f.T)
-                om_gek = self.om_eg[:,:,None]-self.om_k[None,None,:]
-                betamu = tuple(1j* np.dot(self.muMat[i], np.flip(betaB*np.array([-1,1,-1]))) for i in range(2))
-                dd = h_gege * (self.dMat[:,:,None,None,:]* self.dMat[None,None,:,:,:]).sum(axis=-1)
-                self.Gfd,self.om_gek = Gfd,om_gek
-                sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
-                                self.y0, t_eval=T_eval, **kwargs,
-                                args=(lNum,uNum,pNum,
-                                      self.M_indices,Gfd,om_gek,betamu,dd))
-            
-            #___transform the solution vectors back to the density matrix ymat
-            y_vec = sol.y
-            #: solution of the time dependent density matrix elements
-            self.ymat    = np.zeros((N,N,y_vec.shape[-1]),dtype=np.complex64)
-            count   = 0
-            for i in range(N):
-                for j in range(i,N):
-                    self.ymat[i,j,:] = y_vec[count] + 1j* y_vec[count+1]
-                    count += 2     
-            self.ymat    += np.conj(np.transpose(self.ymat,axes=(1,0,2))) #is diagonal remaining purely real or complex?
-            self.ymat[(np.arange(N),np.arange(N))] *=0.5
-            #: solution of the time dependent populations N
-            self.N = np.real(self.ymat[(np.arange(N),np.arange(N))])
-            #: array of the times at which the solutions are calculated
-            self.t = sol.t/Gamma
-            
-            if not steadystate: break
-            if step == 0:
-                length  = int(y_vec.shape[-1]/20)
-            else:
-                length  = int(y_vec.shape[-1]/2)
-            m1      = self.N[:, -(2*length):-length].mean(axis=1)
-            m2      = self.N[:, -length:           ].mean(axis=1)
-            # print('diff & prop',np.all(np.abs(m1-m2)*1e2<0.01),np.all(np.abs(1-m1/m2)*1e2 <5))
-            # print('prop\n',np.all(np.abs(1-m1/m2)*1e2 <5))
-            #___check if conditions for steady state are fulfilled
-            if np.all(np.abs(m1-m2)*1e2 < 0.1) and np.all(np.abs(1-m1/m2)*1e2 < 50):
-                break
-            else:
-                N0mat   = self.ymat[:,:,-1]
+        if not steadystate:
+            self._evaluate(t_start, t_int, dt, N0mat)
+        else:
+            #___initial propagation of the equations for reaching the equilibrium region
+            if self.steadystate['t_ini']:
+                self._evaluate(t_start, self.steadystate['t_ini'], dt, N0mat)
                 t_start = self.t[-1]
-                t_int   = self.t[-1] - self.t[-(2*length)]
-        if verbose: print(' calculation steps: ',step)
+                N0mat   = self.ymat[:,:,-1]
+            #___specifying interaction time for the next multiple iterations to compare
+            # if callable(self.steadystate['period']):
+            if isinstance(self.steadystate['period'],float):
+                t_int = self.steadystate['period']
+            elif self.args['rounded']:
+                t_int = 2*pi/(self.levels.exstates.Gamma*self.args['rounded'])
+            elif self.steadystate['period'] == 'standingwave':
+                period = 859.83e-9/2/abs(self.v0[2])
+                if period > 50e-6:  t_int = 50e-6
+                else:               t_int = period*(t_int//period+1) # int(t_int - t_int % period)
+            self._evaluate(t_start, t_int, dt, N0mat)
+            t_start = self.t[-1]
+            N0mat   = self.ymat[:,:,-1]
+            m1      = self.N.mean(axis=1)
+            # if self.steadystate['period'] == None: t_int *= 0.1
+            con1, con2 = self.steadystate['condition']
+            step    = 0
+            for step in range(1,self.steadystate['maxiters']):
+                self._evaluate(t_start, t_int, dt, N0mat)
+                m2 = self.N.mean(axis=1)
+                # print('diff & prop',np.all(np.abs(m1-m2)*1e2<con1),np.all(np.abs(1-m1/m2)*1e2 <con2))
+                #___check if conditions for steady state are fulfilled
+                if np.all(np.abs(m1-m2)*1e2 < con1) and np.all(np.abs(1-m1/m2)*1e2 < con2):
+                    break
+                else:
+                    m1      = m2
+                    N0mat   = self.ymat[:,:,-1]
+                    t_start = self.t[-1]       
+            if verbose: print(' calculation steps: ',step+1)
+            
         #___execution time for the ODE solving
         self.exectime = time.perf_counter()-start_time
         if verbose: print(" execution time: {:2.4f} seconds, (t_start, t_end) = ({}s, {}s)".format(self.exectime,mp_time0,time.gmtime()[5]))
@@ -699,33 +782,165 @@ class System:
             dev = abs(self.N[:,-1].sum() -1)
             if dev > 1e-6:
                 print('WARNING: the sum of the occupations does not remain stable! Deviation: {:.2E}'.format(dev))
+            if np.any(self.N < -1e-3): print('WARNING: population oscillations got negative')
         if return_fun: return return_fun(self)#{'N':self.N[-1,-1]}#[self.__dict__[key] for key in return_val]
-    
+        # if return_fun == True: use default function which returns force and pops?
+    def _evaluate(self,t_start,t_int,dt,N0mat):
+        Gamma = self.levels.exstates.Gamma
+        #___determine the time points at which the ODE solver should evaluate the equations    
+        if len(self.args['t_eval']) != 0:
+            self.t_eval = np.array(self.args['t_eval'])
+        else:   
+            if dt != None and dt < t_int:
+                self.t_eval = np.linspace(t_start,t_start+t_int,int(t_int/dt)+1)
+            else:
+                self.t_eval, T_eval = None, None
+        if np.all(self.t_eval) != None:
+            T_eval = self.t_eval * Gamma
+        
+        #___transform the initial density matrix N0mat in a vector
+        N = self.levels.N
+        N0_vec = np.zeros( N*(N+1) )
+        count = 0
+        for i in range(N):
+            for j in range(i,N):
+                N0_vec[count]   = N0mat[i,j].real
+                N0_vec[count+1] = N0mat[i,j].imag
+                count += 2
+                
+        #___depenending on the position dependence two different ODE evaluation functions are called
+        velocity_dep, position_dep = self.args['velocity_dep'], self.args['position_dep']
+        if velocity_dep or position_dep:
+            self.y0      = N0_vec#np.array([*self.N0, *self.v0, *self.r0])
+        else:
+            self.y0      = N0_vec
+        
+        # ---------------Ordinary Differential Equation solver----------------
+        # solve initial value problem of the ordinary first order differential equation with scipy
+        lNum,uNum,pNum = self.levels.lNum,self.levels.uNum,self.lasers.pNum
+        kwargs = self.args['kwargs']
+        if not velocity_dep and not position_dep:
+            # sol = solve_ivp(ode0_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+            #                 self.y0, t_eval=T_eval, **kwargs,
+            #                 args=(lNum,uNum,pNum,self.G,self.f,self.om_eg,self.om_k,
+            #                       betaB,self.dMat,self.muMat,
+            #                       self.M_indices,h_gek,h_gege,self.phi)) # delete?
+            sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+                            self.y0, t_eval=T_eval, **kwargs,
+                            args=(lNum,uNum,pNum, self.M_indices,
+                                  self.Gfd,self.om_gek,self.betamu,self.dd))
+        else:
+            sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+                            self.y0, t_eval=T_eval, **kwargs,
+                            args=(lNum,uNum,pNum, self.M_indices,
+                                  self.Gfd,self.om_gek,self.betamu,self.dd))
+        
+        #___transform the solution vectors back to the density matrix ymat
+        y_vec = sol.y
+        #: solution of the time dependent density matrix elements
+        self.ymat    = np.zeros((N,N,y_vec.shape[-1]),dtype=np.complex64)
+        count   = 0
+        for i in range(N):
+            for j in range(i,N):
+                self.ymat[i,j,:] = y_vec[count] + 1j* y_vec[count+1]
+                count += 2     
+        self.ymat    += np.conj(np.transpose(self.ymat,axes=(1,0,2))) #is diagonal remaining purely real or complex?
+        self.ymat[(np.arange(N),np.arange(N))] *=0.5
+        #: solution of the time dependent populations N
+        self.N = np.real(self.ymat[(np.arange(N),np.arange(N))])
+        #: array of the times at which the solutions are calculated
+        self.t = sol.t/Gamma
+            
     def add_magnfield(self,strength,direction=[0,0,1]): #old function. could be deleted?
+        """old function. Was replaced by the methods in the class Bfield"""
         self.Bfield.turnon(strength=strength,direction=direction)
 
 #%%
 class Bfield:
-    def __init__(self):
-        self.reset()
+    def __init__(self,**kwargs):
+        """Class defines a magnetic field configuration and methods to turn on
+        a certain field strength and direction conveniently. When initializing
+        a new system via `system=System()` a magnetic field instance with zero
+        field strength is directly included in this System via `system.Bfield`.
+        
+        Example
+        -------
+        >>> B1 = Bfield()   # initialize Bfield instance
+        >>> B1.turnon(strength=5e-4,direction=[0,0,1],angle=60)
+        >>> print(B1)       # print properties
+        >>> B1.reset()      # reset magnetic field to zero.
+
+        Parameters
+        ----------
+        **kwargs
+            Optional keyword arguments for directly turn on a certain magnetic
+            field by using these keyword arguments within the the method
+            :func:`turnon` (further information).
+        """
+        if kwargs:  self.turnon(**kwargs)
+        else:       self.reset()
         self.mu_B = physical_constants['Bohr magneton'][0]
-    def turnon(self,strength=5e-4,direction=[0,0,1],remix_strength=None):
+    def turnon(self,strength=5e-4,direction=[0,0,1],angle=None,remix_strength=None):
+        """Turn on a magnetic field with a certain strength and direction.
+
+        Parameters
+        ----------
+        strength : float or np.ndarray, optional
+            Strength in Tesla. The default is 5e-4.
+        direction : list or np.ndarray with shape (3,), optional
+            Direction of the magnetic field vector. Doesn't have to be given
+            as normalized array. The default is [0,0,1].
+        angle : float or np.ndarray, optional
+            Angle in degrees at which the magnetic field vector is pointing with
+            respect to the `direction` argument. The default is None.
+        remix_strength : float, optional
+            measure of the magnetic field strength (i.e. the magnetic remixing
+            matrix is multiplied by 10^remix_strength). Reasonable values are
+            between 6 and 9. The default is None.
+        """
         if np.any(strength >= 10e-4):
             print('WARNING: linear Zeeman shifts are only a good approx for B<10G.')
         self.strength = strength
         self.direction = np.array(direction)
+        if np.all(angle != None):
+            self.angle = angle
+            self.axisforangle = self.direction
+            angle = angle/360*2*pi
+            if not np.all(np.sin(angle) == 0.):
+                v1      = self.direction
+                v_perp  = np.cross(v1,np.array([0,1,0]))
+                if np.all(v_perp) == 0.0: v_perp = np.cross(v1,np.array([1,0,0]))
+                v1n, v_perpn = (v1*v1).sum(), (v_perp*v_perp).sum()
+                alpha = np.sqrt( (v1n/(np.sin(angle)**2) - v1n)/(v_perpn**2) )
+                self.direction  = v_perp + np.tensordot(alpha,v1,axes=0)
         # self.remix_strength = remix_strength
     def turnon_earth(self,vertical='z',towardsNorthPole='x'):
+        """Turn on the magnetic field of the earth at Germany with a strength
+        of approximately 48 uT. The vertical component is 44 uT and the horizontal
+        component directing towards the North Pole is 20 uT.
+
+        Parameters
+        ----------
+        vertical : str, optional
+            vertical axis. Supported values are 'x', 'y' or 'z'.
+            The default is 'z'.
+        towardsNorthPole : str, optional
+            horizontal axis directing towards the North Pole. Supported values
+            are 'x', 'y' or 'z'.The default is 'x'.
+        """
         axes = {'x' : 0, 'y' : 1, 'z' : 2}
         vec = np.zeros(3)
         vec[axes[vertical]]         = 44e-6
         vec[axes[towardsNorthPole]] = 20e-6
         self.turnon(strength=np.linalg.norm(vec),direction=vec)
     def reset(self):
-        self.strength, self.direction = 0.0, [0,0,1]
+        """Reset the magnetic field to default which is a magnetic field
+        strength 0.0 and the direction [0.,0.,1.]"""
+        self.strength, self.direction = 0.0, np.array([0.,0.,1.])
+        if 'angle' in self.__dict__: del self.angle, self.axisforangle
         self._remix_matrix = np.array([[],[]])
     def get_remix_matrix(self,grs,remix_strength=None):
-        """returns a matrix to remix all adjacent ground hyperfine levels
+        """return a matrix to remix all adjacent ground hyperfine levels
         by a magnetic field with certain field strength. The default is False.
     
         Parameters
@@ -755,10 +970,14 @@ class Bfield:
                     matr[i,j] = 1
         self._remix_matrix = 10**(remix_strength)*matr
         return self._remix_matrix #if remix_strength ==None: estimate it with strength & if strength=0 return empty matrix?
-        
+    
+    def __str__(self):
+        return str(self.__dict__)
+    
     @property
     def Bvec_sphbasis(self):
-        strength, direction = self.strength, self.direction
+        """returns the magnetic field vector in the spherical basis."""
+        strength, direction = self.strength, np.array(self.direction)
         ex,ey,ez = direction.T / np.linalg.norm(direction,axis=-1)
         eps = np.array([+(ex - 1j*ey)/np.sqrt(2), ez, -(ex + 1j*ey)/np.sqrt(2)])
         if type(strength)   == np.ndarray: strength = strength[:,None,None]
@@ -779,9 +998,9 @@ def multiproc(obj,kwargs):
     if obj.calcmethod == 'rateeqs': obj.Bfield.reset()
     
     #___expand dimensions of strength, direction, v0, r0 in order to be able to loop through them    
-    if obj.Bfield.strength.ndim == 0:   strengths = [obj.Bfield.strength]
+    if np.array(obj.Bfield.strength).ndim == 0:   strengths = [obj.Bfield.strength]
     else:                               strengths = obj.Bfield.strength
-    if obj.Bfield.direction.ndim == 1:  directions = [obj.Bfield.direction]
+    if np.array(obj.Bfield.direction).ndim == 1:  directions = [obj.Bfield.direction]
     else:                               directions = obj.Bfield.direction    
     if obj.r0.ndim == 1:    r0_arr = obj.r0[None,:]
     else:                   r0_arr = obj.r0
@@ -804,17 +1023,17 @@ def multiproc(obj,kwargs):
                 laser_iters_N[key] = len(value)
         laser_list.append(laser_dict)
     laser_iters = list(laser_iters_N.keys())
-    if kwargs['verbose']: print(laser_list,laser_iters,laser_iters_N)
+    # if kwargs['verbose']: print(laser_list,laser_iters,laser_iters_N)
     
     #___recursive function to loop through all iterable laser variables
     def recursive(_laser_iters,index):
         if not _laser_iters:
             for i,dic in enumerate(laser_list):
                 for key,value in dic.items():
-                    if kwargs['verbose']: print('Laser {}: key {} is set to {}'.format(i,key,value[index[key]]))
+                    # if kwargs['verbose']: print('Laser {}: key {} is set to {}'.format(i,key,value[index[key]]))
                     obj.lasers[i].__dict__[key] = value[index[key]]
                     #or more general here: __setattr__(self, attr_name, value)
-            if kwargs['verbose']: print('b1={},b2={},b3={},b4={}'.format(b1,b2,b3,b4))
+            # if kwargs['verbose']: print('b1={},b2={},b3={},b4={}'.format(b1,b2,b3,b4))
             # result_objects.append(pool.apply_async(np.sum,args=(np.arange(3),)))
             if obj.calcmethod == 'OBEs':
                 result_objects.append(pool.apply_async(deepcopy(obj).calc_OBEs,kwds=(kwargs)))
@@ -827,7 +1046,8 @@ def multiproc(obj,kwargs):
                 recursive(_laser_iters[1:],index)
     
     #___Parallelizing using Pool.apply()
-    pool = mp.Pool(mp.cpu_count()-1) #Init multiprocessing.Pool()
+    pool = multiprocessing.Pool(obj.multiprocessing['processes'],
+                                maxtasksperchild=obj.multiprocessing['maxtasksperchild']) #Init multiprocessing.Pool()
     result_objects = []
     iters_dict = {'strength': len(strengths),
                   'direction': len(directions),
@@ -847,9 +1067,14 @@ def multiproc(obj,kwargs):
                     obj.v0 = v0
                     recursive(laser_iters,{})
                     
-    if kwargs['verbose']: print('starting calculations')
+    if kwargs['verbose']: print('starting calculations for iterations: {}'.format(iters_dict))
+    time.sleep(.5)
     # print( [r.get() for r in result_objects])
-    results = [list(r.get().values()) for r in result_objects]
+    # results = [list(r.get().values()) for r in result_objects]
+    # keys = result_objects[0].get().keys() #switch this task with the one above?
+    results, keys = [], []
+    for r in tqdm(result_objects,smoothing=0.0):
+        results.append(list(r.get().values()))
     keys = result_objects[0].get().keys() #switch this task with the one above?
     pool.close()    # Prevents any more tasks from being submitted to the pool.
     pool.join()     # Wait for the worker processes to exit.
@@ -881,14 +1106,12 @@ def multiproc(obj,kwargs):
                         # result_objects.append(mp_calc(obj,betaB[c1,c2,:],**kwargs)) # --> without Pool parallelization
                     # result_objects.append(pool.apply_async(deepcopy(obj).calc_OBEs,kwds=(kwargs)))
 #%%
-def ode_MC(t,y,a,position_dep):
-    dy      = np.zeros(6)
-    if position_dep:
-        dy[:3] = a(y[:3],y[3:6])
-    else:
-        dy[3] = a(y[3])
-    dy[3:6] = y[:3]
-    return dy
+def vtoT(v,mass=157):
+    """function to convert a velocity v in m/s to a temperatur in K."""
+    return v**2 * 0.5*(mass*u)/k_B
+def Ttov(T,mass=157):
+    """function to convert a temperatur in K to a velocity v in m/s."""
+    return np.sqrt(k_B*T*2/(mass*u))
 
 #%%
 @jit(nopython=True,parallel=False,fastmath=True)
@@ -1119,7 +1342,7 @@ def ode1_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cylind,k,r_k,m,tsw
     sp = sp_.copy()
     # position dependent Force on particle due to Gaussian shape of Laserbeam:
     if pos_dep:
-        if w_cylind[0] != .0 :
+        if w_cylind[0] != .0 : #not only first index?
             for p in range(pNum):
                 sp[p] = sp[p] * np.exp(-2*( (y[-3]-r_k[p,0])**2/(w_cylind[p]**2)
                                            +(y[-1]-r_k[p,2])**2/(w[p]**2)    ))
@@ -1179,10 +1402,6 @@ def save_object(obj,filename=None,maxsize=20e3):
         ``Nscattrate`` are shrunken to this value by averaging over the other variable
         entries. Usefull for preventing the files to get to big in disk space.
         The default is 20e3 which results approximately in a file size of 12MB.
-
-    Returns
-    -------
-    None.
     """
     if filename == None:
         if hasattr(obj,'description'): filename = obj.description

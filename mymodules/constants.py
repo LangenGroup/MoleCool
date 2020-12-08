@@ -113,7 +113,8 @@ def freq(name):
         lambda_vibr = [[859.830, 828.903, 800.360],
                        [895.699, 862.188, 831.350],
                        [934.370, 897.961, 864.561],
-                       [976.181, 936.510, 900.238]]
+                       [976.181, 936.510, 900.238],
+                       [1021.520,978.165, 938.663]]
         # Energy level splitting of groundstates with quantum numbers J and F
         # Energies of excited levels are not resolved, and thus assumed to be equal
         hyperfine_gr_labels = [[0.5,      0.5,     1.5,     1.5],   #-> J
