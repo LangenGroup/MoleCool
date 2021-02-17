@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v2.3.1
+v2.4.1
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -109,7 +109,7 @@ class Lasersystem:
         **kwargs
             optional arguments  (see :class:`Laser`).
         """
-        EOM_freqs   = np.array([-2,-1,1,2])*np.expand_dims(EOM_freq,axis=-1).T
+        EOM_freqs   = (np.array([-2,-1,1,2])*np.expand_dims(EOM_freq,axis=-1)).T
         if 'I' in kwargs:
             I_red   = np.array(ratios)/np.sum(ratios) * np.expand_dims(kwargs['I'],axis=-1)
             del kwargs['I']
@@ -278,8 +278,8 @@ class Laser:
                 z = np.array([ 0, +1, 0 ])
                 if len(p) == 1:
                     if p == 'x': f_q = x
-                    if p == 'y': f_q = y
-                    if p == 'z': f_q = z
+                    elif p == 'y': f_q = y
+                    elif p == 'z': f_q = z
                 if len(p) == 2:
                     if pol1 == 'sigmap':
                         a1,a2 = -1., -1j
@@ -288,7 +288,7 @@ class Laser:
                     if p == 'xy':   f_q = a1*x + a2*y
                     elif p == 'xz': f_q = a1*z + a2*x
                     elif p == 'yz': f_q = a1*y + a2*z
-                self.f_q = f_q / np.linalg.norm(f_q)
+                self.f_q = np.array([ -f_q[2], +f_q[1], -f_q[0] ]) / np.linalg.norm(f_q)
         else:
             raise Exception("Wrong datatype or length of <pol>: either tuple((2)) or str allowed")
         self.pol1,self.pol2 = pol1,pol2
