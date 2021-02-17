@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v2.3.1
+v2.4.1
 
 This module contains all classes and functions to define a System including
 multiple :class:`Level` objects.
@@ -108,7 +108,12 @@ class Levelsystem:
     
     def __delitem__(self,index):
         """delete levels using del system.levels[<normal indexing>], or delete all del system.levels[:]"""
-        del self.entries[index] #does not work why?
+        if (type(index) == slice):  indices = sorted(range(self.N)[index],reverse=True)
+        else:                       indices = [index]
+        for i in indices:
+            if i >= self.lNum:      del self.exstates.entries[i-self.lNum]
+            else:                   del self.grstates.entries[i]
+        # del self.entries[index] #does not work why?
         self.__dMat_arr                 = None #also reset other variables???
         self.__branratios_arr           = None
         self.__freq_arr                 = None
@@ -125,10 +130,6 @@ class Levelsystem:
             all ground states with vibrational levels :math:`\\nu\\le` `nu_max`
             and respectively all excited states up to `(nu_max-1)` are added to
             the subclasses :class:`Groundstates` and :class:`Excitedstates`.
-
-        Returns
-        -------
-        None.
         """
         for nu in range(nu_max+1):
             self.grstates.add_grstate(nu=nu)      
@@ -196,8 +197,8 @@ class Levelsystem:
                     dMat.append(dMat_row)
                     row += 1
             self._dMat = pd.DataFrame(dMat,
-                                     index  =pd.MultiIndex.from_arrays(np.array(index).T,   names=('J','F','mF')),
-                                     columns=pd.MultiIndex.from_arrays(np.array(columns).T, names=("J'","F'","mF'"))
+                                     index  =pd.MultiIndex.from_arrays(np.array(index,dtype=object).T,   names=('J','F','mF')),
+                                     columns=pd.MultiIndex.from_arrays(np.array(columns,dtype=object).T, names=("J'","F'","mF'"))
                                      )       
             self._dMat /= np.sqrt((self._dMat**2).sum(axis=0))
         return self._dMat
@@ -482,7 +483,7 @@ class Levelsystem:
         for l1,st1 in enumerate(self.grstates):
             list_M = []
             if st1.name == 'Loss state':
-                M_indices_g.append([l1])
+                M_indices_g.append(np.array([l1]))
                 continue
             for l2,st2 in enumerate(self.grstates):
                 if st2.name == 'Loss state':
@@ -490,14 +491,14 @@ class Levelsystem:
                 if st1.nu == st2.nu and st1.N == st2.N \
                     and st1.J == st2.J and st1.F == st2.F:
                     list_M.append(l2)
-            M_indices_g.append(list_M)
+            M_indices_g.append(np.array(list_M))
         for st1 in self.exstates:
             list_M = []
             for l2,st2 in enumerate(self.exstates):
                 if st1.nu == st2.nu and st1.N == st2.N \
                     and st1.J == st2.J and st1.F == st2.F:
                     list_M.append(l2)
-            M_indices_e.append(list_M)
+            M_indices_e.append(np.array(list_M))
         self._M_indices = (tuple(M_indices_g),tuple(M_indices_e))
         return self._M_indices
     
@@ -543,8 +544,8 @@ class Levelsystem:
             if not([ex.J,ex.F] in col_labels):
                 col_labels.append([ex.J,ex.F])
         if len(row_labels) == 0 or len(col_labels)==0:
-            raise('There are no levels defined! First, levels have to be added to this class')
-        return np.array(row_labels).T, np.array(col_labels).T
+            raise Exception('There are no levels defined! First, levels have to be added to this class')
+        return np.array(row_labels,dtype=object).T, np.array(col_labels,dtype=object).T
     @property
     def description(self):
         """str: Displays a short description with the number of included laser objects."""
@@ -585,8 +586,9 @@ class Groundstates():
         ----------
         nu : int, optional
             vibrational state manifold quantum number. The default is 0.
-        J : float, optional
-            Total angular momentum without the nuclear spin. The default is None.
+        J : float or str, optional
+            label or number of other angular momenta without the nuclear spin.
+            The default is None.
         F : float, optional
             Total angular momentum with the nuclear spin. The default is None.
         mF : float, optional
@@ -610,7 +612,7 @@ class Groundstates():
             if isinstance(x, (int, float)) and not isinstance(x, bool):
                 return True
             return False
-        if isnumber(F) and isnumber(J):
+        if isnumber(F):# and isnumber(J): or add label as input parameter?
             if isinstance(mF,(list,np.ndarray)):
                 pass
             elif mF == None:
@@ -642,10 +644,6 @@ class Groundstates():
             spin quantum number. The default is 0.5.
         I : float, optional
             nuclear spin quantum number. The default is 0.5.
-        
-        Returns
-        -------
-        None.
         """
         for J in np.arange(abs(N-S),abs(N+S)+1):
             for F in np.arange(abs(J-I),abs(J+I)+1):
@@ -664,10 +662,6 @@ class Groundstates():
             Provided the default value None a loss state is added which is
             lying in the next higher vibrational manifold than the existing one
             in the already included ground levels.
-
-        Returns
-        -------
-        None.
         """
         if self.has_lossstate == False:
             if nu == None:
@@ -728,7 +722,7 @@ class Groundstates():
     @property
     def nu_max(self):
         if len(self.entries)==0:
-            raise('There are no levels defined! First, levels have to be added to this class')
+            raise Exception('There are no levels defined! First, levels have to be added to this class')
         return max([st.nu for st in self.entries])
 #%%    
 class Excitedstates():
@@ -761,8 +755,9 @@ class Excitedstates():
         ----------
         nu : int, optional
             vibrational state manifold quantum number. The default is 0.
-        J : float, optional
-            Total angular momentum without the nuclear spin. The default is None.
+        J : float or str, optional
+            label or number of other angular momenta without the nuclear spin.
+            The default is None.
         F : float, optional
             Total angular momentum with the nuclear spin. The default is None.
         mF : float, optional
@@ -785,7 +780,7 @@ class Excitedstates():
             if isinstance(x, (int, float)) and not isinstance(x, bool):
                 return True
             return False
-        if isnumber(F) and isnumber(J):
+        if isnumber(F):# and isnumber(J):
             if isinstance(mF,(list,np.ndarray)):
                 pass
             elif mF == None:
@@ -818,10 +813,6 @@ class Excitedstates():
             spin quantum number. The default is 0.5.
         I : float, optional
             nuclear spin quantum number. The default is 0.5.
-
-        Returns
-        -------
-        None.
         """
         for F in np.arange(abs(J-I),abs(J+I)+1):
             for mF in np.arange(-F,F+1):
@@ -846,7 +837,7 @@ class Excitedstates():
     @property
     def nu_max(self):
         if len(self.entries)==0:
-            raise('There are no levels defined! First, levels have to be added to this class')
+            raise Exception('There are no levels defined! First, levels have to be added to this class')
         return max([st.nu for st in self.entries])
     
 #%%
