@@ -4,7 +4,7 @@ Created on Wed May 13 18:27:42 2020
 
 @author: fkogel
 
-v2.3.1
+v2.5.0
 
 Module containing specific contants of certain molecules, atoms or more general
 systems. Theses constants will be imported within the classes
@@ -31,6 +31,7 @@ import _pickle as pickle
 def dMat(name):
     """returns the electric dipole matrix of the electric dipole transition operator.
     """
+    #ATTENTION: all label pairs (J,F,mF) or (J,F) have to be unique!
     if name == 'BaF':
         # decay ex -> gr: dipole_matrix_new1, gr -> ex: dipole_matrix_new2
         with open('dipole_matrix_new1'+'.pkl','rb') as input:
@@ -82,6 +83,22 @@ def dMat_red(name):
                        [1  ]]       #-> F
         column_labels = [[0.5],     #-> J'
                          [0.0]]     #-> F'
+    elif name == '137BaF':
+        array =[[-0.9074, -0.1325, -0.2635, -0.2712],
+                [ 1.4981, -0.3807, -0.5068, -0.    ],
+                [ 0.1358, -0.6456, -0.2039,  0.1946],
+                [ 0.1968, -1.1891,  0.2889, -0.2963],
+                [-0.0131,  0.0625, -0.4385, -0.3416],
+                [-0.1789,  0.8507, -0.3824,  0.5273],
+                [-0.3642,  0.5028, -0.2123,  1.1851],
+                [ 1.1343, -0.2194, -0.9552,  0.0403],
+                [-0.5021, -0.0945,  1.4665,  0.    ],
+                [-0.0758,  0.9844,  0.3443,  0.    ],
+                [-1.1424,  0.    ,  0.    , -0.    ]]
+        row_labels = [[11, 12, 11, 12, 10,   21, 22, 21, 22, 23, 23 ],  #-> J = 10*G+F1
+                      [1.5,2.5,0.5,1.5,0.5,  0.5,1.5,1.5,2.5,2.5,3.5]]  #-> F
+        column_labels = [[2,    2,      1,      1], #-> J = F1
+                         [2.5,  1.5,    1.5,    0.5]] #-> F
     else:
         return None
     return array, row_labels, column_labels
@@ -126,6 +143,16 @@ def freq(name):
         hyperfine_ex        =  [0.0,     0.0]    #-> values in MHz (non-angular frequencies)
         
         # rotational_gr       = [0.0, 12947.890, 38843.552, 77686.706] doesn't work yet!!!
+    elif name == '137BaF':
+        lambda_vibr = [[859.845]]
+        hyperfine_gr_labels = [[11, 12, 11, 12, 10,   21, 22, 21, 22, 23, 23 ],  #-> J = 10*G+F1
+                               [1.5,2.5,0.5,1.5,0.5,  0.5,1.5,1.5,2.5,2.5,3.5]]  #-> F
+        hyperfine_gr = [10025.2498, 10029.9165, 10042.8014, 10054.3382, 10164.1612,
+                        14635.2988, 14643.5158, 14677.1062, 14681.1442, 14729.4801,
+                        14764.7988]
+        hyperfine_ex_labels = [[2,    2,      1,      1],   #-> J = F1
+                               [2.5,  1.5,    1.5,    0.5]] #-> F
+        hyperfine_ex = [  0.    ,   0.    , 304.4994, 304.4994]
     else:
         return None
     return lambda_vibr, (hyperfine_gr,hyperfine_gr_labels), (hyperfine_ex,hyperfine_ex_labels)
@@ -153,6 +180,8 @@ def Gamma(name):
     """
     if name == 'BaF':
         Gamma = 2*pi*2.8421e6
+    elif name == '137BaF':
+        Gamma = 2*pi*2.8421e6
     elif name == 'CaF':
         Gamma = 2*pi*6.3e6
     else:
@@ -163,6 +192,8 @@ def mass(name):
     """returns the mass (e.g. for the :math:`^{138}Ba^{19}F` molecule).
     """
     if name == 'BaF':
+        mass = (138+19)*u
+    elif name == '137BaF':
         mass = (138+19)*u
     elif name == 'CaF':
         mass = (40+19)*u

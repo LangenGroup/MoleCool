@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.4.1
+v2.5.0
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -256,23 +256,19 @@ class System:
                                 for la in self.lasers ])
         self.k      = np.array([ la.k*la.kabs for la in self.lasers ])
         self.w      = np.array([la.w for la in self.lasers ])
-        self.w_cylind = np.array([la.w_cylind for la in self.lasers ])
+        self._w_cylind = np.array([la._w_cylind for la in self.lasers ])
         self.r_k    = np.array([ np.array(la.r_k,dtype=float) for la in self.lasers ])
         self.beta   = np.array([la.beta for la in self.lasers ])
+        omega_k     = np.array([la.omega for la in self.lasers])
         #polarization switching time
         tswitch = 1/self.lasers.freq_pol_switch
         #calculate excitation rate R1, R2 (two for switching) with detunings and selection rules
         self.rx1    = np.zeros((lNum,uNum,pNum))
         self.rx2    = np.zeros((lNum,uNum,pNum))
-        self.R1     = np.zeros((lNum,uNum,pNum))
-        self.R2     = np.zeros((lNum,uNum,pNum))
-        self.delta  = np.zeros((lNum,uNum,pNum))
-        for l in range(lNum):
-            for u in range(uNum):
-                gr,ex       = self.levels.grstates[l],self.levels.exstates[u]
-                for p in range(pNum):
-                    la = self.lasers[p]
-                    self.delta[l,u,p]   = -(self.levels.calc_freq()[l,u] - la.omega)
+        self.delta  = omega_k[None,None,:] - self.levels.calc_freq()[:,:,None]
+        for l,gr in enumerate(self.levels.grstates):
+            for u,ex in enumerate(self.levels.exstates):
+                for p,la in enumerate(self.lasers):
                     #if nodetuning and abs(self.delta[l,u,p]) < 20e6*2*pi:
                     #    self.delta[l,u,p] = 0
                     if perfect_resonance:
@@ -284,8 +280,8 @@ class System:
                                 self.delta[l,u,p] = 0
                     self.rx1[l,u,p]     = self.r_[l,u] * selrule(gr,ex,la.pol1)
                     self.rx2[l,u,p]     = self.r_[l,u] * selrule(gr,ex,la.pol2)
-                    self.R1[l,u,p]      = Gamma/2 * (self.rx1[l,u,p]*self.sp[p]) / (1+ 4*(self.delta[l,u,p]- np.dot(self.k[p],self.v0))**2/Gamma**2)
-                    self.R2[l,u,p]      = Gamma/2 * (self.rx2[l,u,p]*self.sp[p]) / (1+ 4*(self.delta[l,u,p]- np.dot(self.k[p],self.v0))**2/Gamma**2)
+        self.R1 = Gamma/2*self.rx1*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
+        self.R2 = Gamma/2*self.rx2*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
         #sum R1 & R2 over pNum:
         self.R1sum, self.R2sum = np.sum(self.R1,axis=2), np.sum(self.R2,axis=2)
         
@@ -329,7 +325,7 @@ class System:
             sol = solve_ivp(ode1_rateeqs_jit, (t_start,t_start+t_int), self.y0,
                     t_eval=self.t_eval, max_step = 10e-6, **kwargs,
                     args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
-                          self.delta,self.sp,self.w,self.w_cylind,
+                          self.delta,self.sp,self.w,self._w_cylind,
                           self.k,self.r_k,self.m,tswitch,self.M,position_dep,self.beta))
             #velocity v and position r
             self.v = sol.y[-6:-3]
@@ -582,19 +578,7 @@ class System:
             v = self.F_profile['v']
             if 'I' in self.F_profile: #or position_dep?
                 I = self.F_profile['I']
-                def I_ges(r):
-                    I_arr = np.zeros(self.lasers.pNum)
-                    for p,la in enumerate(self.lasers):
-                        if la.w_cylind != .0:
-                            if np.abs(r[0]-la.r_k[0]) > 5e-2:
-                                I_arr[p] = 0.0
-                            else:
-                                I_arr[p] = la.I * np.exp(-2*( (r[0]-la.r_k[0])**2/(la.w_cylind**2)
-                                                           +(r[1]-la.r_k[1])**2/(la.w**2)    ))
-                        else:
-                            d = np.linalg.norm(np.cross( r-la.r_k , la.k/np.linalg.norm(la.k) ))
-                            I_arr[p] = la.I * np.exp(-2 * d**2 / (la.w**2) )   
-                    return I_arr.sum() # change?
+                I_tot = self.lasers.get_intensity_func()
                 
                 from scipy.interpolate import RegularGridInterpolator
                 a_intp  = RegularGridInterpolator((v,I), self.F_profile['F']/self.levels.mass,
@@ -604,8 +588,8 @@ class System:
                                                    method=interpol_kind,
                                                    bounds_error=False,fill_value=None)
                 self.a_intp=a_intp
-                def a(v,r): return a_intp(xi=(v,I_ges(r)))
-                def GNe(v,r): return GNe_intp(xi=(v,I_ges(r)))
+                def a(v,r): return a_intp(xi=(v,I_tot(r)))
+                def GNe(v,r): return GNe_intp(xi=(v,I_tot(r)))
                 if force_axis == '-v':
                     v0_arr2 = v0_arr.copy()
                     v0_arr2[:,0] *= 0
@@ -1496,7 +1480,7 @@ def ode1_rateeqs_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cylind,k,r
                                            +(y[-1]-r_k[p,2])**2/(w[p]**2)    ))
         else:
             for p in range(pNum):
-                d = np.linalg.norm(np.cross( y[-3:]-r_k[p] , k[p]/np.linalg.norm(k[p]) ))
+                d = np.linalg.norm(np.cross( y[-3:]-r_k[p] , k[p]/np.linalg.norm(k[p]) )) #norm doesn't have to be calcualted?! since the norm of k[p] is given by lasers[p].kabs
                 sp[p] = sp[p] * np.exp(-2 * d**2 / ((w[p])**2) )
     delta_ = delta + 2*pi*beta*t #frequency chirping
     # shape of k: (pNum,3)
@@ -1600,7 +1584,7 @@ def selrule(gr,ex,pol):
         Groundstate Object.
     ex : :class:`~Levelsystem.Excitedstate`
         Excitedstate object.
-    pol : str, tuple(str, str)
+    pol : str
         polarization of the light interacting with the two states.
         See :class:`~Lasersystem.Laser`
 
