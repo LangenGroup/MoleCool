@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.5.0
+v2.5.1
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -84,6 +84,7 @@ from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pl
+import matplotlib.ticker as mtick
 # plt.rcParams['errorbar.capsize']=3
 # plt.rc('text', usetex=True)
 # plt.rc('font', family='serif')
@@ -242,6 +243,8 @@ class System:
         self.m      = self.levels.mass
         #branching ratios
         self.r_     = self.levels.calc_branratios(calculated_by)
+        #electric dipole matrix
+        self.dMat   = self.levels.calc_dMat()
         #number of ground, excited states and lasers
         lNum,uNum,pNum = self.levels.lNum, self.levels.uNum, self.lasers.pNum
         
@@ -255,9 +258,12 @@ class System:
         self.sp     = np.array([ la.I / ( pi*c*h*Gamma/(3*la.lamb**3) ) 
                                 for la in self.lasers ])
         self.k      = np.array([ la.k*la.kabs for la in self.lasers ])
+        self.f      = np.array([la.f_q for la in self.lasers])
         self.w      = np.array([la.w for la in self.lasers ])
         self._w_cylind = np.array([la._w_cylind for la in self.lasers ])
         self.r_k    = np.array([ np.array(la.r_k,dtype=float) for la in self.lasers ])
+        self.r_cyl_trunc = np.array([la._r_cylind_trunc for la in self.lasers])
+        self.dir_cyl= np.array([la._dir_cylind for la in self.lasers],dtype=float) #unit vectors
         self.beta   = np.array([la.beta for la in self.lasers ])
         omega_k     = np.array([la.omega for la in self.lasers])
         #polarization switching time
@@ -266,20 +272,24 @@ class System:
         self.rx1    = np.zeros((lNum,uNum,pNum))
         self.rx2    = np.zeros((lNum,uNum,pNum))
         self.delta  = omega_k[None,None,:] - self.levels.calc_freq()[:,:,None]
-        for l,gr in enumerate(self.levels.grstates):
-            for u,ex in enumerate(self.levels.exstates):
-                for p,la in enumerate(self.lasers):
-                    #if nodetuning and abs(self.delta[l,u,p]) < 20e6*2*pi:
-                    #    self.delta[l,u,p] = 0
-                    if perfect_resonance:
-                        # nodetuned_list contains tuples (nu_gr,nu_ex,p)
-                        # determining the ground/ excited states nu being in
-                        # perfect resonance with the lasers p
-                        for nu_gr, nu_ex, p_ in nodetuned_list:
-                            if gr.nu == nu_gr and ex.nu == nu_ex and p == p_:
-                                self.delta[l,u,p] = 0
-                    self.rx1[l,u,p]     = self.r_[l,u] * selrule(gr,ex,la.pol1)
-                    self.rx2[l,u,p]     = self.r_[l,u] * selrule(gr,ex,la.pol2)
+        if np.any([la.pol_switching for la in self.lasers]):
+            for l,gr in enumerate(self.levels.grstates):
+                for u,ex in enumerate(self.levels.exstates):
+                    for p,la in enumerate(self.lasers):
+                        #if nodetuning and abs(self.delta[l,u,p]) < 20e6*2*pi:
+                        #    self.delta[l,u,p] = 0
+                        if perfect_resonance:
+                            # nodetuned_list contains tuples (nu_gr,nu_ex,p)
+                            # determining the ground/ excited states nu being in
+                            # perfect resonance with the lasers p
+                            for nu_gr, nu_ex, p_ in nodetuned_list:
+                                if gr.nu == nu_gr and ex.nu == nu_ex and p == p_:
+                                    self.delta[l,u,p] = 0
+                        self.rx1[l,u,p]     = self.r_[l,u] * selrule(gr,ex,la.pol1)
+                        self.rx2[l,u,p]     = self.r_[l,u] * selrule(gr,ex,la.pol2)
+        else:
+            self.rx1 = np.abs(np.dot(self.dMat,self.f.T))**2
+            self.rx2 = self.rx1.copy()
         self.R1 = Gamma/2*self.rx1*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
         self.R2 = Gamma/2*self.rx2*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
         #sum R1 & R2 over pNum:
@@ -326,7 +336,9 @@ class System:
                     t_eval=self.t_eval, max_step = 10e-6, **kwargs,
                     args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
                           self.delta,self.sp,self.w,self._w_cylind,
-                          self.k,self.r_k,self.m,tswitch,self.M,position_dep,self.beta))
+                          self.k,np.linalg.norm(self.k,axis=-1),self.r_k,
+                          self.r_cyl_trunc,self.dir_cyl,
+                          self.m,tswitch,self.M,position_dep,self.beta))
             #velocity v and position r
             self.v = sol.y[-6:-3]
             self.r = sol.y[-3:]
@@ -481,6 +493,9 @@ class System:
         for k,la in enumerate(self.lasers):
             Rabi_freqs_arr = np.abs(self.G[k]/np.sqrt(2)*np.dot(self.dMat, self.f[k,:])* Gamma)
             weights= np.exp(-4*(self.omega_eg-self.omega_k[k])**2/(Gamma**2))
+            # protection against the case when all weights are zero because the
+            # detuning is too large so that exp() gets 0.0
+            if np.all(weights==0.0): weights = weights*0 + 1
             weights = weights*np.sign(Rabi_freqs_arr) * (np.dot(self.dMat, self.f[k,:]))**2
             # print(Rabi_freqs_arr,'\n',weights)
             Rabi_freqs.append( (Rabi_freqs_arr*weights).sum()/weights.sum() )
@@ -545,6 +560,12 @@ class System:
                                      *self.Gfd[:,:,:,None,None]*np.exp(1j*T[None,None,None,None,t1:t2]*self.om_gek[:,:,:,None,None]) \
                                      *self.k[None,None,:,:,None] ).sum(axis=(0,1,2))
         return F
+    
+    def Isat(self,kind='2-level'):
+        """calculates saturation intensity in W/m^2 for each laser"""
+        if kind == '2-level':
+            return np.array([pi*c*h*self.levels.exstates.Gamma/(3*la.lamb**3)
+                             for la in self.lasers ])
     #%%
     def calc_trajectory(self,t_int=20e-6,t_start=0.,dt=None,t_eval=[],
                         position_dep=False,verbose=True,force_axis=None,
@@ -731,7 +752,9 @@ class System:
         else:
             #___initial propagation of the equations for reaching the equilibrium region
             if self.steadystate['t_ini']:
+                self.args['t_eval'] = [t_start, self.steadystate['t_ini']] #only the start and end point are important to be calculated for initial period
                 self._evaluate(t_start, self.steadystate['t_ini'], dt, N0mat)
+                self.args['t_eval'] = []
                 t_start = self.t[-1]
                 N0mat   = self.ymat[:,:,-1]
             #___specifying interaction time for the next multiple iterations to compare
@@ -741,9 +764,12 @@ class System:
             elif self.args['rounded']:
                 t_int = 2*pi/(self.levels.exstates.Gamma*self.args['rounded'])
             elif self.steadystate['period'] == 'standingwave':
-                period = 859.83e-9/2/abs(self.v0[2])
-                if period > 50e-6:  t_int = 50e-6
-                else:               t_int = period*(t_int//period+1) # int(t_int - t_int % period)
+                if self.v0[2] != 0: #if v0==0, then t_int is not changed and thus used for int time.
+                    lambda_mean = (c/(self.om_eg*Gamma/2/pi)).mean()
+                    if np.any(np.abs(c/(self.om_eg*Gamma/2/pi) /lambda_mean -1)>0.1e-2 ):#percental deviation from mean
+                        print('WARNING: averaging over standing wave periods might not be accurate since the wavelengths differ.')
+                    period = lambda_mean/2/abs(self.v0[2])
+                    t_int = period*(t_int//period+1) # int(t_int - t_int % period)
             self._evaluate(t_start, t_int, dt, N0mat)
             t_start = self.t[-1]
             N0mat   = self.ymat[:,:,-1]
@@ -788,7 +814,8 @@ class System:
         #___determine the time points at which the ODE solver should evaluate the equations    
         if len(self.args['t_eval']) != 0:
             self.t_eval = np.array(self.args['t_eval'])
-        else:   
+        else:
+            if dt == 'auto': dt = 1/np.max(self.calc_Rabi_freqs()/2/pi)/9 #1/9 of one Rabi-oscillation
             if dt != None and dt < t_int:
                 self.t_eval = np.linspace(t_start,t_start+t_int,int(t_int/dt)+1)
             else:
@@ -1467,21 +1494,26 @@ def ode1_rateeqs(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,
 
 #%%
 @jit(nopython=True,parallel=False,fastmath=False)
-def ode1_rateeqs_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cylind,k,r_k,m,tswitch,M,pos_dep,beta):    
+def ode1_rateeqs_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cyl,k,kabs,r_k,r_cyl_trunc,dir_cyl,m,tswitch,M,pos_dep,beta):    
     dydt = np.zeros(lNum+uNum+3+3)
     if floor(t/tswitch)%2 == 1: rx=rx1
     else: rx=rx2
     sp = sp_.copy()
     # position dependent Force on particle due to Gaussian shape of Laserbeam:
     if pos_dep:
-        if w_cylind[0] != .0 : #not only first index?
-            for p in range(pNum):
-                sp[p] = sp[p] * np.exp(-2*( (y[-3]-r_k[p,0])**2/(w_cylind[p]**2)
-                                           +(y[-1]-r_k[p,2])**2/(w[p]**2)    ))
-        else:
-            for p in range(pNum):
-                d = np.linalg.norm(np.cross( y[-3:]-r_k[p] , k[p]/np.linalg.norm(k[p]) )) #norm doesn't have to be calcualted?! since the norm of k[p] is given by lasers[p].kabs
-                sp[p] = sp[p] * np.exp(-2 * d**2 / ((w[p])**2) )
+        for p in range(pNum):
+            r_ = y[-3:] - r_k[p]
+            if w_cyl[p] != 0.0: # calculation for a beam which is widened by a cylindrical lens
+                d2_w = np.dot(dir_cyl[p],r_)**2
+                if d2_w > r_cyl_trunc[p]**2: #test if position is larger than the truncation radius along the dir_cyl direction
+                    sp[p] = 0.0  
+                else:
+                    d2 = np.dot(np.cross(dir_cyl[p],k[p]/kabs[p]),r_)**2
+                    sp[p] = sp[p] *np.exp(-2*(d2_w/w_cyl[p]**2 + d2/w[p]**2))
+            else: 
+                r_perp = np.cross( r_ , k[p]/kabs[p] )
+                sp[p] = sp[p] *np.exp(-2 * np.dot(r_perp,r_perp) / w[p]**2 )  
+
     delta_ = delta + 2*pi*beta*t #frequency chirping
     # shape of k: (pNum,3)
     # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)

@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v2.5.0
+v2.5.1
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -33,6 +33,7 @@ be printed to display all attributes via:
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g
 from numba import jit
+import matplotlib.pyplot as plt
 #%%
 class Lasersystem:
     def __init__(self,freq_pol_switch=5e6):
@@ -192,6 +193,48 @@ class Lasersystem:
             return self.intensity_func(r)
         else:
             return self.get_intensity_func()(r)
+        
+    def plot_I_2D(self,ax='x',axshift=0,limits=([-0.05,0.05],[-0.05,0.05])):
+        """plot the intensity distribution of all laser beams by using the
+        method :func:`get_intensity_func`.
+        
+        Parameters
+        ----------
+        ax : str, optional
+            axis orthogonal to the plane to be plotted. Can be 'x','y' or 'z'.
+            The default is 'x'.
+        axshift : float, optional
+            shift along the axis `ax` which defines the absolute position of
+            the plane to be plotted. The default is 0.
+        limits : tuple(list,list), optional
+            determines the minimum and maximum limit for both axes which lies
+            in the plane to be plotted.
+            The default is ([-0.05,0.05],[-0.05,0.05]).
+        """
+        axshift = float(axshift)
+        xyz = {'x':0,'y':1,'z':2}
+        ax_ = xyz[ax]
+        del xyz[ax]
+        axes_ = np.array([*xyz.values()])
+        lim1,lim2 = limits
+        x1,x2 = np.linspace(lim1[0],lim1[1],201),np.linspace(lim2[0],lim2[1],201)
+        Z = np.zeros((len(x1),len(x2)))
+        r = np.zeros(3)
+        for i in range(201):
+            for j in range(201):
+                r[ax_] = axshift
+                r[axes_] = x1[i],x2[j]
+                Z[i,j] = self.I_tot(r)
+        
+        X1,X2 = np.meshgrid(x1,x2)
+        plt.figure('Intensity distribution of all laser beams at {}={:.2f}mm'.format(
+            ax,axshift*1e3))
+        plt.contourf(X1*1e3,X2*1e3,Z.T,levels=20)
+        cbar = plt.colorbar()
+        cbar.ax.set_ylabel('Intensity $I_{tot}$ in W/m$^2$')
+        keys = list(xyz.keys())
+        plt.xlabel('position {} in mm'.format(keys[0]))
+        plt.ylabel('position {} in mm'.format(keys[1]))
     
     def __delitem__(self,index):
         """delete lasers using del system.lasers[<normal indexing>], or delete all del system.lasers[:]"""
@@ -201,7 +244,7 @@ class Lasersystem:
         
     def __getitem__(self,index):
         #if indeces are integers or slices (e.g. obj[3] or obj[2:4])
-        if isinstance(index, (int, slice)): 
+        if isinstance(index, (int, slice,np.integer)): 
             return self.entries[index]
         #if indices are tuples instead (e.g. obj[1,3,2])
         return [self.entries[i] for i in index]
@@ -220,6 +263,14 @@ class Lasersystem:
     def pNum(self):
         """int: returns the number of included Laser objects."""
         return len(self.entries)
+    @property
+    def I_sum(self):
+        """returns the sum of the peak intensities of all laser beams"""
+        return np.array([la.I for la in self]).sum()
+    @property
+    def P_sum(self):
+        """returns the sum of the powers of all laser beams"""
+        return np.array([la.P for la in self]).sum()
     
 #%%
 class Laser:
@@ -309,7 +360,14 @@ class Laser:
         ------
         Exception
             When the given type of the ``pols`` Parameter is not accepted.
-
+            
+        Example
+        -------
+        A fast way to calculate the power of a laser with certain beam radii
+        to reach a certain intensity (or the other way around for an intensity):
+            
+            >>> print(Laser(I=1000.,w=1e-3,w_cylind=5e-2).P)
+            >>> print(Laser(P=0.02,FWHM=5e-3).I)
         """
         #: float: angular frequency :math:`\omega`
         self.omega      = 2*pi*(c/lamb + freq_shift)

@@ -4,7 +4,7 @@ Created on Wed May 13 18:27:42 2020
 
 @author: fkogel
 
-v2.5.0
+v2.5.1
 
 Module containing specific contants of certain molecules, atoms or more general
 systems. Theses constants will be imported within the classes
@@ -27,6 +27,10 @@ dipole matrix :func:`~Levelsystem.Levelsystem.get_dMat`.
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g,u
 import _pickle as pickle
+import os
+script_dir = os.path.dirname(os.path.abspath(__file__)) #directory where this script is stored.
+# Using this directory path, the module System (and the others) can be imported
+# from an arbitrary directory provided that the respective path is in the PYTHONPATH variable.
 #%%
 def dMat(name):
     """returns the electric dipole matrix of the electric dipole transition operator.
@@ -34,7 +38,7 @@ def dMat(name):
     #ATTENTION: all label pairs (J,F,mF) or (J,F) have to be unique!
     if name == 'BaF':
         # decay ex -> gr: dipole_matrix_new1, gr -> ex: dipole_matrix_new2
-        with open('dipole_matrix_new1'+'.pkl','rb') as input:
+        with open(os.path.join(script_dir,'dipole_matrix_new1.pkl'),'rb') as input:
             array = pickle.load(input).to_numpy() #2D-array of the dipole matrix
         row_labels = [[0.5, 0.5, 0.5, 0.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5], #-> J
                       [0  ,   1,   1,   1,   1,   1,   1,   2,   2,   2,   2,   2], #-> F
@@ -43,7 +47,7 @@ def dMat(name):
                          [0  ,1  ,1  ,1  ], #-> F'
                          [0  ,-1 ,0  ,+1]] #-> mF'
         
-    elif name == 'CaF':
+    elif name == 'CaF':#X-B transition
         array = [[0         ,-0.5774    ,0          ,0          ],
                  [0         ,0.4082     ,-0.4082    ,0          ],
                  [0         ,-0.2357    ,0.4714     ,-0.2357    ],
@@ -153,6 +157,18 @@ def freq(name):
         hyperfine_ex_labels = [[2,    2,      1,      1],   #-> J = F1
                                [2.5,  1.5,    1.5,    0.5]] #-> F
         hyperfine_ex = [  0.    ,   0.    , 304.4994, 304.4994]
+    elif name == 'CaF':
+        # wavelengths of vibrational levels: cols: A(v') states, rows:X(v'') states
+        lambda_vibr = [[531.0]]
+        # Energy level splitting of groundstates with quantum numbers J and F
+        # Energies of excited levels are not resolved, and thus assumed to be equal
+        hyperfine_gr_labels = [[0.5,      0.5,     1.5,     1.5],   #-> J
+                               [1,        0,       1,       2  ]]   #-> F
+        hyperfine_gr        = [-97.6,   -22.9,  +23.9,    +48.8] #->values in MHz (non-angular frequencies)
+        
+        hyperfine_ex_labels = [[0.5,     0.5],   #-> J'
+                               [0,       1  ]]   #-> F'
+        hyperfine_ex        =  [0.0,     0.0]    #-> values in MHz (non-angular frequencies)
     else:
         return None
     return lambda_vibr, (hyperfine_gr,hyperfine_gr_labels), (hyperfine_ex,hyperfine_ex_labels)
@@ -170,6 +186,23 @@ def gfac(name):
         row_labels_ex = [[0.5,  0.5],               #-> J'
                          [  0,    1]]               #-> F'
         array_ex      = [0.00, -0.20272]
+    elif name == '137BaF':
+        row_labels_gr = [[11, 12, 11, 12, 10,   21, 22, 21, 22, 23, 23 ],  #-> J = 10*G+F1
+                         [1.5,2.5,0.5,1.5,0.5,  0.5,1.5,1.5,2.5,2.5,3.5]]  #-> F
+        array_gr      = [-0.251, -0.205, -0.439, -0.241,  0.063,
+                          1.043,  0.447,  0.578,  0.325,  0.395,  0.286]
+        
+        row_labels_ex = [[2,    2,      1,      1],   #-> J = F1
+                         [2.5,  1.5,    1.5,    0.5]] #-> F
+        array_ex      = [-0.00012, -0.00019,  0.00012,  0.00025]    
+    elif name == 'CaF':
+        row_labels_gr = [[0.5,  0.5,  1.5,  1.5],   #-> J
+                         [  0,    1,    1,    2]]   #-> F
+        array_gr      = [0.00, 0.64, -0.14, 0.5]
+        
+        row_labels_ex = [[0.5,  0.5],               #-> J'
+                         [  0,    1]]               #-> F'
+        array_ex      = [0.00, 1.0]        
     else:
         return None
     return (array_gr, row_labels_gr), (array_ex, row_labels_ex)
@@ -182,8 +215,8 @@ def Gamma(name):
         Gamma = 2*pi*2.8421e6
     elif name == '137BaF':
         Gamma = 2*pi*2.8421e6
-    elif name == 'CaF':
-        Gamma = 2*pi*6.3e6
+    elif name == 'CaF': #X-B transition
+        Gamma = 2*pi*6.34e6
     else:
         return 2*pi*1e6 #or is None better??
     return Gamma
