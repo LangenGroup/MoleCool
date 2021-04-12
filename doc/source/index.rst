@@ -1,18 +1,45 @@
-BaF Laser-cooling Simulation Documentation!
-============================================
+Welcome to the Diatomic Laser Cooling Simulations Documentation!
+================================================================
 
 Information
 -----------
-* first point
-* second point
+This python software includes two different programs:
+
+1. Molecular Dynamics Simulation Code
+	The first code only uses pre-defined constants (like the dipole matrix,
+	hyperfine freqs, g-factors, ...) from the module :py:mod:`constants` which
+	are	required to calculate dynamics via the rate or optical Bloch equations.
+
+2. Molecular Spectra Calculation Code
+	In comparison, the second code only uses constants of the effective
+	Hamiltonian and Quantum numbers of the level structure to evaluate the
+	constants (like dipole matrix, hyperfine freqs, g-factors, ...) which
+	are needed for the dynamics simulation code.
+
+--------------------------
+
+To get started:
+^^^^^^^^^^^^^^^
+
++ SVN Checkout of the repository
++ the first command in python3 should be::
+	
+	>>> from System import *
+	
++ This command should be called from the **same directory** as where the
+  modules are stored. Otherwise the module's directory can also be included
+  in an environment variable named "PYTHONPATH" in Windows to call the
+  command from an arbitrary working directory
++ Then, you see if some further packages have to be installed (e.g. numba, pandas, ..)
++ Afterwards, some examples from the module's documentation can be tried.
 
 .. toctree::
    :maxdepth: 2
    :caption: API documentation
    
    modules.rst
-   ExampleNumPyStyle.rst
 
+------------------------
 
 Indices and tables
 ==================
