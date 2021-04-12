@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.5.1
+v2.5.2
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -485,22 +485,25 @@ class System:
         plt.xlabel('Frequency $f$ in MHz')
         plt.ylabel('Power spectrum of the FFT')
     
-    def calc_Rabi_freqs(self,print_all=False):
+    def calc_Rabi_freqs(self,average_levels=True):
         """calculates detuning-weighted, averaged angular Rabi frequencies
         for every laser (with 2*pi included)."""
         Gamma = self.levels.exstates.Gamma
         Rabi_freqs = []
         for k,la in enumerate(self.lasers):
             Rabi_freqs_arr = np.abs(self.G[k]/np.sqrt(2)*np.dot(self.dMat, self.f[k,:])* Gamma)
-            weights= np.exp(-4*(self.omega_eg-self.omega_k[k])**2/(Gamma**2))
-            # protection against the case when all weights are zero because the
-            # detuning is too large so that exp() gets 0.0
-            if np.all(weights==0.0): weights = weights*0 + 1
-            weights = weights*np.sign(Rabi_freqs_arr) * (np.dot(self.dMat, self.f[k,:]))**2
-            # print(Rabi_freqs_arr,'\n',weights)
-            Rabi_freqs.append( (Rabi_freqs_arr*weights).sum()/weights.sum() )
-            if print_all: print(Rabi_freqs_arr/2/pi*1e-6)
+            if average_levels:
+                weights= np.exp(-4*(self.omega_eg-self.omega_k[k])**2/(Gamma**2))
+                # protection against the case when all weights are zero because the
+                # detuning is too large so that exp() gets 0.0
+                if np.all(weights==0.0): weights = weights*0 + 1
+                weights = weights*np.sign(Rabi_freqs_arr) * np.abs(np.dot(self.dMat, self.f[k,:]))**2
+                # print(Rabi_freqs_arr,'\n',weights)
+                Rabi_freqs.append( (Rabi_freqs_arr*weights).sum()/weights.sum() )
+            else: 
+                Rabi_freqs.append( Rabi_freqs_arr )
         self.Rabi_freqs = np.array(Rabi_freqs)
+        if not average_levels: self.Rabi_freqs = np.transpose(self.Rabi_freqs,axes=(1,2,0))
         return self.Rabi_freqs
     
     def plot_F(self,figname=None):
@@ -696,12 +699,19 @@ class System:
         for k,la in enumerate(self.lasers):
             Rabi = la.freq_Rabi
             if Rabi != None:
-                ratio = Rabi/self.calc_Rabi_freqs()[k]
+                ratio = Rabi/self.calc_Rabi_freqs(average_levels=True)[k]
                 self.G[k]           *= ratio
                 self.lasers[k].I    *= ratio**2    
         #coefficients h to neglect highly-oscillating terms of the OBEs (with frequency threshold freq_clip_TH)
-        h_gek  = np.where(np.abs(self.om_eg[:,:,None]-self.om_k[None,None,:])         < freq_clip_TH, 1.0, 0.0)
-        h_gege = np.where(np.abs(self.om_eg[:,:,None,None]-self.om_eg[None,None,:,:]) < freq_clip_TH, 1.0, 0.0)
+        if freq_clip_TH == 'auto':
+            FWHM = np.sqrt( 1 + 2*(self.calc_Rabi_freqs(False)/Gamma)**2 ) #in units of Gamma
+            h_gek  = np.where(np.abs(self.om_eg[:,:,None]-self.om_k[None,None,:]) < 8*FWHM/2, 1.0, 0.0)
+            h_gege = np.where(np.abs(self.om_eg[:,:,None,None]-self.om_eg[None,None,:,:]) < 8*np.max(FWHM)/2, 1.0, 0.0)
+            self.FWHM = FWHM #remove later?
+        else:
+            h_gek  = np.where(np.abs(self.om_eg[:,:,None]-self.om_k[None,None,:]) < freq_clip_TH, 1.0, 0.0)
+            h_gege = np.where(np.abs(self.om_eg[:,:,None,None]-self.om_eg[None,None,:,:]) < freq_clip_TH, 1.0, 0.0)
+        self.h_gek,self.h_gege = h_gek,h_gege #remove later?
         #___magnetic remixing of the ground states and excited states
         if magn_remixing:
             betaB  = self.Bfield.Bvec_sphbasis/(hbar*self.levels.exstates.Gamma/self.Bfield.mu_B)
@@ -768,7 +778,7 @@ class System:
                     lambda_mean = (c/(self.om_eg*Gamma/2/pi)).mean()
                     if np.any(np.abs(c/(self.om_eg*Gamma/2/pi) /lambda_mean -1)>0.1e-2 ):#percental deviation from mean
                         print('WARNING: averaging over standing wave periods might not be accurate since the wavelengths differ.')
-                    period = lambda_mean/2/abs(self.v0[2])
+                    period = lambda_mean/abs(self.v0[2])#/2
                     t_int = period*(t_int//period+1) # int(t_int - t_int % period)
             self._evaluate(t_start, t_int, dt, N0mat)
             t_start = self.t[-1]
@@ -815,7 +825,7 @@ class System:
         if len(self.args['t_eval']) != 0:
             self.t_eval = np.array(self.args['t_eval'])
         else:
-            if dt == 'auto': dt = 1/np.max(self.calc_Rabi_freqs()/2/pi)/9 #1/9 of one Rabi-oscillation
+            if dt == 'auto': dt = 1/np.max(self.calc_Rabi_freqs(average_levels=True)/2/pi)/9 #1/9 of one Rabi-oscillation
             if dt != None and dt < t_int:
                 self.t_eval = np.linspace(t_start,t_start+t_int,int(t_int/dt)+1)
             else:

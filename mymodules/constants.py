@@ -4,7 +4,7 @@ Created on Wed May 13 18:27:42 2020
 
 @author: fkogel
 
-v2.5.1
+v2.5.2
 
 Module containing specific contants of certain molecules, atoms or more general
 systems. Theses constants will be imported within the classes
@@ -15,14 +15,19 @@ This module is constructed in such way so that it can be modified or extended
 by other users to hold the constants for their specific level system.
 Here, there is a function for every important quantity which all take a string
 ``name`` as input value. So e.g. if one want to get the electric dipole matrix
-belonging to `BaF` the function call:
+belonging to `BaF` the function call::
     
-    >>> dMat('BaF')
+    dMat('BaF')
     
 returns the matrix values with the respective row and column labels.
 But for nicely displaying these constants and matrices please use the respective
 functions in the class :class:`~Levelsystem.Levelsystem`, e.g. for the electric
 dipole matrix :func:`~Levelsystem.Levelsystem.get_dMat`.
+So, to nicely print all properties and constants for e.g. 138BaF try::
+    
+    levels = Levelsystem(load_constants='BaF')
+    levels.add_all_levels(0)
+    levels.print_properties()
 """
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g,u

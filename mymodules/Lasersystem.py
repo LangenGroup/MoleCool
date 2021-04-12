@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v2.5.1
+v2.5.2
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -12,10 +12,10 @@ multiple :class:`Laser` objects.
 Example
 -------
 Below an empty Lasersystem is created and a single Laser with wavelength 860nm
-and Power 20 mW with linear polarization is added:
+and Power 20 mW with linear polarization is added::
     
-    >>> lasers = Lasersystem()
-    >>> lasers.add(860e-9,20e-3,'lin')
+    lasers = Lasersystem()
+    lasers.add(860e-9,20e-3,'lin')
 
 But first start python and import the module::
     
@@ -25,10 +25,10 @@ But first start python and import the module::
 Tip
 ---
 Every object of the classes :class:`Lasersystem` or :class:`Laser` class can
-be printed to display all attributes via:
+be printed to display all attributes via::
     
-    >>> print(lasers)
-    >>> print(lasers[0])
+    print(lasers)
+    print(lasers[0])
 """
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g
@@ -40,22 +40,24 @@ class Lasersystem:
         """System consisting of :py:class:`Lasersystem.Laser` objects
         and methods to add them properly.
         These respective objects can be retrieved and also deleted by using the
-        normal item indexing of a :class:`Lasersystem`'s object:
+        normal item indexing of a :class:`Lasersystem`'s object::
             
-            >>> lasers = Lasersystem()
-            >>> lasers.add(lamb=860e-9,P=20e-3,pols='lin')
-            >>> lasers.add(lamb=890e-9,I=1000,FWHM=2e-3)            
-            >>> laser1 = lasers[0] # call first Laser object included in lasers
-            >>> del lasers[-1] # delete last added Laser object
+            lasers = Lasersystem()
+            lasers.add(lamb=860e-9,P=20e-3,pols='lin')
+            lasers.add(lamb=890e-9,I=1000,FWHM=2e-3)            
+            laser1 = lasers[0] # call first Laser object included in lasers
+            del lasers[-1] # delete last added Laser object
         
         Within the command in the first line an empty `self.entries` list is
         created to store all :class:`Laser` objects.
         
         Example
         -------
-        >>> lasers = Lasersystem()
-        >>> lasers.add_sidebands(lamb=860e-9,P=20e-3,pols='lin',AOM_shift=20e6,EOM_freq=39e6)
-        >>> print(lasers)
+        ::
+            
+            lasers = Lasersystem()
+            lasers.add_sidebands(lamb=860e-9,P=20e-3,pols='lin',AOM_shift=20e6,EOM_freq=39e6)
+            print(lasers)
 
         Parameters
         ----------

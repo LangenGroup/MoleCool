@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v2.4.1
+v2.5.2
 
 This module contains all classes and functions to define a System including
 multiple :class:`Level` objects.
@@ -13,21 +13,21 @@ Example
 -------
 Below an empty Levelsystem is created which automatically initializes an instance
 of the :class:`Groundstates` and the :class:`Excitedstates` classes.
-Within these instances the respective ground states and excited states can be added:
+Within these instances the respective ground states and excited states can be added::
     
-    >>> levels = Levelsystem()
-    >>> levels.grstates.add_grstate(nu=0,N=1)
-    >>> levels.grstates.add_lossstate(nu=1)
-    >>> levels.exstates.add_exstate(nu=0,N=0,J=.5,p=+1)
+    levels = Levelsystem()
+    levels.grstates.add_grstate(nu=0,N=1)
+    levels.grstates.add_lossstate(nu=1)
+    levels.exstates.add_exstate(nu=0,N=0,J=.5,p=+1)
     
 Tip
 ---
 Every object of the classes :class:`Levelsystem` or :class:`Level` can be
-printed to display all attributes via:
+printed to display all attributes via::
     
-    >>> print(levels)
-    >>> print(levels.grstates)
-    >>> print(levels.exstates[0])
+    print(levels)
+    print(levels.grstates)
+    print(levels.exstates[0])
 """
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g
@@ -40,14 +40,14 @@ class Levelsystem:
         """System consisting of :py:class:`Levelsystem.Level` objects
         and methods to add them properly.
         These respective objects can be retrieved and also deleted by using the
-        normal item indexing of a :class:`Levelsystem`'s object:
+        normal item indexing of a :class:`Levelsystem`'s object::
             
-            >>> levels = Levelsystem()
-            >>> levels.grstates.add(nu=0,J=.5,F=1)
-            >>> levels.grstates.add(nu=1,J=.5,F=1)
-            >>> levels.exstates.add(J=.5,F=0,mF=0)
-            >>> level1 = levels[0] # save first Level object included in levels
-            >>> del levels[-1] # delete last added Level object
+            levels = Levelsystem()
+            levels.grstates.add(nu=0,J=.5,F=1)
+            levels.grstates.add(nu=1,J=.5,F=1)
+            levels.exstates.add(J=.5,F=0,mF=0)
+            level1 = levels[0] # save first Level object included in levels
+            del levels[-1] # delete last added Level object
         
         Within the command in the first line an empty `self.entries` list is
         created to store all :class:`Level` objects.        
@@ -65,22 +65,22 @@ class Levelsystem:
         Tip
         ---
         When arbitrary custom level systems want to be defined, first all
-        levels have to be added, e.g. for a (3,3)+1 system:
+        levels have to be added, e.g. for a (3,3)+1 system::
             
-            >>> levels = Levelsystem()
-            >>> levels.grstates.add(nu=0,J=.5,F=1)
-            >>> levels.grstates.add(nu=1,J=.5,F=1)
-            >>> levels.exstates.add(J=.5,F=0,mF=0)
+            levels = Levelsystem()
+            levels.grstates.add(nu=0,J=.5,F=1)
+            levels.grstates.add(nu=1,J=.5,F=1)
+            levels.exstates.add(J=.5,F=0,mF=0)
         
         Then the default constants and properties can be nicely viewed with
         the function :func:`print_properties`. Afterwards the values in these
         pandas.DataFrames (here: vibrational branchings, transition wavelength,
-        and g-factor) can be easily modified via `<DataFrame>.iloc[<index>]`:
+        and g-factor) can be easily modified via `<DataFrame>.iloc[<index>]`::
             
-            >>> system.levels.print_properties()
-            >>> system.levels.vibrbranch.iloc[:] = np.array([ [0.98], [0.02] ])
-            >>> system.levels.freq[0].iloc[1] = 890
-            >>> system.levels.gfac[0].iloc[0] = 1.0
+            system.levels.print_properties()
+            system.levels.vibrbranch.iloc[:] = np.array([ [0.98], [0.02] ])
+            system.levels.freq[0].iloc[1] = 890
+            system.levels.gfac[0].iloc[0] = 1.0
         
         """
         self.grstates = Groundstates()
