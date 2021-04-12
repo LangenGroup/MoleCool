@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.1.0
+v0.1.1
 
 Module for calculating the energies and transition probabilies of molecular states
 
@@ -37,6 +37,15 @@ Example for calculating and plotting a spectrum of 138BaF::
     plt.plot(BaF.Eplt, BaF.I)
     plt.xlabel('transition frequency in 1/cm')
     plt.ylabel('intensity')
+    
+Tip
+---
+The instances of all classes :class:`~Molecule.Molecule`,
+:class:`ElectronicState` and :class:`Hcasea` can be printed::
+    
+    print(BaF)
+    print(BaF.X)
+    print(BaF.X.states[0])
 """
 from System import *
 from collections.abc import Iterable
@@ -48,7 +57,7 @@ class Molecule:
                  label='BaF',verbose=True):        
         """This class represents a molecule containing all electronic and
         hyperfine states in order to calculate branching ratios and thus
-        to plot the spectrum. 
+        to plot the spectrum.
 
         Parameters
         ----------
@@ -124,10 +133,21 @@ class Molecule:
     def calc_branratios(self,threshold=0.05,E_lowest=0.0,include_Boltzmann=True,
                         grstate=None,exstate=None):
         """
-        calculates the linestrengths (by evaluating the eletric dipole matrix)
+        calculates the linestrengths (by evaluating the electric dipole matrix)
         and energies of all transitions between a ground and excited electronic
         state in order to obtain the branching ratios weighted by a Boltzmann
         factor.
+        
+        Note
+        ----
+        This method creates the attributes (as `numpy.ndarrays`):
+        
+        * ``dipmat`` : electric dipole matrix of the eigenstates in the same
+          order as the eigenstates are stored in the respective electronic
+          states :class:`ElectronicState` which can be printed via the method
+          :meth:`~ElectronicState.get_eigenstates`.
+        * ``E`` : transition energies between the eigenstates in the same order
+        * ``branratios`` : respective branching ratios
 
         Parameters
         ----------
@@ -256,19 +276,19 @@ class Molecule:
     def __str__(self):
         """prints all general information of the Molecule with its electronic states"""
         
-        print('Molecule {}: with the nuclear spins I1 = {}, I2 = {} and mass {}'.format(
-            self.label,self.I1,self.I2,self.mass))
-        print(' magnetic field strength: {:.2e}G, temperature: {:.2f}K'.format(
-            self.Bfield*1e4,self.temp))
-        print('including the following defined electronic states:\n')
+        str1 = 'Molecule {}: with the nuclear spins I1 = {}, I2 = {} and mass {}'.format(
+            self.label,self.I1,self.I2,self.mass)
+        str1+= '\n magnetic field strength: {:.2e}G, temperature: {:.2f}K'.format(
+            self.Bfield*1e4,self.temp)
+        str1+= '\nIncluding the following defined electronic states:\n'
         for state in [*self.grstates,*self.exstates]:
-            print(' {}\n'.format(self.__dict__[state]))
+            str1+='* {}\n'.format(self.__dict__[state])
             
         cm2MHz = c*100*1e-6
         # these two values are actually dependent on the electronic state!??
         self.Gamma #in MHz (without 2pi) and then to cm^-1
         self.transfreq #in cm^-1
-        return ''
+        return str1
  
 #%%        
 class ElectronicState:
@@ -347,6 +367,7 @@ class ElectronicState:
         self.nu         = nu
         
         # load all constants & update non-zero values in the constants dictionary
+        #: list containing the provided effective Hamiltonian constants
         self.const = self.constants_zero.copy()
         for key,value in const.items():
             if key in self.const:
@@ -357,7 +378,7 @@ class ElectronicState:
         #self.parity or symmetry for Sigma states --> + or -
         if self.S > 0:  self.shell = 'open'
         else:           self.shell = 'closed'
-        # list for storing states which can be added after class initialization
+        #: list for storing the pure states which can be added after class initialization
         self.states = []
         # boolean variable determining if eigenstates are already calculated
         self.eigenst_already_calc = False
@@ -446,7 +467,7 @@ class ElectronicState:
         H = np.zeros((self.N,self.N))
         for i,st_i in enumerate(self.states):
             for j in range(i,len(self.states)):
-                st_j = self.states[j]#???
+                st_j = self.states[j]
                 H[i,j] = H_tot(st_i,st_j,self.const)
                 if self.Bfield != 0.0:
                     H[i,j] += H_Zeeman(st_i,st_j,self.const,Bfield=self.Bfield)
@@ -635,7 +656,7 @@ class ElectronicState:
         Ew_B_arr = eigensort(Bfield,Ew_B_arr)
         plt.figure('Zeeman splitting')
         for i in range(Ew_B_arr.shape[1]):
-            plt.plot(Bfield*1e4,Ew_B_arr[:,i]*cm2MHz,'-')
+            plt.plot(Bfield*1e4,Ew_B_arr[:,i],'-')
         plt.xlabel('magnetic field in G')
         plt.ylabel('Energy in cm$^{-1}$')
         
@@ -1072,7 +1093,6 @@ if __name__ == '__main__':
     BaF.X.build_states(Fmax=3,Fmin=0)
     BaF.A.build_states(Fmax=3,Fmin=0)
     
-    plt.figure()
     BaF.X.plot_Zeeman(100e-4)
     
     #%% getting g-factors
