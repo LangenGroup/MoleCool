@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.1.1
+v0.1.2
 
 Module for calculating the energies and transition probabilies of molecular states
 
@@ -295,6 +295,7 @@ class ElectronicState:
     # create empty dictionary for the molecular constants filled with zeros
     #: attribute containing all possible constants of the effective Hamiltonian which are set to zero initially.
     constants_zero = dict.fromkeys([
+        'T_e','w_e','w_e x_e','w_e y_e','alpha_e','gamma_e','beta_e',
         'A','B','gamma','A_D','o+p+q','p+2q','q',
         'a','b_F','c','d','c_I',
         'a_2','b_F_2','c_2', #for the second nuclear spin if non-zero
@@ -382,6 +383,70 @@ class ElectronicState:
         self.states = []
         # boolean variable determining if eigenstates are already calculated
         self.eigenst_already_calc = False
+        
+    def get_energy_casea(self,J,Omega,p):
+        """calculate the energy of the electronic state as Hund's case (a).
+        The energy is evaluated with an approximate expression and returned
+        in units of wave numbers (1/cm).
+
+        Parameters
+        ----------
+        J : float
+            total angular momentum quantum number without nuclear spin.
+        Omega : float
+            absolute value of the quantum number
+            :math:`\Omega = \Lambda + \Sigma`.
+        p : int
+            parity of the excited state. Either +1 or -1.
+
+        Returns
+        -------
+        E : float
+            energy of the state in wave numbers (1/cm).
+        """
+        cs = self.const
+        nu  = self.nu
+        B_v = cs['B'] - cs['alpha_e']*(nu+0.5) + cs['gamma_e']*(nu+0.5)**2
+        D_v = cs['D'] + cs['beta_e']*(nu+0.5)
+        if Omega > self.L: pm = +1
+        else: pm = -1
+        
+        E = cs['T_e'] \
+            + cs['w_e']*(nu+0.5) - cs['w_e x_e']*(nu+0.5)**2 +cs['w_e y_e']*(nu+0.5)**3 \
+            + pm*cs['A']*self.L*self.S + (B_v *J*(J+1) - D_v *(J*(J+1))**2) \
+            + p*phs(J+0.5) * cs['p+2q']/2 *(J+0.5)
+        return E
+    
+    def get_energy_caseb(self,N,sr):
+        """calculate the energy of the electronic state as Hund's case (b).
+        The energy is evaluated with an approximate expression and returned
+        in units of wave numbers (1/cm).
+        
+        Parameters
+        ----------
+        N : int
+            rotational quantum number N.
+        sr : int
+            Can be either +1 or -1 for the two energy states which are shifted
+            up or down in energy respectively due to the spin-rotation interaction.
+
+        Returns
+        -------
+        E : float
+            energy of the state in wave numbers (1/cm).
+        """
+        cs = self.const
+        nu  = self.nu
+        B_v = cs['B'] - cs['alpha_e']*(nu+0.5) + cs['gamma_e']*(nu+0.5)**2
+        D_v = cs['D'] + cs['beta_e']*(nu+0.5)
+        if sr == +1:   sr = 0.5*cs['gamma']*N
+        elif sr == -1: sr = 0.5*cs['gamma']*(-1*(N+1))
+        else: raise Exception('variable <sr> can only take the values +1 or -1')
+        
+        E = cs['T_e'] \
+            + cs['w_e']*(nu+0.5) - cs['w_e x_e']*(nu+0.5)**2 +cs['w_e y_e']*(nu+0.5)**3 \
+            + B_v *N*(N+1) - D_v *(N*(N+1))**2 + sr
+        return E    
     
     def build_states(self,Fmax,Fmin=None):
         """
@@ -506,7 +571,7 @@ class ElectronicState:
         
         self.eigenst_already_calc = True
         
-    def get_eigenstates(self,precision=4,onlygoodQuNrs=True):
+    def get_eigenstates(self,precision=4,onlygoodQuNrs=True,createHTML=False):
         """
         returns the sorted eigenenergies and respective eigenstates determined
         by the method :func:`calc_eigenstates` in a nice format via the datatype
@@ -520,6 +585,9 @@ class ElectronicState:
         onlygoodQuNrs : bool, optional
             specifies if only the good Quantum numbers are included for getting
             a better overview of the printed DataFrame. The default is True.
+        createHTML : bool, optional
+            if True a Html file `eigenstates.html` with the DataFrame is generated
+            for a better view of the eigenstates. The default is False.
 
         Returns
         -------
@@ -538,7 +606,15 @@ class ElectronicState:
                            index=pd.MultiIndex.from_frame(
                                self.get_purestates(onlygoodQuNrs=onlygoodQuNrs)),
                            columns=pd.MultiIndex.from_arrays(col_arr,names=('eigenvector i','eigenvalue')))
-        return DF1.round(precision)
+        DF1 = DF1.round(precision)
+        if createHTML:
+            #render dataframe as html
+            html = DF1.to_html()
+            #write html to file
+            text_file = open("eigenstates.html", "w")
+            text_file.write(html)
+            text_file.close()
+        return DF1
         
     def get_purestates(self,onlygoodQuNrs=False):
         """
@@ -708,7 +784,10 @@ class Hcasea:
     # maybe new hunds case for two nuclear spins with an option: stron coupling I1 and weak I2 =True
     def to_Hcaseb(self):
         # return Hcaseb(quNrs,states=[],prefactors=[])
-        pass
+        prefacs = []
+        for N in addJ(self.S,self.J):
+            prefac = np.sqrt(2*N+1)*phs(self.J+self.Om)*w3j(self.S,N,self.J,self.Si,self.L,-self.Om)
+            print('{:+.4f} * |N={}> '.format(prefac,N),end=' ')
     
 # class Eigenstates: #??
 #     def __init__(self):
