@@ -4,23 +4,28 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.1.2
+v0.2.0
 
-Module for calculating the energies and transition probabilies of molecular states
-
-The effective Hamiltonian terms for a molecule are used to calculate the
-eigenstates and eigenenergies to 
+Module for calculating the eigenenergies and eigenstates of diatomic molecules
+exposed to external fields.
+Therefore molecular constants which are measured and fitted in spectroscopic
+experiments must be provided to build up the effective Hamiltonian terms.
+Finally, the transition probabilities between two given electronic
+state manifolds can be determined to simulate a complete spetrum.
 
 Example
 -------
 
 Example for calculating and plotting a spectrum of 138BaF::
 
+    from Molecule import *    
     # molecular constants in wave numbers (1/cm) within the effective Hamiltonian
-    const_gr_138 = {'B':0.21594802,'D':1.85e-7,'gamma':0.00269930,
-                    'b_F':0.002209862,'c':0.000274323}
-    const_ex_138 = {'A':632.28175,'A_D':3.1e-5,'B':0.2117414,
-                    'D':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980}
+    const_gr_138 = ElectronicStateConstants(const={
+                    'B_e':0.21594802,'D_e':1.85e-7,'gamma':0.00269930,
+                    'b_F':0.002209862,'c':0.000274323})
+    const_ex_138 = ElectronicStateConstants(const={
+                    'A':632.28175,'A_D':3.1e-5,'B_e':0.2117414,
+                    'D_e':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980})
     
     # create a Molecule instance with nuclear spin 1/2
     BaF = Molecule(I1=0.5,transfreq=11946.31676963)
@@ -41,11 +46,13 @@ Example for calculating and plotting a spectrum of 138BaF::
 Tip
 ---
 The instances of all classes :class:`~Molecule.Molecule`,
-:class:`ElectronicState` and :class:`Hcasea` can be printed::
+:class:`ElectronicState`, :class:`Hcasea` and :class:`ElectronicStateConstants`
+can be printed::
     
     print(BaF)
     print(BaF.X)
     print(BaF.X.states[0])
+    print(const_gr_138) # is the same as: print(BaF.X.const)
 """
 from System import *
 from collections.abc import Iterable
@@ -84,7 +91,11 @@ class Molecule:
             The default is 1.0.
         transfreq : float, optional
             transition frequency between the ground and excited state in units
-            of wavenumbers 1/cm. The default is 0.0.
+            of wavenumbers 1/cm. The default is 0.0. This value `transfreq` is
+            used as offset for the calculation of the spectrum but if the constants
+            `T_e` or `w_e` in :class:`ElectronicStateConstants` are non-zero,
+            these values are used instead to calculate the energy offset
+            (see :meth:`ElectronicStateConstants.electrovibr_energy`).
         label : string, optional
             label or name of the molecule. The default is 'BaF'.
         verbose : bool, optional
@@ -193,7 +204,13 @@ class Molecule:
         
         # eigenstate dipole matrix via matrix multiplication of eigenstates and pure basis dipole matrix 
         self.dipmat = np.matmul(np.matmul(X.Ev.T,H_dpure),A.Ev)
-        self.E = A.Ew[None,:] - X.Ew[:,None] + self.transfreq   #transition energies
+        # transition energies
+        E_vibX, E_vibA = self.X.const.electrovibr_energy, self.X.const.electrovibr_energy
+        if (E_vibX == 0.0) and (E_vibA == 0.0):
+            E_offset = self.transfreq
+        else:
+            E_offset = E_vibA - E_vibX
+        self.E = A.Ew[None,:] - X.Ew[:,None] + E_offset
         
         if include_Boltzmann:
             cm2MHz = c*100*1e-6
@@ -287,24 +304,212 @@ class Molecule:
         cm2MHz = c*100*1e-6
         # these two values are actually dependent on the electronic state!??
         self.Gamma #in MHz (without 2pi) and then to cm^-1
-        self.transfreq #in cm^-1
+        # self.transfreq #in cm^-1
         return str1
- 
-#%%        
-class ElectronicState:
-    # create empty dictionary for the molecular constants filled with zeros
-    #: attribute containing all possible constants of the effective Hamiltonian which are set to zero initially.
-    constants_zero = dict.fromkeys([
-        'T_e','w_e','w_e x_e','w_e y_e','alpha_e','gamma_e','beta_e',
-        'A','B','gamma','A_D','o+p+q','p+2q','q',
-        'a','b_F','c','d','c_I',
-        'a_2','b_F_2','c_2', #for the second nuclear spin if non-zero
-        'eq0Q','D','(p+2q)_D','q_D','H','gamma_D',
-        'g_l',"g'_l"], 0.0) #for Zeeman Hamiltonian
+#%%
+class ElectronicStateConstants: 
+    #: electronic energy offset constant
+    const_elec      = ['T_e']
+    #: vibrational constants
+    const_vib       = ['w_e','w_e x_e','w_e y_e']
+    #: rotation constants
+    const_rot       = ['B_e','D_e','H_e','alpha_e','gamma_e','beta_e']
+    #: spin-rotation constants
+    const_sr        = ['gamma','gamma_D']
+    #: spin-orbit constants
+    const_so        = ['A','A_D']
+    #: hyperfine constants
+    const_HFS       = ['a','b_F','c','d','c_I',
+                       'a_2','b_F_2','c_2'] #for the second nuclear spin if I2 is non-zero
+    #: electric quadrupol interaction
+    const_eq0Q      = ['eq0Q']
+    #: Lambda-doubling constants
+    const_LD        = ['o+p+q','p+2q','q','(p+2q)_D','q_D']
+    #: (magnetic) Zeeman constants. `g_S` and `g'_L` are initially set to 2.002 and 1. respectively.
+    const_Zeeman    = ['g_l',"g'_l",'g_S',"g'_L"]  
+    #: sum of all constant names
+    const_all = const_elec + const_vib + const_rot + const_sr + const_so \
+                + const_HFS + const_eq0Q + const_LD + const_Zeeman
+    #: dictionary of all predefined constants which are set to zero initially
+    constants_zero = dict.fromkeys(const_all, 0.0)
     # standard Zeeman Hamiltonian constants
     constants_zero['g_S'] = 2.002#3 in Fortran code without the last digit?
     constants_zero["g'_L"] = 1.0
+
+    def __init__(self,const={},unit='1/cm',nu=0,**kwargs):
+        """An instance of this class represents an object which includes all
+        molecular constants for evaluating the effective Hamiltonian yielding
+        the molecular eigenstates and respective eigenenergies.
+   
+        After the provided constants are loaded into the instance they can simply
+        be modified or returned via::
+            
+            const = ElectronicStateConstants()
+            const['B_e'] = 0.21
+            print(const['g_S'])
+
+        Parameters
+        ----------
+        const : dict, optional
+            dictionary of all constants in wave numbers (1/cm) required for the
+            effective Hamiltonian.
+            See the predefined constant attributes of this class,
+            e.g. :attr:`const_vib` or :attr:`const_rot`, containing all possible
+            names of the constants which are set to zero initially.
+            The values of the provided dictionary `const` are then
+            loaded into the class' new instance. The default is {}.
+        unit : str, optional
+            unit of the provided constants. Can either be '1/cm' for wave
+            numbers or 'MHz' for frequency. The default is '1/cm'.
+        nu : int, optional
+            vibrational quantum number for the vibrational levels.
+            The default is 0.
+        **kwargs : optional
+            the values of the provided dictionary `const` can also be given as
+            normal keyword arguments, e.g. B_e = 0.21, which will overwrite
+            the ones from the dictionary.
+
+        Tip
+        ---
+        Such instance can nicely export the defined constants as a HTML file
+        (see :meth:`show`) or can be saved with all its properties
+        via the function :func:`~System.save_object` of the :mod:`System` module
+        and can be loaded later using the function :func:`~System.open_object`.
+        
+        Raises
+        ------
+        KeyError
+            if the dictionary `const` or the keyword arguments `kwargs`
+            contains some values for which the respective key is not defined.
+        """
+        units = ['1/cm','MHz']
+        cm2MHz = c*100*1e-6 # convert from 1/cm into MHz
+        # load all constants from constants_zero into the class' instance
+        # & update non-zero values from the const dictionary
+        self.__dict__.update(self.constants_zero.copy())
+        const.update(kwargs) # merge provided **kwargs with the const dictionary
+        if not (unit in units):
+            raise ValueError('{} is not a valid unit. Use instead one of: {}'.format(unit,units))
+        for key,value in const.items():
+            if not (key in self.const_all):
+                raise KeyError("key '{}' of the input parameter 'const' does not exist".format(key))
+            if (unit == 'MHz') and (not (key in self.const_Zeeman)):
+                const[key] = value/cm2MHz
+        self.__dict__.update(const)
+        self.nu = nu
+        # not really a constant but it is needed in this class for calculation
+        # of some vibrationally dependent constants
+        
+    def show(self,formatting='all',createHTML=False):
+        """returns a `pandas.DataFrame` object which shows the defined constants
+        in a nice format. This table can then be saved as a `.html` file.
+
+        Parameters
+        ----------
+        formatting : str, optional
+            Can either be 'all' for printing all constants or 'non-zero' for
+            printing only the non-zero constants. The default is 'all'.
+        createHTML : bool, optional
+            if True the returned table with the specific formatting is saved
+            as a HTML file `ElectronicStateConstants.html`. The default is False.
+
+        Returns
+        -------
+        DF : pandas.DataFrame
+            table of all constants with further explanatory comments.
+        """
+        names = ['electronic energy offset','vibration','rotation','spin-rotation','spin-orbit',
+                 'hyperfine','electric quadrupol','Lambda-doubling','Zeeman (no unit)']
+        const_vars = ['const_elec','const_vib','const_rot','const_sr','const_so',
+                      'const_HFS','const_eq0Q','const_LD','const_Zeeman']
+        index, values, values2  = [],[],[]
+        cm2MHz = c*100*1e-6
+        for arr,name in zip(const_vars,names):
+            for var in self.__class__.__dict__[arr]:
+                index.append([name,var])
+                values.append(self.__dict__[var])
+                if arr == 'const_Zeeman':
+                    values2.append(self.__dict__[var])
+                else:
+                    values2.append(self.__dict__[var]*cm2MHz)
+        value_arr = np.array([values,values2])
+        DF = pd.DataFrame(value_arr.T,
+                          index=pd.MultiIndex.from_arrays(np.array(index).transpose()),
+                          columns=['value [1/cm]','value [MHz]'])
+        
+        if formatting == 'all':
+            pass    
+        elif formatting == 'non-zero':
+            indices = np.where(np.array(values) != 0.0)[0]
+            DF = DF.iloc[indices]
+        
+        if createHTML:
+            #render dataframe as html
+            html = DF.to_html()
+            #write html to file
+            text_file = open("ElectronicStateConstants.html", "w")
+            text_file.write(html)
+            text_file.close()
+        
+        return DF
+
+    def to_dict(self):
+        """Converts the defined constants to a dictionary which also includes
+        the calculated values :meth:`B_v` and :meth:`D_v`.
+
+        Returns
+        -------
+        dic : dict
+            dictionary with all defined constants.
+        """
+        dic = {key : self.__dict__[key] for key in self.const_all}
+        dic['B_v'] = self.B_v
+        dic['D_v'] = self.D_v
+        return dic
+
+    def DunhamCoeffs(self):
+        """Handling the Dunham coefficients. Under construction.."""
+        pass
     
+    def __setitem__(self, index, value):
+        if not (index in self.const_all):
+            raise KeyError('Only the keys specified in <const_all> can be set!')
+        self.__dict__[index] = value
+        
+    def __getitem__(self, index):
+        if not (index in self.const_all):
+            raise KeyError('Only the values of the keys specified in <const_all> can be called!') 
+        return self.__dict__[index]
+    
+    def __str__(self):
+        return self.show(formatting='non-zero').to_string()
+    
+    @property
+    def B_v(self):
+        """returns the vibrational-state-dependent rotational constant `B_v`.
+        
+        :math:`B_v = B_e - \\alpha_e (v + 1/2) + \gamma_e (v + 1/2)^2`.
+        """
+        return self.B_e - self.alpha_e*(self.nu+0.5) + self.gamma_e*(self.nu+0.5)**2
+    @property
+    def D_v(self):
+        """returns the vibrational-state-dependent rotational constant `D_v`.
+        
+        :math:`D_v = D_e + \\beta_e (v + 1/2)`.
+        """
+        return self.D_e + self.beta_e*(self.nu+0.5)
+    @property
+    def electrovibr_energy(self):
+        """returns the sum of the electronic and vibrational energy.
+        
+        :math:`E = T_e + \\omega_e (v + 1/2) - \\omega_e \\chi_e (v+1/2)^2 + \\omega_e y_e (v+1/2)^3`.
+        """
+        nu = self.nu
+        w1,w2,w3 = self.w_e, self.__dict__['w_e x_e'], self.__dict__['w_e y_e']
+        return self.T_e + w1*(nu+0.5) - w2*(nu+0.5)**2 + w3*(nu+0.5)**3
+    
+#%%        
+class ElectronicState:    
     def __init__(self,label,Smultipl,L,Hcase='a',nu=0,const={}):
         """This class represents an electronic ground or excited state manifold
         which are part of the molecular level structure.
@@ -332,19 +537,13 @@ class ElectronicState:
         nu : int, optional
             vibrational quantum number for the vibrational levels.
             The default is 0.
-        const : dict, optional
+        const : dict or :class:`ElectronicStateConstants`, optional
             dictionary of all constants in wave numbers (1/cm) required for the
-            effective Hamiltonian.
-            See the predefined attribute :attr:`constants_zero` of the class
-            containing all possible constants which are set to zero initially.
-            This dictionary is updated with the items of the provided dictionary
-            `const` and stored into the new attribute ``const``. The default is {}.
-
-        Raises
-        ------
-        KeyError
-            if the dictionary `const` contains some values for which the respective
-            key is not known.
+            effective Hamiltonian or directly an instance of the class
+            :class:`ElectronicStateConstants` (see for further documentation).
+            During initialization of the class :class:`ElectronicState`
+            an attribute ``const`` as an instance of :class:`ElectronicStateConstants`
+            is created. The default is {}.
         """
         #determine from label X,A,B,.. if state is electronic ground/ excited state
         if label[0] == 'X':                       
@@ -352,7 +551,7 @@ class ElectronicState:
         elif 'ABCDEFGHIJKLMN'.find(label[0]) >= 0:
             self.grex = 'excited state'
         else:
-            raise('Please provide X,A,B,C,D,.. as first character of `label` for the electronic ground or excited states')
+            raise ValueError('Please provide X,A,B,C,D,.. as first character of `label` for the electronic ground or excited states')
         self.label      = label
         # spin multiplicity and spin
         self.Smultipl   = int(Smultipl)
@@ -364,18 +563,15 @@ class ElectronicState:
             self.L  = {'Sigma':0, 'Pi':1, 'Delta':2, 'Phi':3, 'Gamma':4}[L]
         # Hund's case
         self.Hcase      = Hcase
-        # vibrational level
-        self.nu         = nu
+        #constants
+        if type(const) == ElectronicStateConstants:
+            self.const = const
+            self.const.nu = nu
+        else:
+            self.const = ElectronicStateConstants(const=const,nu=nu)
         
-        # load all constants & update non-zero values in the constants dictionary
-        #: list containing the provided effective Hamiltonian constants
-        self.const = self.constants_zero.copy()
-        for key,value in const.items():
-            if key in self.const:
-                self.const[key] = value
-            else:
-                raise KeyError("key '{}' of the input parameter 'const' does not exist".format(key))
-        self.const.update(const)
+        # vibrational level
+        self.nu         = nu #have to be called after init of self.const
         #self.parity or symmetry for Sigma states --> + or -
         if self.S > 0:  self.shell = 'open'
         else:           self.shell = 'closed'
@@ -386,8 +582,8 @@ class ElectronicState:
         
     def get_energy_casea(self,J,Omega,p):
         """calculate the energy of the electronic state as Hund's case (a).
-        The energy is evaluated with an approximate expression and returned
-        in units of wave numbers (1/cm).
+        The energy is evaluated with an approximate analytic expression
+        and returned in units of wave numbers (1/cm).
 
         Parameters
         ----------
@@ -406,21 +602,19 @@ class ElectronicState:
         """
         cs = self.const
         nu  = self.nu
-        B_v = cs['B'] - cs['alpha_e']*(nu+0.5) + cs['gamma_e']*(nu+0.5)**2
-        D_v = cs['D'] + cs['beta_e']*(nu+0.5)
+        B_v, D_v = cs.B_v, cs.D_v
         if Omega > self.L: pm = +1
         else: pm = -1
         
-        E = cs['T_e'] \
-            + cs['w_e']*(nu+0.5) - cs['w_e x_e']*(nu+0.5)**2 +cs['w_e y_e']*(nu+0.5)**3 \
+        E = cs.electrovibr_energy \
             + pm*cs['A']*self.L*self.S + (B_v *J*(J+1) - D_v *(J*(J+1))**2) \
             + p*phs(J+0.5) * cs['p+2q']/2 *(J+0.5)
         return E
     
     def get_energy_caseb(self,N,sr):
         """calculate the energy of the electronic state as Hund's case (b).
-        The energy is evaluated with an approximate expression and returned
-        in units of wave numbers (1/cm).
+        The energy is evaluated with an approximate analytic expression
+        and returned in units of wave numbers (1/cm).
         
         Parameters
         ----------
@@ -437,16 +631,14 @@ class ElectronicState:
         """
         cs = self.const
         nu  = self.nu
-        B_v = cs['B'] - cs['alpha_e']*(nu+0.5) + cs['gamma_e']*(nu+0.5)**2
-        D_v = cs['D'] + cs['beta_e']*(nu+0.5)
+        B_v, D_v = cs.B_v, cs.D_v
         if sr == +1:   sr = 0.5*cs['gamma']*N
         elif sr == -1: sr = 0.5*cs['gamma']*(-1*(N+1))
-        else: raise Exception('variable <sr> can only take the values +1 or -1')
+        else: raise ValueError('variable <sr> can only take the values +1 or -1')
         
-        E = cs['T_e'] \
-            + cs['w_e']*(nu+0.5) - cs['w_e x_e']*(nu+0.5)**2 +cs['w_e y_e']*(nu+0.5)**3 \
+        E = cs.electrovibr_energy \
             + B_v *N*(N+1) - D_v *(N*(N+1))**2 + sr
-        return E    
+        return E
     
     def build_states(self,Fmax,Fmin=None):
         """
@@ -530,12 +722,13 @@ class ElectronicState:
         """
         if self.verbose: print('Calc Hamiltonian for {} electronic state'.format(self.label),end=' ')
         H = np.zeros((self.N,self.N))
+        const = self.const.to_dict()
         for i,st_i in enumerate(self.states):
             for j in range(i,len(self.states)):
                 st_j = self.states[j]
-                H[i,j] = H_tot(st_i,st_j,self.const)
+                H[i,j] = H_tot(st_i,st_j,const)
                 if self.Bfield != 0.0:
-                    H[i,j] += H_Zeeman(st_i,st_j,self.const,Bfield=self.Bfield)
+                    H[i,j] += H_Zeeman(st_i,st_j,const,Bfield=self.Bfield)
                 #next line can be commented out since H is symmetric and therefore
                 #only the upper/lower triangular part of the matrix has to be 
                 #used to the calculation of the eigenstates & eigenvalues.
@@ -747,6 +940,20 @@ class ElectronicState:
             + '\n  --> includes {} states'.format(self.N)
 
     @property
+    def nu(self):
+        """vibrational quantum number for the vibrational levels.
+        Can be called and changed.
+        """
+        return self.__nu # maybe check if self.const.nu is different?
+    
+    @nu.setter
+    def nu(self,val):
+        if not isint(val):
+            raise ValueError('given value {} is no integer!'.format(val))
+        self.const.nu = val
+        self.__nu = val
+        
+    @property
     def N(self):
         """returns the number of states in the current instance of :class:`ElectronicState`.
 
@@ -807,9 +1014,10 @@ def H_tot(x,y,const):
         second state.
     const : dict
         dictionary of all constants required for the effective Hamiltonian.
-        Same as in the input parameter of :class:`ElectronicState`.
-        See the predefined attribute :attr:`ElectronicState.constants_zero` of the
-        class containing all possible constants which are set to zero initially.
+        When this function is called by the method :meth:`ElectronicState.calc_eigenstates`,
+        the method :meth:`ElectronicStateConstants.to_dict` of the attribute
+        ``const`` within :class:`ElectronicState` is used to
+        create a proper dictionary.
     """
     # x: lower state, y: upper state
     # prevent mixing of different F values
@@ -870,11 +1078,11 @@ def H_tot(x,y,const):
     
     #==================== H_rot - rotational term 
     H_rot = 0.0
-    if (const['B'] != 0.0) and (kd(J,J_) != 0.0):
+    if (const['B_v'] != 0.0) and (kd(J,J_) != 0.0):
         sum1 = 0.0
         for q in [-1,+1]:
             sum1 += phs(J_-Om+S-Si)*cb(J)*cb(S)*w3j(J,1,J,-Om,q,Om_)*w3j(S,1,S,-Si,q,Si_)
-        H_rot = const['B']*kd(J,J_)*(
+        H_rot = const['B_v']*kd(J,J_)*(
             -2*sum1 + kd(Si,Si_)*kd(Om,Om_)*(J*(J+1) + S*(S+1) - Om_**2 - Si_**2) )        
     
     #==================== H_sr - spin-rotation coupling
@@ -936,9 +1144,10 @@ def H_Zeeman(x,y,const,Bfield):
         second state.
     const : dict
         dictionary of all constants required for the effective Hamiltonian.
-        Same as in the input parameter of :class:`ElectronicState`.
-        See the predefined attribute :attr:`ElectronicState.constants_zero` of the
-        class containing all possible constants which are set to zero initially.
+        When this function is called by the method :meth:`ElectronicState.calc_eigenstates`,
+        the method :meth:`ElectronicStateConstants.to_dict` of the attribute
+        ``const`` within :class:`ElectronicState` is used to
+        create a proper dictionary.
     Bfield : float
         magnetic field strength in T.
     """
@@ -1122,15 +1331,15 @@ def eigensort(x,y_arr):
 if __name__ == '__main__':
     cm2MHz = 29979.2458 # actually c*100*1e-6 ?
     # BaF constants for the isotopes 138 and 137 from Steimle paper 2011
-    const_gr_138 = {'B':0.21594802,'D':1.85e-7,'gamma':0.00269930,
+    const_gr_138 = {'B_e':0.21594802,'D_e':1.85e-7,'gamma':0.00269930,
                     'b_F':0.002209862,'c':0.000274323} #,'g_l':-0.028}#gl constant??
     const_ex_138 = {'A':632.28175,'A_D':3.1e-5,
-                    'B':0.2117414, 'D':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980}
+                    'B_e':0.2117414, 'D_e':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980}
     
-    const_gr_137 = {'B':0.21613878,'D':1.85e-7,'gamma':0.002702703,
+    const_gr_137 = {'B_e':0.21613878,'D_e':1.85e-7,'gamma':0.002702703,
                     'b_F':0.077587, 'c':0.00250173,'eq0Q':-0.00390270*2,
                     'b_F_2':0.002209873,'c_2':0.000274323}
-    const_ex_137 = {'B':0.211937,'D':2e-7,'A':632.2802,'A_D':3.1e-5,
+    const_ex_137 = {'B_e':0.211937,'D_e':2e-7,'A':632.2802,'A_D':3.1e-5,
                     'p+2q':-0.2581,'d':0.0076}
     
     #%% bosonic 138BaF
@@ -1150,6 +1359,7 @@ if __name__ == '__main__':
     plt.ylabel('intensity')
     plt.legend()
     
+    print(BaF.X.const.show('non-zero'))
     #%% fermionic 137BaF
     BaF2 = Molecule(I1=1.5,I2=0.5,transfreq=11946.3152748,naturalabund=0.112,
                     Gamma=21.,label='137 BaF')
