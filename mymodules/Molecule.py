@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.0
+v0.2.1
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -205,7 +205,7 @@ class Molecule:
         # eigenstate dipole matrix via matrix multiplication of eigenstates and pure basis dipole matrix 
         self.dipmat = np.matmul(np.matmul(X.Ev.T,H_dpure),A.Ev)
         # transition energies
-        E_vibX, E_vibA = self.X.const.electrovibr_energy, self.X.const.electrovibr_energy
+        E_vibX, E_vibA = X.const.electrovibr_energy, A.const.electrovibr_energy
         if (E_vibX == 0.0) and (E_vibA == 0.0):
             E_offset = self.transfreq
         else:
