@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.1
+v0.2.2
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -717,8 +717,18 @@ class ElectronicState:
         calculates the matrix elements of the various terms of the total
         Hamiltonian and determines the eigenvalues and eigenstates which are
         sorted by energy and stored in the variables ``Ew`` and ``Ev`` in the
-        current :class:`ElectronicState`.
+        current instace of the class :class:`ElectronicState`.
         The eigenstates can be nicely printed via :meth:`get_eigenstates`.
+        
+        Warning
+        -------
+        The total diagonalized Hamiltonian excludes the electronic and vibrational
+        constants since the vibrational motion can be decoupled completely from
+        the smaller interactions like rotation, hyperfine, spin-orbit,... .
+        So, the electronic and vibrational part of the molecular eigenenergies
+        are not included in the obtained eigenenergies of this function ``Ew``
+        but they can simply be added as an energy offset
+        (what is done in the method :meth:`Molecule.calc_branratios`).
         """
         if self.verbose: print('Calc Hamiltonian for {} electronic state'.format(self.label),end=' ')
         H = np.zeros((self.N,self.N))
