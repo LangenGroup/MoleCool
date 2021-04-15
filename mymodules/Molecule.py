@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.2
+v0.2.3
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -987,7 +987,7 @@ class Hcasea:
         """
         # self.L,self.Si,self.Om,self.J,self.F,self.I1 = L,Si,Om,J,F,I1
         self.__dict__.update(kwargs)
-        self.QuNrs = kwargs.keys()
+        self.QuNrs = list(kwargs.keys()) # convert to list since otherwise an error arises with pickle
         # check if all quantum numbers except L and Si are positive!!?
     def __str__(self):
         print(self.DF())
