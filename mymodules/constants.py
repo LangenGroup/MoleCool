@@ -4,7 +4,7 @@ Created on Wed May 13 18:27:42 2020
 
 @author: fkogel
 
-v2.5.2
+v2.5.3
 
 Module containing specific contants of certain molecules, atoms or more general
 systems. Theses constants will be imported within the classes
@@ -190,7 +190,7 @@ def gfac(name):
         
         row_labels_ex = [[0.5,  0.5],               #-> J'
                          [  0,    1]]               #-> F'
-        array_ex      = [0.00, -0.20272]
+        array_ex      = [0.00, -0.20272] #parity-dep Zeeman shift #in H_Z: [0.,-0.186]
     elif name == '137BaF':
         row_labels_gr = [[11, 12, 11, 12, 10,   21, 22, 21, 22, 23, 23 ],  #-> J = 10*G+F1
                          [1.5,2.5,0.5,1.5,0.5,  0.5,1.5,1.5,2.5,2.5,3.5]]  #-> F
@@ -199,7 +199,7 @@ def gfac(name):
         
         row_labels_ex = [[2,    2,      1,      1],   #-> J = F1
                          [2.5,  1.5,    1.5,    0.5]] #-> F
-        array_ex      = [-0.00012, -0.00019,  0.00012,  0.00025]    
+        array_ex      = [-0.050,  -0.172, 0.033, 0.198] #[-0.00012, -0.00019,  0.00012,  0.00025]    
     elif name == 'CaF':
         row_labels_gr = [[0.5,  0.5,  1.5,  1.5],   #-> J
                          [  0,    1,    1,    2]]   #-> F
