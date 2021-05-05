@@ -9,7 +9,7 @@ This python software includes two different programs:
 	The first code only uses pre-defined constants (like the dipole matrix,
 	hyperfine freqs, g-factors, ...) from the module :py:mod:`constants` which
 	are	required to calculate dynamics via the rate or optical Bloch equations.
-
+	
 2. Molecular Spectra Calculation Code
 	In comparison, the second code only uses constants of the effective
 	Hamiltonian and Quantum numbers of the level structure to evaluate the
@@ -32,6 +32,24 @@ To get started:
   command from an arbitrary working directory
 + Then, you see if some further packages have to be installed (e.g. numba, pandas, ..)
 + Afterwards, some examples from the module's documentation can be tried.
+
+----------------------------
+
+
+Code Structure:
+^^^^^^^^^^^^^^^
+
+.. figure:: CodeStructure.jpg
+   :scale: 70
+   :align: center
+   :alt: map to buried treasure
+   :figclass: align-center
+   
+   Class diagram of the ``Molecular Dynamics Simulation Code``. While methods
+   are characterized by parentheses,
+   attributes and properties are labeled without parentheses.
+   Class composition is marked by arrows with diamonds and class inheritance by open arrow tip.
+
 
 .. toctree::
    :maxdepth: 2
