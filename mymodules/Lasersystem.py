@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v2.5.2
+v2.5.4
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -268,7 +268,7 @@ class Lasersystem:
     @property
     def I_sum(self):
         """returns the sum of the peak intensities of all laser beams"""
-        return np.array([la.I for la in self]).sum()
+        return np.array([la.I for la in self]).sum(axis=0)
     @property
     def P_sum(self):
         """returns the sum of the powers of all laser beams"""
