@@ -4,7 +4,7 @@ Created on Wed May 13 18:27:42 2020
 
 @author: fkogel
 
-v2.5.3
+v2.5.5
 
 Module containing specific contants of certain molecules, atoms or more general
 systems. Theses constants will be imported within the classes
@@ -85,6 +85,15 @@ def dMat_red(name):
                       [1   ,1]]     #-> F
         column_labels = [[0.5],     #-> J'
                          [1.0]]     #-> F'
+    elif name == 'BaF': #as long as dMat is given for 'BaF', this dMat_red is ignored
+        array =[[0.0   , 0.8165 ],
+                [ -0.6201, 1.223],
+                [ 0.7845,  0.0654],
+                [ 0.    ,  0.9129]]
+        row_labels = [[0.5,0.5,1.5,1.5],
+                      [0,  1,  1,  2  ]]
+        column_labels = [[0.5,0.5],
+                          [0,  1]]
         
     elif name == '2-level-system':
         array       = [[1]]

@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v2.5.2
+v2.5.5
 
 This module contains all classes and functions to define a System including
 multiple :class:`Level` objects.
@@ -180,22 +180,18 @@ class Levelsystem:
         else:
             dMat_red = self.get_dMat_red()
             dMat = []
-            row = 0
-            column = 0
             index = []
-            for J,F in np.array([dMat_red.index.get_level_values('J'), dMat_red.index.get_level_values('F')]).T:
+            for J,F in zip(dMat_red.index.get_level_values('J'), dMat_red.index.get_level_values('F')):
                 for mF in np.arange(-F,F+1):
                     dMat_row = []
                     index.append([J,F,mF])
                     columns = []
-                    for J_,F_ in np.array([dMat_red.columns.get_level_values("J'"), dMat_red.columns.get_level_values("F'")]).T:
+                    for J_,F_ in zip(dMat_red.columns.get_level_values("J'"), dMat_red.columns.get_level_values("F'")):
                         for mF_ in np.arange(-F_,F_+1):
                             #### or is it better in the other direction <ex|d|gr> ???
-                            dMat_row.append( dMat_red.loc[(J,F),(J_,F_)] * (-1)**(F-mF)*np.sqrt(2*F+1) * float(wigner_3j(F,1,F_,-mF,mF-mF_,mF_)) )
+                            dMat_row.append( dMat_red.loc[(J,F),(J_,F_)] * (-1)**(F_-mF_) * float(wigner_3j(F_,1,F,-mF_,mF_-mF,mF)) )
                             columns.append([J_,F_,mF_])
-                            column += 1
                     dMat.append(dMat_row)
-                    row += 1
             self._dMat = pd.DataFrame(dMat,
                                      index  =pd.MultiIndex.from_arrays(np.array(index,dtype=object).T,   names=('J','F','mF')),
                                      columns=pd.MultiIndex.from_arrays(np.array(columns,dtype=object).T, names=("J'","F'","mF'"))
