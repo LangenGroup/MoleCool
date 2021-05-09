@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.5.2
+v2.5.6
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -56,7 +56,7 @@ a repumper each in the distance :math:`4mm`::
     
     # calculate dynamics with velocity and position dependence of the laser beams and molecules
     system.calc_rateeqs(t_int=40e-6,magn_remixing=False,
-                        velocity_dep=True,position_dep=True,method='LSODA')
+                        trajectory=True,position_dep=True,method='LSODA')
     
     # plot scattering rate, scattered photons, velocity and position
     system.plot_Nscattrate()
@@ -142,10 +142,12 @@ class System:
         self.N0 = np.array([]) #: initial population of all levels
         self.v0     = np.array([0.,0.,0.]) #: initial velocity of the particle
         self.r0     = np.array([0.,0.,0.]) #: initial position of the particle
+        """dictionary for parameters specifying the steady state conditions."""
         self.steadystate = {'t_ini'       : None,
                             'maxiters'    : 100,
                             'condition'   : [0.1,50],
                             'period'      : None}
+        """dictionary for parameters specifying the multiprocessing of calculations."""
         self.multiprocessing = {'processes' : multiprocessing.cpu_count()-1,#None
                                 'maxtasksperchild' : None}
         print("System is created with description: {}".format(self.description))
@@ -153,10 +155,10 @@ class System:
     def calc_rateeqs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
                      perfect_resonance=False, nodetuned_list=[],
                      magn_remixing=False, magn_strength=8,
-                     velocity_dep=False, position_dep=False,
+                     position_dep=False, trajectory=False, velocity_dep=None,
                      calculated_by='YanGroupnew',verbose=True,
                      mp=False,return_fun=None,**kwargs):
-        """Calculates the time evolution of the single level occupations with
+        """Calculates the time evolution of the single level populations with
         rate equations.        
 
         Parameters
@@ -195,14 +197,18 @@ class System:
             measure of the magnetic field strength (i.e. the magnetic remixing
             matrix is multiplied by 10^magn_strength). Reasonable values are
             between 6 and 9. The default is 8.
-        velocity_dep : bool, optional
-            whether to calculate the velocity of a particle which changes due 
-            to a momentum transfer and thus affects e.g. the scattering rate
-            due to the Doppler shift.
-            The default is False.
         position_dep : bool, optional
-            whether to take the Gaussian intensity distribution of the laser
-            beams into account. The default is False.
+            determines whether to take the Gaussian intensity distribution of
+            the laser beams into account. The default is False.
+        trajectory : bool, optional
+            determines whether a trajectory of the molecule is calculated using
+            simple equations of motion. This yields the additional time-dependent
+            parameters ``v`` and ``r`` for the velocity and position. So, the force
+            which is acting on the molecule changes the velocity which in turn can
+            alter the Doppler shift. Further, the `position_dep` parameter determines
+            if either a uniform unitensity or complex intensity distribution due to
+            the Gaussian beam shapes is assumed through which the particle is
+            propagated. The default is False.
         calculated_by : str, optional
             The branching ratios are different depending on the group or person 
             who has calculated these values. Either 'Lucas', 'YanGroup' or
@@ -210,6 +216,13 @@ class System:
         verbose : bool, optional
             whether to print additional information like execution time or the
             scattered photon number. The default is True.
+        mp : bool, optional
+            determines if multiple parameter configurations are calculated using
+            multiprocessing. The default is False.
+        return_fun : function-type, optional
+            if `mp` == True, the returned dictionary of this function determines
+            the quantities which are save for every single parameter configuration.
+            The default is None.
         **kwargs : keyword arguments, optional
             other options of the `solve_ivp` scipy function can be specified
             (see homepage of scipy for further information).
@@ -218,20 +231,16 @@ class System:
         ----
         function creates attributes 
         
-        * ``self.N`` : solution of the time dependent populations N,
-        * ``self.Nscatt`` : time dependent scattering number,
-        * ``self.Nscattrate`` : time dependent scattering rate,
-        * ``self.photons``: totally scattered photons
-        * ``self.args``: input arguments of the call of this function
-        * ``self.t`` : times at which the solution was calculated
-        * ``self.v`` : calculated velocities of the molecule at times `self.t`
-          (only given if velocity_dep == True)
-        * ``self.r`` : calculated positions of the molecule at times `self.t`
-          (only given if velocity_dep == True)
-        
-        Returns
-        -------
-        None.
+        * ``N`` : solution of the time dependent populations N,
+        * ``Nscatt`` : time dependent scattering number,
+        * ``Nscattrate`` : time dependent scattering rate,
+        * ``photons``: totally scattered photons
+        * ``args``: input arguments of the call of this function
+        * ``t`` : times at which the solution was calculated
+        * ``v`` : calculated velocities of the molecule at times ``t``
+          (only given if `trajectory` == True)
+        * ``r`` : calculated positions of the molecule at times ``t``
+          (only given if `trajectory` == True)
         """
         self.calcmethod = 'rateeqs'
         #___input arguments of this called function
@@ -258,6 +267,7 @@ class System:
         self.sp     = np.array([ la.I / ( pi*c*h*Gamma/(3*la.lamb**3) ) 
                                 for la in self.lasers ])
         self.k      = np.array([ la.k*la.kabs for la in self.lasers ])
+        kabs        = np.linalg.norm(self.k,axis=-1)
         self.f      = np.array([la.f_q for la in self.lasers])
         self.w      = np.array([la.w for la in self.lasers ])
         self._w_cylind = np.array([la._w_cylind for la in self.lasers ])
@@ -290,10 +300,6 @@ class System:
         else:
             self.rx1 = np.abs(np.dot(self.dMat,self.f.T))**2
             self.rx2 = self.rx1.copy()
-        self.R1 = Gamma/2*self.rx1*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
-        self.R2 = Gamma/2*self.rx2*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
-        #sum R1 & R2 over pNum:
-        self.R1sum, self.R2sum = np.sum(self.R1,axis=2), np.sum(self.R2,axis=2)
         
         #___magnetic remixing of the ground states. An empty array is left for no B-field 
         if magn_remixing: self.M = self.Bfield.get_remix_matrix(self.levels.grstates,remix_strength=magn_strength)
@@ -317,16 +323,36 @@ class System:
                 self.t_eval = None
         
         #___depenending on the position dependence two different ODE evaluation functions are called
-        if velocity_dep or position_dep:
+        if trajectory or velocity_dep: #new variable trajectory replaces velocity_dep
             self.y0      = np.array([*self.N0, *self.v0, *self.r0])
         else:
+            # position dependent intensity due to Gaussian shape of Laserbeam:
+            if position_dep:
+                for p in range(pNum):
+                    r_ = self.r0 - self.r_k[p]
+                    if self._w_cylind[p] != 0.0: # calculation for a beam which is widened by a cylindrical lens
+                        d2_w = np.dot(self.dir_cyl[p],r_)**2
+                        if d2_w > self.r_cyl_trunc[p]**2: #test if position is larger than the truncation radius along the dir_cyl direction
+                            self.sp[p] = 0.0  
+                        else:
+                            d2 = np.dot(np.cross(self.dir_cyl[p],self.k[p]/kabs[p]),r_)**2
+                            self.sp[p] *= np.exp(-2*(d2_w/self._w_cylind[p]**2 + d2/self.w[p]**2))
+                    else: 
+                        r_perp = np.cross( r_ , self.k[p]/kabs[p] )
+                        self.sp[p] *= np.exp(-2 * np.dot(r_perp,r_perp) / self.w[p]**2 )
+            self.R1 = Gamma/2*self.rx1*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
+            self.R2 = Gamma/2*self.rx2*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
+            #sum R1 & R2 over pNum:
+            self.R1sum, self.R2sum = np.sum(self.R1,axis=2), np.sum(self.R2,axis=2)
+            
             self.y0      = self.N0
+            
         
         # ---------------Ordinary Differential Equation solver----------------
         #solve initial value problem of the ordinary first order differential equation with scipy
         if verbose: print('Solving ode with rate equations...', end='')
         start_time = time.perf_counter()
-        if not velocity_dep and not position_dep:
+        if not (trajectory or velocity_dep):
             sol = solve_ivp(ode0_rateeqs_jit, (t_start,t_start+t_int), self.y0,
                     t_eval=self.t_eval, **kwargs,
                     args=(lNum,uNum,pNum,Gamma,self.r_,self.R1sum,self.R2sum,
@@ -336,7 +362,7 @@ class System:
                     t_eval=self.t_eval, max_step = 10e-6, **kwargs,
                     args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
                           self.delta,self.sp,self.w,self._w_cylind,
-                          self.k,np.linalg.norm(self.k,axis=-1),self.r_k,
+                          self.k,kabs,self.r_k,
                           self.r_cyl_trunc,self.dir_cyl,
                           self.m,tswitch,self.M,position_dep,self.beta))
             #velocity v and position r
@@ -531,7 +557,7 @@ class System:
             Force array for all <ntimes> time points and three axes 'x','y','z'.
         """
         if self.calcmethod == 'rateeqs':
-            if not self.args['position_dep'] and not self.args['velocity_dep']:
+            if not (self.args['trajectory'] or self.args['velocity_dep']):
                 lNum,uNum = self.levels.lNum, self.levels.uNum
                 N_lu = self.N[:lNum,:][:,None,:] - self.N[lNum:lNum+uNum,:][None,:,:]
                 F = hbar * np.sum( np.dot(self.R1,self.k)[:,:,:,None] * N_lu[:,:,None,:], axis=(0,1)) #+ g 
@@ -639,16 +665,93 @@ class System:
             pass
         
     #%%
-    def calc_OBEs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
-                  perfect_resonance=False, nodetuned_list=[],
+    def calc_OBEs(self, t_int=20e-6, t_start=0., dt=None, t_eval = [],
                   magn_remixing=False, freq_clip_TH=500, steadystate=False,
-                  velocity_dep=False, position_dep=False, rounded=False,
-                  calculated_by='Lucas',verbose=True,
-                  mp=False,return_fun=None,**kwargs):
+                  position_dep=False, rounded=False,
+                  verbose=True, mp=False, return_fun=None, **kwargs):
+        """Calculates the time evolution of the single level populations with
+        the optical Bloch equations.
+
+        Parameters
+        ----------
+        t_int : float, optional
+            interaction time in which the molecule is exposed to the lasers.
+            The default is 20e-6.
+        t_start : float, optional
+            starting time when the ode_solver starts the calculation. Useful
+            for the situation when e.g. all cooling lasers are shut off at a 
+            specific time t1, so that a new calculation with another laser
+            configuration (e.g. including only a probe laser) can be started
+            at t_start=t1 to continue the simulation. The default is 0.0.
+        dt : float, optional
+            time step of the output data. So in this case the ODE solver will
+            decide at which time points to calculate the solution. If dt='auto',
+            an appropriate time step is chosen by using the smallest Rabi frequency
+            between a single transition and single laser component.
+            The default is None.
+        t_eval : list or numpy array, optional
+            If it desired to get the solution of the ode solver only at 
+            specific time points, the `t_eval` argument can be used to specify 
+            these points. If `_eval` is given, the `dt` argument is ignored.
+            The default is [].
+        magn_remixing : bool, optional
+            if True, the magnetic field, which is defined in the instance
+            :class:`~System.Bfield` contained in this class, is considered in the
+            calculation. Otherwise, the magnetic field is set to zero.
+            The default is False.
+        freq_clip_TH : float or string, optional
+            determines the threshold frequency at which the coupling of a single
+            transition detuned by a frequency from a specific laser component
+            is neglected. If a float is provided, only the transitions with
+            detunings smaller than `freq_clip_TH` times Gamma are driven by the
+            light field. If `freq_clip_TH` == 'auto', the threshold frequencies for
+            all transitions are chosen seperately by considering the transition
+            strengths and intensities of each laser component.            
+            The default is 500.
+        steadystate : bool, optional
+            determines whether the equations are propagated until a steady
+            state or periodic quasi-steady state is reached. The dictionary
+            ``steadystate`` of this class specifies the steady state conditions.
+            The default is False.
+        position_dep : bool, optional
+            determines whether to take position of the particle in an Gaussian
+            intensity distribution of the laser beams into account.
+            The default is False.
+        rounded : float, optional
+            if specified, all frequencies and velocities are rounded to the frequency
+            `rounded` in units of Gamma.
+            The default is False.
+        verbose : bool, optional
+            whether to print additional information like execution time or the
+            scattered photon number. The default is True.
+        mp : bool, optional
+            determines if multiple parameter configurations are calculated using
+            multiprocessing. The default is False.
+        return_fun : function-type, optional
+            if `mp` == True, the returned dictionary of this function determines
+            the quantities which are save for every single parameter configuration.
+            The default is None.
+        **kwargs : keyword arguments, optional
+            other options of the `solve_ivp` scipy function can be specified
+            (see homepage of scipy for further information).
+
+        Note
+        ----
+        function creates attributes 
+        
+        * ``N`` : solution of the time dependent populations N,
+        * ``Nscatt`` : time dependent scattering number,
+        * ``Nscattrate`` : time dependent scattering rate,
+        * ``photons``: totally scattered photons
+        * ``args``: input arguments of the call of this function
+        * ``t`` : times at which the solution was calculated
+        """
         
         self.calcmethod = 'OBEs'
         #___input arguments of this called function
         self.args = locals()
+        #variable velocity_dep not used anymore
+        if 'velocity_dep' in kwargs: del kwargs['velocity_dep']
         
         #___parameters belonging to the levels
         self.levels.verbose = verbose
@@ -686,8 +789,28 @@ class System:
         #___parameters belonging to the lasers (and partially to the levels)
         self.G      = np.array([ la.I / ( pi*c*h*Gamma/(3*la.lamb**3) ) 
                                 for la in self.lasers ])**0.5
-        self.f      = np.array([la.f_q for la in self.lasers])
         self.k      = np.array([ la.k*la.kabs for la in self.lasers ])
+        # position dependent intensity due to Gaussian shape of Laserbeam:
+        if position_dep:
+            kabs        = np.linalg.norm(self.k,axis=-1)
+            self.w      = np.array([la.w for la in self.lasers ])
+            self._w_cylind = np.array([la._w_cylind for la in self.lasers ])
+            self.r_k    = np.array([ np.array(la.r_k,dtype=float) for la in self.lasers ])
+            self.r_cyl_trunc = np.array([la._r_cylind_trunc for la in self.lasers])
+            self.dir_cyl= np.array([la._dir_cylind for la in self.lasers],dtype=float) #unit vectors
+            for p in range(pNum):
+                r_ = self.r0 - self.r_k[p]
+                if self._w_cylind[p] != 0.0: # calculation for a beam which is widened by a cylindrical lens
+                    d2_w = np.dot(self.dir_cyl[p],r_)**2
+                    if d2_w > self.r_cyl_trunc[p]**2: #test if position is larger than the truncation radius along the dir_cyl direction
+                        self.G[p] = 0.0  
+                    else:
+                        d2 = np.dot(np.cross(self.dir_cyl[p],self.k[p]/kabs[p]),r_)**2
+                        self.G[p] *= np.exp(-2*(d2_w/self._w_cylind[p]**2 + d2/self.w[p]**2))**0.5
+                else: 
+                    r_perp = np.cross( r_ , self.k[p]/kabs[p] )
+                    self.G[p] *= np.exp(-2 * np.dot(r_perp,r_perp) / self.w[p]**2 )**0.5
+        self.f      = np.array([la.f_q for la in self.lasers])
         self.phi    = np.array([la.phi for la in self.lasers])
         self.omega_k= np.array([la.omega for la in self.lasers])
         if rounded: #maybe save these variables directly as self.omega_k???
@@ -727,17 +850,17 @@ class System:
         self.ck_indices = (tuple( np.array([i[0],i[1]]) for i in self.ck_indices[0] ),
                        tuple( np.array([i[0],i[1]]) for i in self.ck_indices[1] ))
         
-        if perfect_resonance: #does not work properly --> have to be calculated before h_gek coeffs.
-            # nodetuned_list contains tuples (nu_gr,nu_ex,p)
-            # determining the ground/ excited states nu being in
-            # perfect resonance with the lasers p
-            for l in range(lNum):
-                for u in range(uNum):
-                    gr,ex = self.levels.grstates[l],self.levels.exstates[u]
-                    for p in range(pNum):
-                        for nu_gr, nu_ex, p_ in nodetuned_list:
-                            if gr.nu == nu_gr and ex.nu == nu_ex and p == p_:
-                                self.omega_eg[l,u] = self.omega_k[p]
+        # if perfect_resonance: #does not work properly --> have to be calculated before h_gek coeffs.
+        #     # nodetuned_list contains tuples (nu_gr,nu_ex,p)
+        #     # determining the ground/ excited states nu being in
+        #     # perfect resonance with the lasers p
+        #     for l in range(lNum):
+        #         for u in range(uNum):
+        #             gr,ex = self.levels.grstates[l],self.levels.exstates[u]
+        #             for p in range(pNum):
+        #                 for nu_gr, nu_ex, p_ in nodetuned_list:
+        #                     if gr.nu == nu_gr and ex.nu == nu_ex and p == p_:
+        #                         self.omega_eg[l,u] = self.omega_k[p]
         
         #___specify the initial (normalized) occupations of the levels
         N = lNum + uNum
@@ -842,33 +965,27 @@ class System:
                 N0_vec[count]   = N0mat[i,j].real
                 N0_vec[count+1] = N0mat[i,j].imag
                 count += 2
-                
-        #___depenending on the position dependence two different ODE evaluation functions are called
-        velocity_dep, position_dep = self.args['velocity_dep'], self.args['position_dep']
-        if velocity_dep or position_dep:
-            self.y0      = N0_vec#np.array([*self.N0, *self.v0, *self.r0])
-        else:
-            self.y0      = N0_vec
+        
+        #___initial population
+        self.y0      = N0_vec
         
         # ---------------Ordinary Differential Equation solver----------------
         # solve initial value problem of the ordinary first order differential equation with scipy
         lNum,uNum,pNum = self.levels.lNum,self.levels.uNum,self.lasers.pNum
         kwargs = self.args['kwargs']
-        if not velocity_dep and not position_dep:
-            # sol = solve_ivp(ode0_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
-            #                 self.y0, t_eval=T_eval, **kwargs,
-            #                 args=(lNum,uNum,pNum,self.G,self.f,self.om_eg,self.om_k,
-            #                       betaB,self.dMat,self.muMat,
-            #                       self.M_indices,h_gek,h_gege,self.phi)) # delete?
-            sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
-                            self.y0, t_eval=T_eval, **kwargs,
-                            args=(lNum,uNum,pNum, self.M_indices,
-                                  self.Gfd,self.om_gek,self.betamu,self.dd))
-        else:
-            sol = solve_ivp(ode1_OBEs_opt2, (t_start*Gamma,(t_start+t_int)*Gamma),
-                            self.y0, t_eval=T_eval, **kwargs,
-                            args=(lNum,uNum,pNum, self.M_indices,
-                                  self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices))
+        # sol = solve_ivp(ode0_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+        #                 self.y0, t_eval=T_eval, **kwargs,
+        #                 args=(lNum,uNum,pNum,self.G,self.f,self.om_eg,self.om_k,
+        #                       betaB,self.dMat,self.muMat,
+        #                       self.M_indices,h_gek,h_gege,self.phi)) # delete?
+        # sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+        #                 self.y0, t_eval=T_eval, **kwargs,
+        #                 args=(lNum,uNum,pNum, self.M_indices,
+        #                       self.Gfd,self.om_gek,self.betamu,self.dd))
+        sol = solve_ivp(ode1_OBEs_opt2, (t_start*Gamma,(t_start+t_int)*Gamma),
+                        self.y0, t_eval=T_eval, **kwargs,
+                        args=(lNum,uNum,pNum, self.M_indices,
+                              self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices))
         
         #___transform the solution vectors back to the density matrix ymat
         y_vec = sol.y
@@ -1658,35 +1775,16 @@ if __name__ == '__main__':
     system = System()
     
     pol     = 'lin'
-    # pol     = 'sigmap'
-    # pol     = ('sigmap','sigmam')
-    system.lasers.freq_pol_switch = 5e6
     system.v0 = np.array([190,0,0])
     system.r0 = np.array([0,0,0])
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=16.7e6,
-                                EOM_freq=39.33e6,k=[0,1,0],r_k=[10e-3,0,0])
-    # system.lasers.add_sidebands(895.699e-9,14e-3,pol,AOM_shift=16.7e6,
-                                # EOM_freq=39.33e6,k=[0,1,0],r_k=[10e-3,0,0])
-    # system.lasers.add_sidebands(897.961e-9,14e-3,pol,AOM_shift=16.7e6,
-                                # EOM_freq=39.33e6)
-    # system.lasers.add_sidebands(900.238e-9,14e-3,pol,AOM_shift=20.65e6, EOM_freq=39.33e6)
-    # system.lasers.add(859.830e-9,20e-3,pol,freq_shift=-56.7660e6)
-    # system.lasers.add(895.699e-9,14e-3,pol)
-    # system.lasers.add(897.961e-9,14e-3,pol)
-    # system.lasers.add(900.238e-9,14e-3,pol)
-    
+    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20e6,
+                                EOM_freq=39.33e6,k=[0,1,0])
+
     system.levels.add_all_levels(nu_max=0)
     
-    # nodetuned_list contains tuples (nu_gr,nu_ex,p) determining the ground-/
-    # excited state nu being in perfect resonance with the pth laser
-    nodetuned_list = [(0,0,0),(1,0,1),(2,1,2),(3,2,3)]
-    # system.N0 = [0, 0,0,0, 0,0,0, 1,0,0,0,1,  0, 0,0,0]
-    
-    system.add_magnfield(5e-4,direction=[0,1,1])
+    system.Bfield.turnon(strength=5e-4,direction=[0,1,1])
     system.levels.grstates.del_lossstate()
-    system.calc_OBEs(t_int=5e-6,dt=1e-9,perfect_resonance=False, method='RK45',
-                        nodetuned_list=nodetuned_list,magn_remixing=False,
-                        velocity_dep=False,position_dep=False,calculated_by='YanGroupnew')
+    system.calc_OBEs(t_int=5e-6,dt=1e-9, method='RK45',magn_remixing=True)
 
     
