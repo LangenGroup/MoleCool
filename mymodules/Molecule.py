@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.3
+v0.2.4
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -56,7 +56,8 @@ can be printed::
 """
 from System import *
 from collections.abc import Iterable
-
+#: Constant for converting a unit in wavenumbers (cm^-1) into MHz.
+cm2MHz = 299792458.0*100*1e-6 #using scipys value for the speed of light
 #%% classes
 class Molecule:
     def __init__(self,I1=0,I2=0,Bfield=0.0,mass=None,load_constants=None,
@@ -317,7 +318,7 @@ class ElectronicStateConstants:
     #: spin-rotation constants
     const_sr        = ['gamma','gamma_D']
     #: spin-orbit constants
-    const_so        = ['A','A_D']
+    const_so        = ['A_e','alpha_A','A_D']
     #: hyperfine constants
     const_HFS       = ['a','b_F','c','d','c_I',
                        'a_2','b_F_2','c_2'] #for the second nuclear spin if I2 is non-zero
@@ -409,9 +410,10 @@ class ElectronicStateConstants:
         formatting : str, optional
             Can either be 'all' for printing all constants or 'non-zero' for
             printing only the non-zero constants. The default is 'all'.
-        createHTML : bool, optional
+        createHTML : bool or str, optional
             if True the returned table with the specific formatting is saved
-            as a HTML file `ElectronicStateConstants.html`. The default is False.
+            as a HTML file `ElectronicStateConstants.html`. If str the HTML file
+            is saved with this filename. The default is False.
 
         Returns
         -------
@@ -424,6 +426,9 @@ class ElectronicStateConstants:
                       'const_HFS','const_eq0Q','const_LD','const_Zeeman']
         index, values, values2  = [],[],[]
         cm2MHz = c*100*1e-6
+        precision = 9
+        precision_old = pd.get_option('display.precision')
+        pd.set_option("display.precision", precision)
         for arr,name in zip(const_vars,names):
             for var in self.__class__.__dict__[arr]:
                 index.append([name,var])
@@ -445,12 +450,16 @@ class ElectronicStateConstants:
         
         if createHTML:
             #render dataframe as html
-            html = DF.to_html()
+            html = DF.to_html(formatters=('{:.6f}'.format,'{:.2f}'.format),justify='right')
             #write html to file
-            text_file = open("ElectronicStateConstants.html", "w")
+            if type(createHTML) == str:
+                text_file = open(createHTML+'.html', "w")
+            else:
+                text_file = open("ElectronicStateConstants.html", "w")
             text_file.write(html)
             text_file.close()
-        
+            
+        pd.set_option("display.precision", precision_old)
         return DF
 
     def to_dict(self):
@@ -463,6 +472,7 @@ class ElectronicStateConstants:
             dictionary with all defined constants.
         """
         dic = {key : self.__dict__[key] for key in self.const_all}
+        dic['A_v'] = self.A_v
         dic['B_v'] = self.B_v
         dic['D_v'] = self.D_v
         return dic
@@ -483,6 +493,14 @@ class ElectronicStateConstants:
     
     def __str__(self):
         return self.show(formatting='non-zero').to_string()
+    
+    @property
+    def A_v(self):
+        """returns the vibrational-state-dependent spin-orbit constant `A_v`.
+        
+        :math:`A_v = A_e + \\alpha_A (v + 1/2)`.
+        """
+        return self.A_e + self.alpha_A*(self.nu+0.5)
     
     @property
     def B_v(self):
@@ -602,12 +620,12 @@ class ElectronicState:
         """
         cs = self.const
         nu  = self.nu
-        B_v, D_v = cs.B_v, cs.D_v
+        A_v, B_v, D_v = cs.A_v, cs.B_v, cs.D_v
         if Omega > self.L: pm = +1
         else: pm = -1
         
-        E = cs.electrovibr_energy \
-            + pm*cs['A']*self.L*self.S + (B_v *J*(J+1) - D_v *(J*(J+1))**2) \
+        E = cs.electrovibr_energy + pm*A_v*self.L*self.S \
+            + (B_v *(J*(J+1) + self.S*(self.S+1) - Omega**2 - self.S**2) - D_v *(J*(J+1))**2) \
             + p*phs(J+0.5) * cs['p+2q']/2 *(J+0.5)
         return E
     
@@ -817,7 +835,8 @@ class ElectronicState:
             text_file = open("eigenstates.html", "w")
             text_file.write(html)
             text_file.close()
-        return DF1
+        else:
+            return DF1
         
     def get_purestates(self,onlygoodQuNrs=False):
         """
@@ -1110,7 +1129,7 @@ def H_tot(x,y,const):
     H_so = 0.0
     if (kd(J,J_) != 0.0):
         H_so = kd(L,L_)*kd(Om,Om_)*kd(J,J_)*kd(Si,Si_)*(
-            const['A']*L*Si
+            const['A_v']*L*Si
             + const['A_D']*L*Si* (J*(J+1) - Om**2 + S*(S+1) - Si**2)   )
     
     #==================== H_LD - Lambda-doubling
@@ -1244,7 +1263,7 @@ def H_d(x,y):
         I   = x.I1
         
         sum1 = 0.0
-        for q in [-1,+1]: #here also add 0?
+        for q in [-1,0,+1]: #here also add 0?
             sum1 += w3j(J_,1,J,-Om_,q,Om)
         H = kd(Si,Si_)*phs(J_+I+F+1)*sb(F)*sb(F_)*w6j(J_,F_,I,F,J,1)*phs(J_-Om_)*sb(J)*sb(J_)*sum1
     return H
@@ -1343,13 +1362,13 @@ if __name__ == '__main__':
     # BaF constants for the isotopes 138 and 137 from Steimle paper 2011
     const_gr_138 = {'B_e':0.21594802,'D_e':1.85e-7,'gamma':0.00269930,
                     'b_F':0.002209862,'c':0.000274323} #,'g_l':-0.028}#gl constant??
-    const_ex_138 = {'A':632.28175,'A_D':3.1e-5,
+    const_ex_138 = {'A_e':632.28175,'A_D':3.1e-5,
                     'B_e':0.2117414, 'D_e':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980}
     
     const_gr_137 = {'B_e':0.21613878,'D_e':1.85e-7,'gamma':0.002702703,
                     'b_F':0.077587, 'c':0.00250173,'eq0Q':-0.00390270*2,
                     'b_F_2':0.002209873,'c_2':0.000274323}
-    const_ex_137 = {'B_e':0.211937,'D_e':2e-7,'A':632.2802,'A_D':3.1e-5,
+    const_ex_137 = {'B_e':0.211937,'D_e':2e-7,'A_e':632.2802,'A_D':3.1e-5,
                     'p+2q':-0.2581,'d':0.0076}
     
     #%% bosonic 138BaF
