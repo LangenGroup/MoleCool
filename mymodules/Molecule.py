@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.4
+v0.2.5
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -325,7 +325,7 @@ class ElectronicStateConstants:
     #: electric quadrupol interaction
     const_eq0Q      = ['eq0Q']
     #: Lambda-doubling constants
-    const_LD        = ['o+p+q','p+2q','q','(p+2q)_D','q_D']
+    const_LD        = ['o','p','q']#,'p_D','q_D'] can maybe extracted out of Fortran code
     #: (magnetic) Zeeman constants. `g_S` and `g'_L` are initially set to 2.002 and 1. respectively.
     const_Zeeman    = ['g_l',"g'_l",'g_S',"g'_L"]  
     #: sum of all constant names
@@ -626,7 +626,7 @@ class ElectronicState:
         
         E = cs.electrovibr_energy + pm*A_v*self.L*self.S \
             + (B_v *(J*(J+1) + self.S*(self.S+1) - Omega**2 - self.S**2) - D_v *(J*(J+1))**2) \
-            + p*phs(J+0.5) * cs['p+2q']/2 *(J+0.5)
+            + p*phs(J+0.5) * (cs['p']+2*cs['q'])/2 *(J+0.5)
         return E
     
     def get_energy_caseb(self,N,sr):
@@ -1134,7 +1134,7 @@ def H_tot(x,y,const):
     
     #==================== H_LD - Lambda-doubling
     H_LD = 0.0
-    if ((const['o+p+q']!=0.0) or (const['p+2q']!=0.0) or (const['q']!=0.0)) and (kd(J,J_) != 0.0):
+    if ((const['o']!=0.0) or (const['p']!=0.0) or (const['q']!=0.0)) and (kd(J,J_) != 0.0):
         sum1 = 0.0
         for q in [-1,+1]:
             sum11 = 0.0
@@ -1146,9 +1146,9 @@ def H_tot(x,y,const):
             for Om__ in np.arange(-Om_max,Om_max+1e-3,1):
                 sum13 += phs(J_-Om+J_-Om__)*cb(J_)*w3j(J,1,J,-Om,-q,Om__)*w3j(J,1,J,-Om__,-q,Om_)
                 
-            sum1 += kd(L,L_-2*q)*(  const['o+p+q'] * kd(Om,Om_)*sum11 
-                                  + const['p+2q'] * sum12
-                                  + const['q'] * kd(Si,Si_)*sum13   )
+            sum1 += kd(L,L_-2*q)*(  (const['o']+const['p']+const['q']) * kd(Om,Om_)*sum11 
+                                  + (const['p']+2*const['q']) * sum12
+                                  +  const['q'] * kd(Si,Si_)*sum13   )
         H_LD = kd(J,J_) * sum1        
     
     #==================== H_eq0Q - electric quadrupol
@@ -1363,13 +1363,14 @@ if __name__ == '__main__':
     const_gr_138 = {'B_e':0.21594802,'D_e':1.85e-7,'gamma':0.00269930,
                     'b_F':0.002209862,'c':0.000274323} #,'g_l':-0.028}#gl constant??
     const_ex_138 = {'A_e':632.28175,'A_D':3.1e-5,
-                    'B_e':0.2117414, 'D_e':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980}
+                    'B_e':0.2117414, 'D_e':2.0e-7,'p':-0.25755-2*(-0.0840),'q':-0.0840,
+                    "g'_l":-0.536,"g'_L":0.980}
     
     const_gr_137 = {'B_e':0.21613878,'D_e':1.85e-7,'gamma':0.002702703,
                     'b_F':0.077587, 'c':0.00250173,'eq0Q':-0.00390270*2,
                     'b_F_2':0.002209873,'c_2':0.000274323}
     const_ex_137 = {'B_e':0.211937,'D_e':2e-7,'A_e':632.2802,'A_D':3.1e-5,
-                    'p+2q':-0.2581,'d':0.0076}
+                    'p':-0.2581-2*(-0.0840),'q':-0.0840,'d':0.0076}
     
     #%% bosonic 138BaF
     BaF = Molecule(I1=0.5,transfreq=11946.31676963,naturalabund=0.717,
