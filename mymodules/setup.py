@@ -2,7 +2,7 @@ from distutils.core import setup
 
 requirements = [
         "numba",
-        "numpy==1.21.1",
+        "numpy",
         "tqdm",
         "pandas",
         "matplotlib",
@@ -11,8 +11,11 @@ requirements = [
         ]
 
 setup(
-        name="Great Simulation",
+        name="MolLaserCoolSimulations",
         version="2.4.3",
         author="Felix Kogel",
+        author_email="fkogel@pi5.physik.uni-stuttgart.de",
+        description="A module for calculating molecular laser-cooling dynamics and molecular spectra",
+        python_requires=">=3.6",
         install_requires=requirements
         )
