@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.5
+v0.2.6
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -461,7 +461,55 @@ class ElectronicStateConstants:
             
         pd.set_option("display.precision", precision_old)
         return DF
+    
+    def get_isotope_shifted_constants(self,masses,masses_isotope,inplace=False):
+        """calculates new isotope-shifted constant set.
+        --> see https://www.lfd.uci.edu/~gohlke/molmass/ for precise masses.
+        
+        Parameters
+        ----------
+        masses : list or ndarray
+            masses of the two atoms of the molecule for which the constants
+            are given, e.g. [137.9052, 18.9984] for 138BaF.
+        masses_isotope : list or ndarray
+            masses of the two atoms of the molecule for which the constants
+            should be calculated
+        inplace : bool
+            determines if the current constants are replaced inplace.
+            
+        Returns
+        -------
+        ElectronicStateConstants
+            Copy of the current ElectronicStateConstants instance with
+            isotope-shifted constants.
+        """
+        masses,masses_isotope = np.array(masses), np.array(masses_isotope)
+        if (len(masses) != 2) or (len(masses_isotope) != 2):
+            raise ValueError('masses parameters must be of length 2')
+            
+        m_e     = 1/1836.15267343
+        def m_mol(masses):
+            return masses[0]*masses[1]/masses.sum()
+        def m_el(masses):
+            return m_e*(masses.sum()-m_e) / masses.sum()
+        rho     = np.sqrt( m_mol(masses)/m_mol(masses_isotope) )
+        rho_el  = m_el(masses) / m_el(masses_isotope)
+        
+        if inplace:
+            const_new = self
+        else:
+            const_new = deepcopy(self)
+        
+        # rotation
+        const_new['B_e']        = self['B_e']*rho**2
+        const_new['alpha_e']    = self['alpha_e']*rho**3
+        # vibration
+        const_new['w_e']        = self['w_e'] * rho
+        const_new['w_e x_e']    = self['w_e x_e'] * rho**2
+        const_new['T_e']        = self['T_e'] / rho_el
 
+        return const_new
+    
     def to_dict(self):
         """Converts the defined constants to a dictionary which also includes
         the calculated values :meth:`B_v` and :meth:`D_v`.
