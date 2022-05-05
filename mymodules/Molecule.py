@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.6
+v0.2.7
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -142,7 +142,7 @@ class Molecule:
             self.grstates.append(args[0])
         else: self.exstates.append(args[0])
     
-    def calc_branratios(self,threshold=0.05,E_lowest=0.0,include_Boltzmann=True,
+    def calc_branratios(self,threshold=0.05,include_Boltzmann=True,
                         grstate=None,exstate=None):
         """
         calculates the linestrengths (by evaluating the electric dipole matrix)
@@ -166,11 +166,6 @@ class Molecule:
         threshold : float, optional
             all branching ratios below the threshold  in the range from 0.0
             to 1.0 are set to zero. The default is 0.05.
-        E_lowest : float, optional
-            if the Boltzmann factor is included the respective energy difference
-            is calculated with respect to the energy `E_lowest`.
-            However it is ensured that no eigenenergy of any of the ground state
-            levels is below this energy `E_lowest`. The default is 0.0.
         include_Boltzmann : bool, optional
             determines if the Boltzmann factor is included weighting ground state
             levels with different energy dependent on the temperature.
@@ -214,10 +209,11 @@ class Molecule:
         self.E = A.Ew[None,:] - X.Ew[:,None] + E_offset
         
         if include_Boltzmann:
-            cm2MHz = c*100*1e-6
-            fac = 1*cm2MHz*1e6*h/k_B
-            if np.min(X.Ew) < E_lowest: E_lowest = np.min(X.Ew)
-            Boltzmannfac = np.exp(-(X.Ew-E_lowest)[:,None]/fac/self.temp)
+            cm2MHz      = c*100*1e-6
+            fac         = 1*cm2MHz*1e6*h/k_B
+            E_lowest    = np.min(X.Ew)
+            Boltzmannfac= np.exp(-(X.Ew-E_lowest)[:,None]/fac/self.temp)
+            Boltzmannfac/= Boltzmannfac[:,0].sum() #normalizing constant in Boltzmann statistic
         else:
             Boltzmannfac = 1.0
         self.branratios = self.dipmat**2 * Boltzmannfac
@@ -500,9 +496,17 @@ class ElectronicStateConstants:
         else:
             const_new = deepcopy(self)
         
+        # others
+        const_new['gamma']      = self['gamma']*rho**2
+        const_new['p']          = self['p']*rho**2
+        const_new['q']          = self['q']*rho**4
+        # spin-orbit
+        const_new['alpha_A']    = self['alpha_A']*rho
+        const_new['A_D']        = self['A_D']*rho**2
         # rotation
         const_new['B_e']        = self['B_e']*rho**2
         const_new['alpha_e']    = self['alpha_e']*rho**3
+        const_new['gamma_e']    = self['gamma_e']*rho**4
         # vibration
         const_new['w_e']        = self['w_e'] * rho
         const_new['w_e x_e']    = self['w_e x_e'] * rho**2
