@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.7
+v0.2.8
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -54,8 +54,21 @@ can be printed::
     print(BaF.X.states[0])
     print(const_gr_138) # is the same as: print(BaF.X.const)
 """
-from System import *
+from numba import jit
+import numpy as np
+import pandas as pd
+from scipy.constants import c,h,hbar,pi,g,physical_constants
+from scipy.constants import k as k_B
+from scipy.constants import u as u_mass
+from System import open_object, save_object
+
 from collections.abc import Iterable
+import _pickle as pickle
+from copy import deepcopy
+from tqdm import tqdm
+import warnings
+import pywigxjpf as wig
+import matplotlib.pyplot as plt
 #: Constant for converting a unit in wavenumbers (cm^-1) into MHz.
 cm2MHz = 299792458.0*100*1e-6 #using scipys value for the speed of light
 #%% classes
@@ -122,6 +135,10 @@ class Molecule:
             pass
         #elements, isotopes, natural abundance, nuclear spin magn moment, ..
         
+        max_two_j = 2*80
+        # wig.wig_table_init(max_two_j,3)
+        wig.wig_table_init(max_two_j,6)
+        wig.wig_temp_init(max_two_j)
     
     def add_electronicstate(self,*args,**kwargs):
         """adds an electronic state (ground or excited state) as instance of
@@ -142,7 +159,7 @@ class Molecule:
             self.grstates.append(args[0])
         else: self.exstates.append(args[0])
     
-    def calc_branratios(self,threshold=0.05,include_Boltzmann=True,
+    def calc_branratios(self,threshold=0.005,include_Boltzmann=True,
                         grstate=None,exstate=None):
         """
         calculates the linestrengths (by evaluating the electric dipole matrix)
@@ -219,8 +236,8 @@ class Molecule:
         self.branratios = self.dipmat**2 * Boltzmannfac
         # additional degeneracy factor here?
         
-        #set all branching ratios smaller than the threshold (default 0.05) to zero
-        self.branratios = np.where(self.branratios<=threshold,0.0,self.branratios)
+        #set all branching ratios smaller than the threshold to zero
+        self.branratios = np.where(self.branratios<=threshold*np.max(self.branratios),0.0,self.branratios)
     
     def calc_spectrum(self,limits=None,plotpoints=40000):
         """ calculates the spectrum in a certain frequency range using the
@@ -458,7 +475,8 @@ class ElectronicStateConstants:
         pd.set_option("display.precision", precision_old)
         return DF
     
-    def get_isotope_shifted_constants(self,masses,masses_isotope,inplace=False):
+    def get_isotope_shifted_constants(self,masses,masses_isotope,
+                                      g_N=0,g_N_isotope=0,inplace=False):
         """calculates new isotope-shifted constant set.
         --> see https://www.lfd.uci.edu/~gohlke/molmass/ for precise masses.
         
@@ -482,7 +500,8 @@ class ElectronicStateConstants:
         masses,masses_isotope = np.array(masses), np.array(masses_isotope)
         if (len(masses) != 2) or (len(masses_isotope) != 2):
             raise ValueError('masses parameters must be of length 2')
-            
+        
+        # reduced masses ratios rho and rho_el
         m_e     = 1/1836.15267343
         def m_mol(masses):
             return masses[0]*masses[1]/masses.sum()
@@ -490,6 +509,12 @@ class ElectronicStateConstants:
             return m_e*(masses.sum()-m_e) / masses.sum()
         rho     = np.sqrt( m_mol(masses)/m_mol(masses_isotope) )
         rho_el  = m_el(masses) / m_el(masses_isotope)
+        
+        # nuclear g-factor ratio
+        if g_N != 0:
+            g_N_ratio = g_N_isotope / g_N
+        else:
+            g_N_ratio = 0
         
         if inplace:
             const_new = self
@@ -511,6 +536,12 @@ class ElectronicStateConstants:
         const_new['w_e']        = self['w_e'] * rho
         const_new['w_e x_e']    = self['w_e x_e'] * rho**2
         const_new['T_e']        = self['T_e'] / rho_el
+        #nuclear spin --> these constants must belong to the correct atom in the molecule!?
+        # maybe define atom1 and atom2 in the Molecule instance with respective g_N factors
+        const_new['a']          = self['a'] * g_N_ratio
+        const_new['b_F']        = self['b_F'] * g_N_ratio
+        const_new['c']          = self['c'] * g_N_ratio
+        const_new['d']          = self['d'] * g_N_ratio
 
         return const_new
     
@@ -1369,10 +1400,12 @@ def ishalfint(x,raise_err=False):
         return True
 def w3j(j_1, j_2, j_3, m_1, m_2, m_3):
     """returns Wigner 3j-symbol with arguments (j_1, j_2, j_3, m_1, m_2, m_3)"""
-    return float(wigner_3j(j_1, j_2, j_3, m_1, m_2, m_3))
+    # return float(wigner_3j(j_1, j_2, j_3, m_1, m_2, m_3))
+    return wig.wig3jj(int(2*j_1), int(2*j_2), int(2*j_3), int(2*m_1), int(2*m_2), int(2*m_3))
 def w6j(j_1, j_2, j_3, j_4, j_5, j_6):
     """returns Wigner 6j-symbol with arguments (j_1, j_2, j_3, j_4, j_5, j_6)"""
-    return float(wigner_6j(j_1, j_2, j_3, j_4, j_5, j_6))
+    # return float(wigner_6j(j_1, j_2, j_3, j_4, j_5, j_6))
+    return wig.wig6jj(int(2*j_1), int(2*j_2), int(2*j_3), int(2*j_4), int(2*j_5), int(2*j_6))
 
 def eigensort(x,y_arr):
     """sorts an eigenvalue matrix, e.g. eigenvalues as a function of a
