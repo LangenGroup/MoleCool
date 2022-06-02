@@ -1,0 +1,10 @@
+# Byte-compiled / optimized (.pyc, .pyo and .pyd) / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# documentation build
+build/
+
+#temporary python files
+mymodules/tmp/

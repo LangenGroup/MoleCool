@@ -83,6 +83,7 @@ from scipy.constants import u as u_mass
 import constants
 from collections.abc import Iterable
 import warnings
+import os
 import numbers
 from copy import deepcopy
 import pandas as pd
@@ -1175,9 +1176,17 @@ class State:
         return [QuNr for QuNr in self.QuNrs if QuNr != 'mF']
 #%%
 def get_constants_dict(name=''):
-    if name:
-        with open(name+".json", "r") as read_file:
+    def openjson(root_dir):
+        with open(root_dir + name + ".json", "r") as read_file:
             data = json.load(read_file)
         return data
+    if name:
+        try:
+            return openjson("./")
+        except FileNotFoundError:
+            script_dir = os.path.dirname(os.path.abspath(__file__)) #directory where this script is stored.
+            # Using this directory path, the module System (and the others) can be imported
+            # from an arbitrary directory provided that the respective path is in the PYTHONPATH variable.
+            return openjson(script_dir + "\\")
     else:
         return {}

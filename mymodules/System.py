@@ -40,7 +40,7 @@ Example for setting up a level and laser system for BaF with the cooling and 3 r
 lasers and calculating the dynamics::
     
     from System import *
-    system = System(description='Test1',load_constants='BaFconstants')
+    system = System(description='SimpleTest1_BaF',load_constants='BaFconstants')
     
     # set up the lasers each with four sidebands
     for lamb in np.array([859.830, 895.699, 897.961])*1e-9:
@@ -75,7 +75,7 @@ and :math:`r_x=-2mm` which is transversely passing two cooling lasers with
 a repumper each in the distance :math:`4mm`::
     
     from System import *
-    system = System(description='Test2',load_constants='BaFconstants')
+    system = System(description='SimpleTest2Traj_BaF',load_constants='BaFconstants')
     
     # specify initial velocity and position of the molecule
     system.v0 = np.array([200,0,0])   #in m/s
@@ -98,12 +98,8 @@ a repumper each in the distance :math:`4mm`::
     system.calc_rateeqs(t_int=40e-6,magn_remixing=False,
                         trajectory=True,position_dep=True)
     
-    # plot scattering rate, scattered photons, velocity and position
-    system.plot_Nscattrate()
-    system.plot_Nscatt()
-    system.plot_v()
-    system.plot_r()
-    system.plot_F()
+    # plot scattering rate, scattered photons, velocity and position, ...
+    system.plot_all()
 """
 import numpy as np
 from scipy.integrate import solve_ivp, cumtrapz
@@ -361,7 +357,11 @@ class System:
         
     #%%        
     def plot_all(self):
-        self.plot_N(); self.plot_Nscatt(); self.plot_Nscattrate(); self.plot_Nsum()
+        self.plot_N(); self.plot_Nsum(); self.plot_dt()
+        self.plot_Nscatt(); self.plot_Nscattrate(); self.plot_F()
+        if ('trajectory' in self.args) and self.args['trajectory']:
+            self.plot_r(); self.plot_v()
+        
     def plot_N(self,figname=None,figsize=(12,5),smallspacing=0.0005):
         """plot populations of all levels over time."""
         if figname == None:
@@ -802,7 +802,7 @@ class System:
         # Gamma for each electronic state (uNum)
         self.Gamma      = self.levels.calc_Gamma()
         # for dimensionless time units
-        freq_unit       = self.Gamma[0]*1.5
+        freq_unit       = self.Gamma[0] # choose the linewidth of the first electronic state as unit
         self.freq_unit  = freq_unit
         #frequency differences between the ground and excited states (delta)
         self.om_eg      = self.levels.calc_freq()/freq_unit
