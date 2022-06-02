@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v2.5.6
+v3.0.0
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -12,51 +12,91 @@ via the rate equations or Optical Bloch equations (OBEs).
 
 Examples
 --------
-Example for setting up a level and laser system with the cooling and 3 repumping
+First simple example to setup and simulate a (3+1)-levelsystem::
+    
+    from System import *
+    system=System(description='Simple3+1') # create empty system instance first
+    
+    # construct level system:
+    # - create empty instances for a ground and excited electronic state
+    system.levels.add_electronicstate(label='X', gs_exs='gs')
+    system.levels.add_electronicstate(label='A', gs_exs='exs', Gamma=1.0)
+    # - add the levels with the respective quantum numbers to the electronic states
+    system.levels.X.add(F=1)
+    system.levels.A.add(F=0)
+    # - next all default level properties can be displayed and simply changed
+    system.levels.print_properties()
+    system.levels.X.gfac.iloc[0] = 1.0 # set ground state g factor to 1.0
+    
+    # set up lasers and magnetic field
+    system.lasers.add(lamb=860e-9, P=5e-3, pol='lin') #wavelength, power, and polarization
+    system.Bfield.turnon(strength=5e-4, direction=[0,1,1]) #magnetic field
+    
+    # simulate dynamics with OBEs and plot population
+    system.calc_OBEs(t_int=5e-6, dt=10e-9, magn_remixing=True, verbose=True)
+    system.plot_N()
+
+Example for setting up a level and laser system for BaF with the cooling and 3 repumping
 lasers and calculating the dynamics::
     
     from System import *
-    system = System(description='Test',load_constants='BaF')
+    system = System(description='Test1',load_constants='BaFconstants')
     
     # set up the lasers each with four sidebands
-    for lamb in np.array([859.830, 895.699, 897.961, 900.238])*1e-9:
-        system.lasers.add_sidebands(lamb=lamb,P=20e-3,pols='lin',AOM_shift=20e6,EOM_freq=39.33e6)
+    for lamb in np.array([859.830, 895.699, 897.961])*1e-9:
+        system.lasers.add_sidebands(lamb=lamb,P=20e-3,pol='lin',
+                                    offset_freq=19e6,mod_freq=39.33e6,
+                                    sidebands=[-2,-1,1,2],ratios=[0.8,1,1,0.8])
     
-    # include all vibrational levels up to the ground state vibrational level nu=3
-    system.levels.add_all_levels(nu_max=3)
-    system.levels.print_properties()
+    # set up the ground and excited states and include all vibrational levels
+    # up to the ground state vibrational level v=2
+    system.levels.add_electronicstate('X','gs') #add ground state X
+    system.levels.X.load_states(v=[0,1,2]) #loading the states defined in the json file
+    system.levels.X.add_lossstate()
+    
+    system.levels.add_electronicstate('A','exs') #add excited state A
+    system.levels.A.load_states(v=[0,1])
+    
+    system.levels.print_properties() #check the imported properties from the json file
+    
+    # Alternatively, all these steps for the levels can be done simpler with:
+    # system.levels.add_all_levels(v_max=2)
     
     # calculate dynamics with rate equations
-    system.calc_rateeqs(t_int=20e-6,magn_remixing=False,method='LSODA')
-    # plot populations and force
-    system.plot_N(smallspacing=1e-5)
+    system.calc_rateeqs(t_int=20e-6, magn_remixing=False)
+    
+    # plot populations, force, and scattered photon number
+    system.plot_N()
     system.plot_F()
+    system.plot_Nscatt()
     
 Example for a Molecule with a initial velocity and position of :math:`v_x=200m/s`
 and :math:`r_x=-2mm` which is transversely passing two cooling lasers with
 a repumper each in the distance :math:`4mm`::
     
     from System import *
-    system = System(description='Test2',load_constants='BaF')
+    system = System(description='Test2',load_constants='BaFconstants')
     
     # specify initial velocity and position of the molecule
-    system.v0 = np.array([200,0,0])
-    system.r0 = np.array([-2e-3,0,0])
+    system.v0 = np.array([200,0,0])   #in m/s
+    system.r0 = np.array([-2e-3,0,0]) #in m
     
     # set up the cooling laser and first repumper with their wave vectors k and positions r_k
-    FWHM,P = 1e-3,5e-3
-    system.lasers.add_sidebands(lamb=859.830e-9,P=P,FWHM=FWHM,k=[0,1,0])
-    system.lasers.add_sidebands(lamb=895.699e-9,P=P,FWHM=FWHM,k=[0,1,0])
-    system.lasers.add_sidebands(lamb=859.830e-9,P=P,FWHM=FWHM,k=[0,1,0],r_k=[4e-3,0,0])
-    system.lasers.add_sidebands(lamb=895.699e-9,P=P,FWHM=FWHM,k=[0,1,0],r_k=[4e-3,0,0])
-    
+    FWHM,P = 1e-3,5e-3 # 1mm and 5mW
+    for lamb in np.array([859.830, 895.699])*1e-9:
+        for rx in [0, 4e-3]:
+            system.lasers.add_sidebands(lamb=lamb,P=P,FWHM=FWHM,pol='lin',
+                                        r_k=[rx,0,0], k=[0,1,0],
+                                        offset_freq=19e6,mod_freq=39.33e6,
+                                        sidebands=[-2,-1,1,2],ratios=[0.8,1,1,0.8])
+        
     # include first two vibrational levels of electronic ground state and the
     # first vibrational level of the excited state
-    system.levels.add_all_levels(nu_max=1)
+    system.levels.add_all_levels(v_max=1)
     
     # calculate dynamics with velocity and position dependence of the laser beams and molecules
     system.calc_rateeqs(t_int=40e-6,magn_remixing=False,
-                        trajectory=True,position_dep=True,method='LSODA')
+                        trajectory=True,position_dep=True)
     
     # plot scattering rate, scattered photons, velocity and position
     system.plot_Nscattrate()
@@ -67,8 +107,9 @@ a repumper each in the distance :math:`4mm`::
 """
 import numpy as np
 from scipy.integrate import solve_ivp, cumtrapz
-from scipy.constants import c,h,hbar,pi,g,u,physical_constants
+from scipy.constants import c,h,hbar,pi,g,physical_constants
 from scipy.constants import k as k_B
+from scipy.constants import u as u_mass
 from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
 from Lasersystem import *
 from Levelsystem import *
@@ -81,20 +122,11 @@ import sys, os
 import multiprocessing
 from copy import deepcopy
 from tqdm import tqdm
+import warnings
 
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pl
 import matplotlib.ticker as mtick
-# plt.rcParams['errorbar.capsize']=3
-# plt.rc('text', usetex=True)
-# plt.rc('font', family='serif')
-# plt.rc('figure', figsize=(7,4.35))
-# plt.rcParams['figure.constrained_layout.use'] = True
-# plt.rc('savefig', pad_inches=0.05, bbox='tight')
-# plt.rc('axes', grid = True)
-# plt.rc('grid', linestyle ='dashed', linewidth=0.5, alpha=0.7)
-# plt.rc('lines', lw=1)
-# plt.rcParams['axes.formatter.use_locale'] = True
 
 np.set_printoptions(precision=4,suppress=True)
 #%%
@@ -114,7 +146,7 @@ class System:
         >>> system.calc_rateeqs()
         >>> system.plot_N()
     """
-    def __init__(self, description=None,load_constants='BaF'):
+    def __init__(self, description=None,load_constants='',verbose=True):
         """creates empty instances of the class :class:`~Lasersystem.Lasersystem`
         and the class :class:`~Levelsystem.Levelsystem` as ``self.lasers`` and
         ``self.levels``.
@@ -132,14 +164,14 @@ class System:
             module :py:class:`constants`. The default is 'BaF'.
         """
         self.lasers = Lasersystem()
-        self.levels = Levelsystem(load_constants=load_constants)
+        self.levels = Levelsystem(load_constants=load_constants,verbose=verbose)
         self.Bfield = Bfield()
         #self.particles = Particlesystem()
         if description == None:
             self.description = os.path.basename(sys.argv[0])[:-3]
         else:
             self.description = description
-        self.N0 = np.array([]) #: initial population of all levels
+        self.N0     = np.array([]) #: initial population of all levels
         self.v0     = np.array([0.,0.,0.]) #: initial velocity of the particle
         self.r0     = np.array([0.,0.,0.]) #: initial position of the particle
         """dictionary for parameters specifying the steady state conditions."""
@@ -150,14 +182,13 @@ class System:
         """dictionary for parameters specifying the multiprocessing of calculations."""
         self.multiprocessing = {'processes' : multiprocessing.cpu_count()-1,#None
                                 'maxtasksperchild' : None}
-        print("System is created with description: {}".format(self.description))
+        if verbose:
+            print("System is created with description: {}".format(self.description))
         
     def calc_rateeqs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
-                     perfect_resonance=False, nodetuned_list=[],
                      magn_remixing=False, magn_strength=8,
-                     position_dep=False, trajectory=False, velocity_dep=None,
-                     calculated_by='YanGroupnew',verbose=True,
-                     mp=False,return_fun=None,**kwargs):
+                     position_dep=False, trajectory=False,
+                     verbose=True, mp=False,return_fun=None,**kwargs):
         """Calculates the time evolution of the single level populations with
         rate equations.        
 
@@ -181,15 +212,6 @@ class System:
             specific time points, the `t_eval` argument can be used to specify 
             these points. If `_eval` is given, the `dt` argument is ignored.
             The default is [].
-        perfect_resonance : bool, optional
-            Property if a certain vibrational levels are in perfect resonance
-            (with no detuning) with a specific lasers
-            (defined in the `nodetuned_list`). The default is False.
-        nodetuned_list : list(tuples), optional
-            list of tuples (nu_gr,nu_ex,p) for a specific vibrational ground 
-            and excited state level with `nu_gr` and `nu_ex` and for the laser
-            with index `p`. For such transition the detuning of laser `p` is
-            set to zero. The default is [].
         magn_remixing : bool, optional
             if True, the adjacent ground hyperfine levels are perfectly mixed
             by a magnetic field. The default is False.
@@ -209,10 +231,6 @@ class System:
             if either a uniform unitensity or complex intensity distribution due to
             the Gaussian beam shapes is assumed through which the particle is
             propagated. The default is False.
-        calculated_by : str, optional
-            The branching ratios are different depending on the group or person 
-            who has calculated these values. Either 'Lucas', 'YanGroup' or
-            'YanGroupnew'. The default is 'YanGroupnew'.
         verbose : bool, optional
             whether to print additional information like execution time or the
             scattered photon number. The default is True.
@@ -245,74 +263,43 @@ class System:
         self.calcmethod = 'rateeqs'
         #___input arguments of this called function
         self.args = locals()
+        self.check_config(raise_Error=True)
         
         #___parameters belonging to the levels
-        self.levels.verbose = verbose
-        Gamma       = self.levels.exstates.Gamma
-        self.m      = self.levels.mass
-        #branching ratios
-        self.r_     = self.levels.calc_branratios(calculated_by)
-        #electric dipole matrix
-        self.dMat   = self.levels.calc_dMat()
-        #number of ground, excited states and lasers
-        lNum,uNum,pNum = self.levels.lNum, self.levels.uNum, self.lasers.pNum
+        self.levels.calc_all()
+        # Gamma for each electronic state (uNum)
+        self.Gamma  = self.levels.calc_Gamma()
         
-        #___start multiprocessing if desired
-        if mp:
-            self.results = multiproc(obj=deepcopy(self),kwargs=self.args)
-            return None
-        mp_time0 = time.gmtime()[5]
+        #___start multiprocessing if desired only after calculating the levels
+        #   properties so that they don't have to be re-calculated every time.
+        if mp: return self._start_mp()
         
         #___parameters belonging to the lasers  (and partially to the levels)
-        self.sp     = np.array([ la.I / ( pi*c*h*Gamma/(3*la.lamb**3) ) 
-                                for la in self.lasers ])
-        self.k      = np.array([ la.k*la.kabs for la in self.lasers ])
-        kabs        = np.linalg.norm(self.k,axis=-1)
-        self.f      = np.array([la.f_q for la in self.lasers])
-        self.w      = np.array([la.w for la in self.lasers ])
-        self._w_cylind = np.array([la._w_cylind for la in self.lasers ])
-        self.r_k    = np.array([ np.array(la.r_k,dtype=float) for la in self.lasers ])
-        self.r_cyl_trunc = np.array([la._r_cylind_trunc for la in self.lasers])
-        self.dir_cyl= np.array([la._dir_cylind for la in self.lasers],dtype=float) #unit vectors
-        self.beta   = np.array([la.beta for la in self.lasers ])
-        omega_k     = np.array([la.omega for la in self.lasers])
+        # wave vector k
+        self.k      = self.lasers.getarr('k')*self.lasers.getarr('kabs')[:,None] #no unit vectors
+        self.delta  = self.lasers.getarr('omega')[None,None,:] - self.levels.calc_freq()[:,:,None]
+        # saturation parameter of intensity (lNum,uNum,pNum)
+        self.sp     = self.lasers.getarr('I')[None,None,:]/(
+            pi*c*h*self.Gamma[None,:]/(3*( 2*pi*c/self.levels.calc_freq() )**3) )[:,:,None]
+        # self.sp     = np.array([ la.I / ( pi*c*h*self.Gamma[0]/(3*la.lamb**3) ) 
+                                # for la in self.lasers ])[None,None,:] #old implementation
         #polarization switching time
-        tswitch = 1/self.lasers.freq_pol_switch
-        #calculate excitation rate R1, R2 (two for switching) with detunings and selection rules
-        self.rx1    = np.zeros((lNum,uNum,pNum))
-        self.rx2    = np.zeros((lNum,uNum,pNum))
-        self.delta  = omega_k[None,None,:] - self.levels.calc_freq()[:,:,None]
+        tswitch     = 1/self.lasers.freq_pol_switch
+        self.rx1    = np.abs(np.dot(self.levels.calc_dMat(),self.lasers.getarr('f_q').T))**2
+        # for polarization switching:
         if np.any([la.pol_switching for la in self.lasers]):
-            for l,gr in enumerate(self.levels.grstates):
-                for u,ex in enumerate(self.levels.exstates):
-                    for p,la in enumerate(self.lasers):
-                        #if nodetuning and abs(self.delta[l,u,p]) < 20e6*2*pi:
-                        #    self.delta[l,u,p] = 0
-                        if perfect_resonance:
-                            # nodetuned_list contains tuples (nu_gr,nu_ex,p)
-                            # determining the ground/ excited states nu being in
-                            # perfect resonance with the lasers p
-                            for nu_gr, nu_ex, p_ in nodetuned_list:
-                                if gr.nu == nu_gr and ex.nu == nu_ex and p == p_:
-                                    self.delta[l,u,p] = 0
-                        self.rx1[l,u,p]     = self.r_[l,u] * selrule(gr,ex,la.pol1)
-                        self.rx2[l,u,p]     = self.r_[l,u] * selrule(gr,ex,la.pol2)
+            self.rx2 = np.abs(np.dot(self.levels.calc_dMat(),self.lasers.getarr('f_q2').T))**2
         else:
-            self.rx1 = np.abs(np.dot(self.dMat,self.f.T))**2
             self.rx2 = self.rx1.copy()
         
         #___magnetic remixing of the ground states. An empty array is left for no B-field 
-        if magn_remixing: self.M = self.Bfield.get_remix_matrix(self.levels.grstates,remix_strength=magn_strength)
-        else: self.M = np.array([[],[]])
+        if magn_remixing:
+            self.M = self.Bfield.get_remix_matrix(self.levels.grstates[0],remix_strength=magn_strength)
+        else:
+            self.M = np.array([[],[]])
         
         #___specify the initial (normalized) occupations of the levels
-        self.N0 = np.array(self.N0, dtype=float)
-        if len(self.N0) == 0:
-            N0_indices = [i for i,st in enumerate(self.levels.grstates) if st.nu==0]    
-            self.N0      = np.zeros(lNum+uNum)
-            for i in N0_indices:
-                self.N0[i] = 1.0
-        self.N0 /= self.N0.sum()
+        self.initialize_N0()
 
         #___determine the time points at which the ODE solver should evaluate the equations
         if len(t_eval) != 0: self.t_eval = np.array(t_eval)
@@ -323,121 +310,133 @@ class System:
                 self.t_eval = None
         
         #___depenending on the position dependence two different ODE evaluation functions are called
-        if trajectory or velocity_dep: #new variable trajectory replaces velocity_dep
+        if trajectory:
             self.y0      = np.array([*self.N0, *self.v0, *self.r0])
         else:
             # position dependent intensity due to Gaussian shape of Laserbeam:
             if position_dep:
-                for p in range(pNum):
-                    r_ = self.r0 - self.r_k[p]
-                    if self._w_cylind[p] != 0.0: # calculation for a beam which is widened by a cylindrical lens
-                        d2_w = np.dot(self.dir_cyl[p],r_)**2
-                        if d2_w > self.r_cyl_trunc[p]**2: #test if position is larger than the truncation radius along the dir_cyl direction
-                            self.sp[p] = 0.0  
-                        else:
-                            d2 = np.dot(np.cross(self.dir_cyl[p],self.k[p]/kabs[p]),r_)**2
-                            self.sp[p] *= np.exp(-2*(d2_w/self._w_cylind[p]**2 + d2/self.w[p]**2))
-                    else: 
-                        r_perp = np.cross( r_ , self.k[p]/kabs[p] )
-                        self.sp[p] *= np.exp(-2 * np.dot(r_perp,r_perp) / self.w[p]**2 )
-            self.R1 = Gamma/2*self.rx1*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
-            self.R2 = Gamma/2*self.rx2*self.sp[None,None,:] / (1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/Gamma**2)
+                self.sp *= self.lasers.I_tot(self.r0,sum_lasers=False,use_jit=False)[None,None,:]
+            self.R1 = self.Gamma[None,:,None]/2*self.rx1*self.sp / (
+                1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/self.Gamma[None,:,None]**2)
+            self.R2 = self.Gamma[None,:,None]/2*self.rx2*self.sp / (
+                1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/self.Gamma[None,:,None]**2)
             #sum R1 & R2 over pNum:
             self.R1sum, self.R2sum = np.sum(self.R1,axis=2), np.sum(self.R2,axis=2)
             
             self.y0      = self.N0
-            
+        
+        #number of ground, excited states and lasers
+        lNum,uNum,pNum = self.levels.lNum, self.levels.uNum, self.lasers.pNum
         
         # ---------------Ordinary Differential Equation solver----------------
         #solve initial value problem of the ordinary first order differential equation with scipy
-        if verbose: print('Solving ode with rate equations...', end='')
+        if verbose: print('Solving ode with rate equations...', end=' ')
         start_time = time.perf_counter()
-        if not (trajectory or velocity_dep):
+        if not trajectory:
             sol = solve_ivp(ode0_rateeqs_jit, (t_start,t_start+t_int), self.y0,
-                    t_eval=self.t_eval, **kwargs,
-                    args=(lNum,uNum,pNum,Gamma,self.r_,self.R1sum,self.R2sum,
-                          tswitch,self.M))
+                    t_eval=self.t_eval, **self.args['kwargs'],
+                    args=(lNum,uNum,pNum,self.Gamma,self.levels.calc_branratios(),
+                          self.R1sum,self.R2sum,tswitch,self.M))
         else:
             sol = solve_ivp(ode1_rateeqs_jit, (t_start,t_start+t_int), self.y0,
-                    t_eval=self.t_eval, max_step = 10e-6, **kwargs,
-                    args=(lNum,uNum,pNum,Gamma,self.r_,self.rx1,self.rx2,
-                          self.delta,self.sp,self.w,self._w_cylind,
-                          self.k,kabs,self.r_k,
-                          self.r_cyl_trunc,self.dir_cyl,
-                          self.m,tswitch,self.M,position_dep,self.beta))
+                    t_eval=self.t_eval, **self.args['kwargs'],
+                    args=(lNum,uNum,pNum,np.reshape(self.Gamma,(1,-1,1)),self.levels.calc_branratios(),
+                          self.rx1,self.rx2,self.delta,self.sp,
+                          self.lasers.getarr('w'),self.lasers.getarr('_w_cylind'),
+                          self.k,self.lasers.getarr('kabs'),self.lasers.getarr('r_k'),
+                          self.lasers.getarr('_r_cylind_trunc'),self.lasers.getarr('_dir_cylind'), #unit vectors
+                          self.levels.mass,tswitch,self.M,position_dep,self.lasers.getarr('beta')))
             #velocity v and position r
             self.v = sol.y[-6:-3]
             self.r = sol.y[-3:]
-        #___execution time for the ODE solving
+
+        #: execution time for the ODE solving
         self.exectime = time.perf_counter()-start_time
-        if verbose: print(" execution time: {:2.4f} seconds, (t_start, t_end) = ({}s, {}s)".format(self.exectime,mp_time0,time.gmtime()[5]))
-        
-        #___compute several physical variables using the solution of the ODE
         #: array of the times at which the solutions are calculated
         self.t = sol.t
         #: solution of the time dependent populations N
         self.N = sol.y[:lNum+uNum]
-        #: time dependent scattering rate
-        self.Nscattrate = Gamma*np.sum(self.N[lNum:,:], axis=0)
-        #: time dependent scattering number
-        self.Nscatt = cumtrapz(self.Nscattrate, self.t, initial = 0.0)
-        #: totally scattered photons
-        self.photons = self.Nscatt[-1]
-        if verbose:
-            print("Scattered Photons:",self.photons)
-            dev = abs(self.N[:,-1].sum() -1)
-            if dev > 1e-8:
-                print('WARNING: the sum of the occupations does not remain stable! Deviation: {:.2E}'.format(dev))
-        if return_fun: return return_fun(self)
+        self._verify_calculation()    
+        if return_fun: return return_fun(self)           
         
     #%%        
     def plot_all(self):
         self.plot_N(); self.plot_Nscatt(); self.plot_Nscattrate(); self.plot_Nsum()
-    def plot_N(self,figname=None,figsize=(12,5),smallspacing=0.001):
+    def plot_N(self,figname=None,figsize=(12,5),smallspacing=0.0005):
         """plot populations of all levels over time."""
         if figname == None:
             plt.figure('N ({}): {}, {}, {}'.format(
                 self.calcmethod,self.description,self.levels.description,
                 self.lasers.description), figsize=figsize)
         else: plt.figure(figname,figsize=figsize)
-
-        lNum, uNum = self.levels.lNum, self.levels.uNum
-        lNum_red   = len([1 for st in self.levels.grstates if st.nu == 0])
-        colors_l = pl.cm.jet(np.linspace(0.05,0.95,lNum_red))
-        colors_u = pl.cm.jet(np.linspace(0,1,uNum))
-        for i,grstate in enumerate(self.levels.grstates):
-            if grstate.name == 'Loss state':
-                label = 'Loss state'
-                ls,color = '-',np.array([0,0,0,1])
-            else:
-                label='$g: J={:1.1f}, F={:1.1f}, mF={:+1.1f}$'.format(grstate.J,grstate.F,grstate.mF)
-                if grstate.nu == 0: ls,color = '-',colors_l[i]
-                else: ls,color = '--',[*colors_l,*colors_l,*colors_l,*colors_l,*colors_l][i]
-            plt.plot(self.t*1e6,(self.N[i,:]+smallspacing*i)*1e2,
-                     label=label,c=color,ls=ls)
-        for i,exstate in enumerate(self.levels.exstates):
-            label =   '$e: J={:1.1f}, F={:1.1f}, mF={:+1.1f}$'.format(exstate.J,exstate.F,exstate.mF)
-            plt.plot(self.t*1e6,(self.N[lNum+i,:]+smallspacing*i)*1e2,
-                     label=label,c=colors_u[i],ls='-.')
         
+        N_sum = 0
+        for i,ElSt in enumerate(self.levels.electronic_states):
+            if 'v' in ElSt.states[0].QuNrs:
+                alphas  = np.linspace(1,0,ElSt.v_max+2)[:-1] #####
+                j_v0    = np.array([jj for jj,st in enumerate(ElSt) if st.v == 0])
+                N_red   = len(j_v0)
+            else:
+                alpha   = 1.0
+            N = ElSt.N
+            for j, state in enumerate(ElSt.states):
+                ls = ['solid','dashed','dashdot','dotted','dashdotdotted',
+                      'loosely dotted','loosely dashed','loosely dashdotted'][i]
+                if N > 10:
+                    if 'v' in state.QuNrs:
+                        if j in j_v0:
+                            color   = pl.cm.jet(np.argwhere(j_v0==j)[0][0]/(N_red-1))
+                        else:
+                            color   = 'grey'
+                    else:
+                        color = pl.cm.jet(j/(N-1))
+                else:
+                    color = 'C' + str(j)
+                    
+                if 'v' in state.QuNrs:
+                    if state.is_lossstate:
+                        color = 'k'
+                        alpha = 1.0
+                    else:
+                        alpha = alphas[state.v]
+                        
+                if 'gs' in state.QuNrs:
+                    label = str(state).split('gs=')[-1]
+                else:
+                    label = str(state).split('exs=')[-1]
+                    
+                plt.plot(self.t*1e6,(self.N[j+N_sum,:]+smallspacing*i)*1e2,
+                         label=label,ls=ls,color=color,alpha=alpha)
+            N_sum += N
+            
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Populations $N$ in %')
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5),fontsize='x-small',labelspacing=-0.0)
-        # plt.tight_layout()
+        plt.legend(title='States:',loc='center left',
+                   bbox_to_anchor=(1, 0.5),fontsize='x-small',labelspacing=-0.0)
         
-    def plot_Nscatt(self):
+    def plot_Nscatt(self,sum_over_ElSts=False):
         """plot the scattered photon number over time (integral of `Nscattrate`)."""
         plt.figure('Nscatt: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Totally scattered photons')
-        plt.plot(self.t*1e6, self.Nscatt, '-')
+        Nscatt = self.get_Nscatt(sum_over_ElSts=sum_over_ElSts)
+        for i,ElSt in enumerate(self.levels.exstates):
+            plt.plot(self.t*1e6, Nscatt[i,:], '-',label=ElSt.label)
+        if Nscatt.shape[0]>1:
+            plt.plot(self.t*1e6, np.sum(Nscatt,axis=0), '-',label='Sum')
+        plt.legend()
     
-    def plot_Nscattrate(self):
+    def plot_Nscattrate(self,sum_over_ElSts=False):
         """plot the photon scattering rate over time (derivative of `Nscatt`)."""
         plt.figure('Nscattrate: {}, {}, {}'.format(self.description,self.levels.description,self.lasers.description))
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Photon scattering rate $\gamma\prime$ in MHz')
-        plt.plot(self.t*1e6, self.Nscattrate*1e-6, '-')
+        Nscattrate = self.get_Nscattrate(sum_over_ElSts=sum_over_ElSts)
+        for i,ElSt in enumerate(self.levels.exstates):
+            plt.plot(self.t*1e6, Nscattrate[i,:]*1e-6, '-',label=ElSt.label)
+        if Nscattrate.shape[0]>1:
+            plt.plot(self.t*1e6, np.sum(Nscattrate,axis=0)*1e-6, '-',label='Sum')
+        plt.legend()
         
     def plot_Nsum(self):
         """plot the population sum of all levels over time to ensure a small
@@ -478,7 +477,10 @@ class System:
         for i,axis in enumerate(['x','y','z']):
             plt.plot(self.t*1e6,self.r[i,:],label='$r_{}$'.format(axis),ls=ls_arr[i])
         plt.legend()
-        
+    
+    def plot_init(self,plot_quant=''):
+        pass
+    
     def plot_FFT(self,only_sum=True,start_time=0.0):
         """plot the fast Fourier transform (FFT) of the time-dependent populations.
         
@@ -511,26 +513,57 @@ class System:
         plt.xlabel('Frequency $f$ in MHz')
         plt.ylabel('Power spectrum of the FFT')
     
-    def calc_Rabi_freqs(self,average_levels=True):
+    def calc_Rabi_freqs(self,position_dep=False): # pos_dep?!? using self.args?
         """calculates detuning-weighted, averaged angular Rabi frequencies
         for every laser (with 2*pi included)."""
-        Gamma = self.levels.exstates.Gamma
-        Rabi_freqs = []
-        for k,la in enumerate(self.lasers):
-            Rabi_freqs_arr = np.abs(self.G[k]/np.sqrt(2)*np.dot(self.dMat, self.f[k,:])* Gamma)
-            if average_levels:
-                weights= np.exp(-4*(self.omega_eg-self.omega_k[k])**2/(Gamma**2))
-                # protection against the case when all weights are zero because the
-                # detuning is too large so that exp() gets 0.0
-                if np.all(weights==0.0): weights = weights*0 + 1
-                weights = weights*np.sign(Rabi_freqs_arr) * np.abs(np.dot(self.dMat, self.f[k,:]))**2
-                # print(Rabi_freqs_arr,'\n',weights)
-                Rabi_freqs.append( (Rabi_freqs_arr*weights).sum()/weights.sum() )
-            else: 
-                Rabi_freqs.append( Rabi_freqs_arr )
-        self.Rabi_freqs = np.array(Rabi_freqs)
-        if not average_levels: self.Rabi_freqs = np.transpose(self.Rabi_freqs,axes=(1,2,0))
+        
+        # saturation parameter of intensity (lNum,uNum,pNum)
+        self.sp = self.lasers.getarr('I')[None,None,:]/(
+            pi*c*h*self.Gamma[None,:]/(3*( 2*pi*c/self.levels.calc_freq() )**3) )[:,:,None]
+        self.Rabi_freqs = self.Gamma[None,:,None]*np.sqrt(self.sp/2)*np.dot(
+                            self.levels.calc_dMat(), self.lasers.getarr('f_q').T )
+        
+        # position dependent intensity due to Gaussian shape of Laserbeam:
+        if position_dep:
+            self.Rabi_freqs *= np.sqrt(self.lasers.I_tot(self.r0,sum_lasers=False,use_jit=False))[None,:]
+        
+        # for simple levelsystems, the Rabi frequency can be set via the laser instances
+        Rabi_set = self.lasers.getarr('freq_Rabi') #this feature must be tested!?
+        if not np.all(np.isnan(Rabi_set)):
+            Rabi_freqs_max = np.abs(self.Rabi_freqs).max(axis=(0,1)) #shape (pNum)
+            for p,la in enumerate(self.lasers):
+                if not np.isnan(Rabi_set[p]):
+                    ratio = Rabi_set[p]/Rabi_freqs_max[p]
+                    self.Rabi_freqs[:,:,p]  *= ratio
+                    la.I                    *= ratio**2   
+        
         return self.Rabi_freqs
+                    
+        # for k,la in enumerate(self.lasers):
+        #     Rabi_set = la.freq_Rabi
+        #     if Rabi_set != None:
+        #         ratio = Rabi_set/self.calc_Rabi_freqs(average_levels=True)[k]
+        #         self.Rabi[:,k]         *= ratio
+        #         self.lasers[k].I    *= ratio**2   
+        
+        #must be checked below!?! This is important for dt = 'auto' and Rabi_freq parameter in a Laser
+        # Rabi_freqs = []
+        # dMat = self.levels.calc_dMat()
+        # for k,la in enumerate(self.lasers):
+        #     Rabi_freqs_arr = np.abs(self.G[k]/np.sqrt(2)*np.dot(dMat, self.f[k,:])* Gamma)
+        #     if average_levels:
+        #         weights= np.exp(-4*(self.omega_eg-self.omega_k[k])**2/(Gamma**2))
+        #         # protection against the case when all weights are zero because the
+        #         # detuning is too large so that exp() gets 0.0
+        #         if np.all(weights==0.0): weights = weights*0 + 1
+        #         weights = weights*np.sign(Rabi_freqs_arr) * np.abs(np.dot(dMat, self.f[k,:]))**2
+        #         # print(Rabi_freqs_arr,'\n',weights)
+        #         Rabi_freqs.append( (Rabi_freqs_arr*weights).sum()/weights.sum() )
+        #     else: 
+        #         Rabi_freqs.append( Rabi_freqs_arr )
+        # Rabi_freqs = np.array(Rabi_freqs)
+        # if not average_levels: self.Rabi_freqs = np.transpose(Rabi_freqs,axes=(1,2,0))
+        # return Rabi_freqs
     
     def plot_F(self,figname=None):
         """plot the Force over time for all three axes 'x','y', and'z'."""
@@ -539,12 +572,13 @@ class System:
                 self.calcmethod,self.description,self.levels.description,
                 self.lasers.description))
         else: plt.figure(figname,figsize=figsize)
-        F = self.F/ (hbar*2*pi/860e-9*self.levels.exstates.Gamma/2)
+        lamb = c/(self.levels.calc_freq()[0,0]/2/pi)
+        F = self.F/ (hbar*2*pi/860e-9*self.Gamma[0]/2)
         ls_arr = ['-','--','-.']
         for i,axis in enumerate(['x','y','z']):
             plt.plot(self.t*1e6,F[i,:],label='$F_{}$'.format(axis),ls=ls_arr[i])
         plt.xlabel('time $t$ in $\mu$s')
-        plt.ylabel('Force $F$ in $\hbar k \Gamma/2$')
+        plt.ylabel('Force $F$ in $\hbar k \Gamma_{}/2$'.format(self.levels.exstates_labels[0]))
         plt.legend()
     
     @property
@@ -557,7 +591,7 @@ class System:
             Force array for all <ntimes> time points and three axes 'x','y','z'.
         """
         if self.calcmethod == 'rateeqs':
-            if not (self.args['trajectory'] or self.args['velocity_dep']):
+            if not self.args['trajectory']:
                 lNum,uNum = self.levels.lNum, self.levels.uNum
                 N_lu = self.N[:lNum,:][:,None,:] - self.N[lNum:lNum+uNum,:][None,:,:]
                 F = hbar * np.sum( np.dot(self.R1,self.k)[:,:,:,None] * N_lu[:,:,None,:], axis=(0,1)) #+ g 
@@ -565,18 +599,18 @@ class System:
                 F = np.zeros((3,self.t.size))
                 F[:,1:] = np.diff(self.v)/np.diff(self.t)*self.levels.mass
         if self.calcmethod == 'OBEs':
-            Gamma   = self.levels.exstates.Gamma
-            T       = Gamma*self.t
+            freq_unit   = self.freq_unit
+            T       = freq_unit*self.t
             # F       = np.zeros((3,self.t.size)) #size of t?
             # for k in range(self.lasers.pNum):
             #     for q in [-1,0,1]:
             #         for c in range(self.levels.lNum):
             #             for c_ in range(self.levels.uNum): #sign has to be + !!!
-            #                 F += 2*np.real(hbar*Gamma*self.G[k]/2/(2**0.5) \
+            #                 F += 2*np.real(hbar*freq_unit*self.G[k]/2/(2**0.5) \
             #                     *np.exp(1j*self.phi[k]+1j*T*(self.om_eg[c,c_]-self.om_k[k])) \
             #                     *self.dMat[c,c_,q+1]*self.ymat[self.levels.lNum+c_,c][None,:] \
             #                     *1j*self.k[k,:][:,None] *self.f[k,q+1] )
-            # F = 2*np.real(hbar*Gamma*self.G[:,None,None,None,None,None]/2/(2**0.5) \
+            # F = 2*np.real(hbar*freq_unit*self.G[:,None,None,None,None,None]/2/(2**0.5) \
                 # *np.exp(1j*self.phi[:,None,None,None,None,None]+1j*T*(self.om_eg[None,None,:,:,None,None]-self.om_k[:,None,None,None,None,None])) *np.transpose(self.h_gek,axes=(2,0,1))[:,None,:,:,None,None]\
                 # *np.transpose(self.dMat,axes=(2,0,1))[None,:,:,:,None,None]*np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,:],axes=(1,0,2))[None,None,:,:,None,:] \
                 # *1j*self.k[:,None,None,None,:,None] *self.f[:,:,None,None,None,None] ).sum(axis=(0,1,2,3))
@@ -585,18 +619,28 @@ class System:
             for i,t1 in enumerate(range(0,size,size//50)):
                 t2  = t1 + size//50
                 if t2 > size: t2 = size
-                F[:,t1:t2]  += 2*hbar*Gamma*np.real(np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,t1:t2],axes=(1,0,2))[:,:,None,None,:] \
+                F[:,t1:t2]  += 2*hbar*freq_unit*np.real(np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,t1:t2],axes=(1,0,2))[:,:,None,None,:] \
                                      *self.Gfd[:,:,:,None,None]*np.exp(1j*T[None,None,None,None,t1:t2]*self.om_gek[:,:,:,None,None]) \
                                      *self.k[None,None,:,:,None] ).sum(axis=(0,1,2))
         return F
     
-    def Isat(self,kind='2-level'):
-        """calculates saturation intensity in W/m^2 for each laser"""
-        if kind == '2-level':
-            return np.array([pi*c*h*self.levels.exstates.Gamma/(3*la.lamb**3)
-                             for la in self.lasers ])
+    @property
+    def Isat(self):
+        """Calculates the two-level saturation intensity in W/m^2 for each laser component."""
+        return np.array([pi*c*h*self.freq_unit/(3*la.lamb**3)
+                         for la in self.lasers ])
+    
+    @property
+    def Isat_eff(self):
+        """Calculates the effective multi-level saturation intensity in W/m^2.
+        This quantity can be derived by rearranging the rate equations into a general
+        approximate expression for the scattering rate. Here, the assumptions
+        that all detunings are equal, all intensities are equal, and all excited
+        states are equally populated are used."""
+        return 2*self.levels.lNum**2/self.levels.N*self.Isat.mean()
+    
     #%%
-    def calc_trajectory(self,t_int=20e-6,t_start=0.,dt=None,t_eval=[],
+    def calc_trajectory(self,t_int=20e-6,t_start=0.,dt=None,t_eval=None,
                         position_dep=False,verbose=True,force_axis=None,
                         interpol_kind='linear',**kwargs):
         """for the calculation of Monte Carlo simulations of classical particles
@@ -634,7 +678,7 @@ class System:
                 a_intp  = RegularGridInterpolator((v,I), self.F_profile['F']/self.levels.mass,
                                                   method=interpol_kind,
                                                   bounds_error=False,fill_value=None)
-                GNe_intp = RegularGridInterpolator((v,I), self.F_profile['Ne']*self.levels.exstates.Gamma,
+                GNe_intp = RegularGridInterpolator((v,I), self.F_profile['Ne']*self.levels.exstates.Gamma,#must be sum over u: N_u*Gamma_u
                                                    method=interpol_kind,
                                                    bounds_error=False,fill_value=None)
                 self.a_intp=a_intp
@@ -648,9 +692,11 @@ class System:
                     force_axis = np.atleast_2d(np.array(force_axis)/np.linalg.norm(force_axis)) +v0_arr*0
                 else:
                     raise Exception('input argument <force axis> has to be given!')
-                for i,v0 in enumerate(v0_arr):
+                i   = -1
+                for v0 in tqdm(v0_arr,smoothing=0.0):
+                    i += 1
                     y0 = np.array([*v0, *r0_arr[i],0.0])
-                    self.sols.append(solve_ivp(ode_MC1D, (0.,t_int[i]), y0, t_eval=None,
+                    self.sols.append(solve_ivp(ode_MC1D, (0.,t_int[i]), y0, t_eval=t_eval,
                                                method='LSODA', args= (force_axis[i],True) ))
             else:
                 from scipy.interpolate import interp1d
@@ -659,7 +705,7 @@ class System:
                 force_axis = np.array(force_axis)/np.linalg.norm(force_axis)
                 for i,v0 in enumerate(v0_arr):
                     y0 = np.array([*v0, *r0_arr[i],0.])
-                    self.sols.append(solve_ivp(ode_MC1D, (0.,t_int[i]), y0, t_eval=None,
+                    self.sols.append(solve_ivp(ode_MC1D, (0.,t_int[i]), y0, t_eval=t_eval,
                                                method='LSODA', args= (force_axis,False) ))
         elif position_dep: #Einius: here only position dependent magnetic force
             pass
@@ -719,7 +765,7 @@ class System:
             The default is False.
         rounded : float, optional
             if specified, all frequencies and velocities are rounded to the frequency
-            `rounded` in units of Gamma.
+            `rounded` in units of Gamma[0].
             The default is False.
         verbose : bool, optional
             whether to print additional information like execution time or the
@@ -746,134 +792,70 @@ class System:
         * ``args``: input arguments of the call of this function
         * ``t`` : times at which the solution was calculated
         """
-        
         self.calcmethod = 'OBEs'
         #___input arguments of this called function
-        self.args = locals()
-        #variable velocity_dep not used anymore
-        if 'velocity_dep' in kwargs: del kwargs['velocity_dep']
+        self.args       = locals()
+        self.check_config(raise_Error=True)
         
         #___parameters belonging to the levels
-        self.levels.verbose = verbose
-        Gamma       = self.levels.exstates.Gamma
-        self.m      = self.levels.mass 
-        #electric dipole matrix
-        self.dMat   = self.levels.calc_dMat()
-        #frequency differences between the ground and excited states
-        self.omega_eg = self.levels.calc_freq()
-        self.om_eg       = self.omega_eg/Gamma
+        self.levels.calc_all()
+        # Gamma for each electronic state (uNum)
+        self.Gamma      = self.levels.calc_Gamma()
+        # for dimensionless time units
+        freq_unit       = self.Gamma[0]*1.5
+        self.freq_unit  = freq_unit
+        #frequency differences between the ground and excited states (delta)
+        self.om_eg      = self.levels.calc_freq()/freq_unit
         if rounded:
-            self.om_eg   = np.around(self.om_eg/rounded)*rounded
-        #magnetic dipole matrix of the magnetic dipole operator mu
-        self.muMat = self.levels.calc_muMat()
-        #indices for the magnetic zeeman sublevels. Needed for magnetic remixing
-        self.M_indices = self.levels.calc_M_indices()
-        #number of ground, excited states and lasers
-        lNum,uNum,pNum = self.levels.lNum, self.levels.uNum, self.lasers.pNum
+            self.om_eg  = np.around(self.om_eg/rounded)*rounded
         
         #___start multiprocessing if desired
-        if mp:
-            self.results = multiproc(obj=deepcopy(self),kwargs=self.args)
-            if multiprocessing.cpu_count() > 16:
-                save_object(self,maxsize=1e15)
-                try:
-                    sys.path.append('../')
-                    import subprocess, sending_email
-                    hostname = subprocess.check_output('hostname').decode("utf-8")
-                    sending_email.send_message('Calculation complete!','File {} at Server {}'.format(self.description,hostname))
-                except:
-                    pass
-            return None
-        mp_time0 = time.gmtime()[5]
+        if mp: return self._start_mp()
         
         #___parameters belonging to the lasers (and partially to the levels)
-        self.G      = np.array([ la.I / ( pi*c*h*Gamma/(3*la.lamb**3) ) 
-                                for la in self.lasers ])**0.5
-        self.k      = np.array([ la.k*la.kabs for la in self.lasers ])
-        # position dependent intensity due to Gaussian shape of Laserbeam:
-        if position_dep:
-            kabs        = np.linalg.norm(self.k,axis=-1)
-            self.w      = np.array([la.w for la in self.lasers ])
-            self._w_cylind = np.array([la._w_cylind for la in self.lasers ])
-            self.r_k    = np.array([ np.array(la.r_k,dtype=float) for la in self.lasers ])
-            self.r_cyl_trunc = np.array([la._r_cylind_trunc for la in self.lasers])
-            self.dir_cyl= np.array([la._dir_cylind for la in self.lasers],dtype=float) #unit vectors
-            for p in range(pNum):
-                r_ = self.r0 - self.r_k[p]
-                if self._w_cylind[p] != 0.0: # calculation for a beam which is widened by a cylindrical lens
-                    d2_w = np.dot(self.dir_cyl[p],r_)**2
-                    if d2_w > self.r_cyl_trunc[p]**2: #test if position is larger than the truncation radius along the dir_cyl direction
-                        self.G[p] = 0.0  
-                    else:
-                        d2 = np.dot(np.cross(self.dir_cyl[p],self.k[p]/kabs[p]),r_)**2
-                        self.G[p] *= np.exp(-2*(d2_w/self._w_cylind[p]**2 + d2/self.w[p]**2))**0.5
-                else: 
-                    r_perp = np.cross( r_ , self.k[p]/kabs[p] )
-                    self.G[p] *= np.exp(-2 * np.dot(r_perp,r_perp) / self.w[p]**2 )**0.5
-        self.f      = np.array([la.f_q for la in self.lasers])
-        self.phi    = np.array([la.phi for la in self.lasers])
-        self.omega_k= np.array([la.omega for la in self.lasers])
-        if rounded: #maybe save these variables directly as self.omega_k???
-            self.om_k    = np.around(self.omega_k/Gamma/rounded)*rounded - np.around(np.dot(self.k,self.v0)/Gamma/rounded)*rounded
-        else: self.om_k  = (self.omega_k-np.dot(self.k,self.v0))/Gamma
-        #polarization switching time
-        tswitch = 1/self.lasers.freq_pol_switch        
-        #change the intensity factor G_k when Rabi frequency is provided 
-        for k,la in enumerate(self.lasers):
-            Rabi = la.freq_Rabi
-            if Rabi != None:
-                ratio = Rabi/self.calc_Rabi_freqs(average_levels=True)[k]
-                self.G[k]           *= ratio
-                self.lasers[k].I    *= ratio**2    
-        #coefficients h to neglect highly-oscillating terms of the OBEs (with frequency threshold freq_clip_TH)
-        if freq_clip_TH == 'auto':
-            FWHM = np.sqrt( 1 + 2*(self.calc_Rabi_freqs(False)/Gamma)**2 ) #in units of Gamma
-            h_gek  = np.where(np.abs(self.om_eg[:,:,None]-self.om_k[None,None,:]) < 8*FWHM/2, 1.0, 0.0)
-            h_gege = np.where(np.abs(self.om_eg[:,:,None,None]-self.om_eg[None,None,:,:]) < 8*np.max(FWHM)/2, 1.0, 0.0)
-            self.FWHM = FWHM #remove later?
+        # Rabi frequency in dimensionless units (lNum,uNum,pNum)
+        self.calc_Rabi_freqs(position_dep=position_dep)
+        # wave vectors k (no unit vectors)
+        self.k  = self.lasers.getarr('k')*self.lasers.getarr('kabs')[:,None]
+        # laser frequencies omega_k
+        if rounded:
+            self.om_k   = np.around(self.lasers.getarr('omega')/freq_unit/rounded)*rounded \
+                        - np.around(np.dot(self.k,self.v0)/freq_unit/rounded)*rounded
         else:
-            h_gek  = np.where(np.abs(self.om_eg[:,:,None]-self.om_k[None,None,:]) < freq_clip_TH, 1.0, 0.0)
-            h_gege = np.where(np.abs(self.om_eg[:,:,None,None]-self.om_eg[None,None,:,:]) < freq_clip_TH, 1.0, 0.0)
-        self.h_gek,self.h_gege = h_gek,h_gege #remove later?
+            self.om_k   = (self.lasers.getarr('omega') - np.dot(self.k,self.v0))/freq_unit
+        
         #___magnetic remixing of the ground states and excited states
         if magn_remixing:
-            betaB  = self.Bfield.Bvec_sphbasis/(hbar*self.levels.exstates.Gamma/self.Bfield.mu_B)
+            betaB  = self.Bfield.Bvec_sphbasis/(hbar*freq_unit/self.Bfield.mu_B)
         else:
             betaB  = np.array([0.,0.,0.])
-        #___coefficients for new defined differential equations
-        self.Gfd = h_gek * 1j*self.G[None,None,:]/2/(2**0.5)*np.exp(1j*self.phi[None,None,:]) * np.dot(self.dMat,self.f.T)
-        self.om_gek = self.om_eg[:,:,None]-self.om_k[None,None,:]
-        self.betamu = tuple(1j* np.dot(self.muMat[i], np.flip(betaB*np.array([-1,1,-1]))) for i in range(2))
-        self.dd = h_gege * (self.dMat[:,:,None,None,:]* self.dMat[None,None,:,:,:]).sum(axis=-1)
-        self.ck_indices = (tuple(np.where(self.Gfd[i,:,:] != 0.0) for i in range(lNum)),
-                           tuple(np.where(self.Gfd[:,i,:] != 0.0) for i in range(uNum)))
-        self.ck_indices = (tuple( np.array([i[0],i[1]]) for i in self.ck_indices[0] ),
-                       tuple( np.array([i[0],i[1]]) for i in self.ck_indices[1] ))
+            
+        #coefficients h to neglect highly-oscillating terms of the OBEs (with frequency threshold freq_clip_TH)
+        self.om_gek = self.om_eg[:,:,None] - self.om_k[None,None,:]
+        if freq_clip_TH == 'auto':
+            FWHM = np.sqrt(self.Gamma[None,:,None]**2 + 2*self.Rabi_freqs**2)/freq_unit #in dimensionless units
+            self.h_gek  = np.where(np.abs(self.om_gek) < 8*FWHM/2, 1.0, 0.0)
+            self.h_gege = np.where(np.abs(self.om_eg[:,:,None,None]-self.om_eg[None,None,:,:])\
+                                   < 8*np.max(FWHM)/2, 1.0, 0.0)
+        else:
+            self.h_gek  = np.where(np.abs(self.om_gek) < freq_clip_TH, 1.0, 0.0)
+            self.h_gege = np.where(np.abs(self.om_eg[:,:,None,None]-self.om_eg[None,None,:,:])\
+                                   < freq_clip_TH, 1.0, 0.0)
         
-        # if perfect_resonance: #does not work properly --> have to be calculated before h_gek coeffs.
-        #     # nodetuned_list contains tuples (nu_gr,nu_ex,p)
-        #     # determining the ground/ excited states nu being in
-        #     # perfect resonance with the lasers p
-        #     for l in range(lNum):
-        #         for u in range(uNum):
-        #             gr,ex = self.levels.grstates[l],self.levels.exstates[u]
-        #             for p in range(pNum):
-        #                 for nu_gr, nu_ex, p_ in nodetuned_list:
-        #                     if gr.nu == nu_gr and ex.nu == nu_ex and p == p_:
-        #                         self.omega_eg[l,u] = self.omega_k[p]
+        #___coefficients for new defined differential equations
+        self.Gfd = 1j/2*np.exp(1j*self.lasers.getarr('phi')[None,None,:])*self.h_gek*self.Rabi_freqs/freq_unit
+        self.betamu = tuple(1j* np.dot(self.levels.calc_muMat()[i], np.flip(betaB*np.array([-1,1,-1])))
+                            for i in range(2) )
+        self.dd = self.h_gege*(self.levels.calc_dMat()[:,:,None,None,:]\
+                               *self.levels.calc_dMat()[None,None,:,:,:]).sum(axis=-1)
+        self.ck_indices = (tuple(np.where(self.Gfd[i,:,:] != 0.0) for i in range(self.levels.lNum)),
+                           tuple(np.where(self.Gfd[:,i,:] != 0.0) for i in range(self.levels.uNum)))
+        self.ck_indices = (tuple( np.array([i[0],i[1]]) for i in self.ck_indices[0] ),
+                           tuple( np.array([i[0],i[1]]) for i in self.ck_indices[1] ))
         
         #___specify the initial (normalized) occupations of the levels
-        N = lNum + uNum
-        N0mat = np.zeros((N,N),dtype=np.complex64)
-        self.N0 = np.array(self.N0, dtype=float)
-        if len(self.N0) == 0:
-            N0_indices = [i for i,st in enumerate(self.levels.grstates) if st.nu==0]    
-            self.N0      = np.zeros(N)
-            for i in N0_indices:
-                self.N0[i] = 1.0
-        self.N0 /= self.N0.sum() #initial populations are always normalized
-        #transform these initial values into the density matrix elements N0mat
-        N0mat[(np.arange(N),np.arange(N))] = self.N0
+        #   and transform these values into the density matrix elements N0mat
+        N0mat = self.initialize_N0(return_densitymatrix=True)
         
         if verbose: print('Solving ode with OBEs...', end='')
         start_time = time.perf_counter()
@@ -895,11 +877,11 @@ class System:
             if isinstance(self.steadystate['period'],float):
                 t_int = self.steadystate['period']
             elif self.args['rounded']:
-                t_int = 2*pi/(self.levels.exstates.Gamma*self.args['rounded'])
+                t_int = 2*pi/(freq_unit*self.args['rounded'])
             elif self.steadystate['period'] == 'standingwave':
                 if self.v0[2] != 0: #if v0==0, then t_int is not changed and thus used for int time.
-                    lambda_mean = (c/(self.om_eg*Gamma/2/pi)).mean()
-                    if np.any(np.abs(c/(self.om_eg*Gamma/2/pi) /lambda_mean -1)>0.1e-2 ):#percental deviation from mean
+                    lambda_mean = (c/(self.om_eg*freq_unit/2/pi)).mean()
+                    if np.any(np.abs(c/(self.om_eg*freq_unit/2/pi) /lambda_mean -1)>0.1e-2 ):#percental deviation from mean
                         print('WARNING: averaging over standing wave periods might not be accurate since the wavelengths differ.')
                     period = lambda_mean/abs(self.v0[2])#/2
                     t_int = period*(t_int//period+1) # int(t_int - t_int % period)
@@ -923,38 +905,113 @@ class System:
                     t_start = self.t[-1]       
             if verbose: print(' calculation steps: ',step+1)
             
-        #___execution time for the ODE solving
-        self.exectime = time.perf_counter()-start_time
-        if verbose: print(" execution time: {:2.4f} seconds, (t_start, t_end) = ({}s, {}s)".format(self.exectime,mp_time0,time.gmtime()[5]))
-        
-        #___compute several physical variables using the solution of the ODE #as properties?
-        #: time dependent scattering rate
-        self.Nscattrate = Gamma*np.sum(self.N[lNum:,:], axis=0)
-        #: time dependent scattering number
-        self.Nscatt = cumtrapz(self.Nscattrate, self.t, initial = 0.0)
-        #: totally scattered photons
-        self.photons = self.Nscatt[-1]
-        if verbose:
-            print("Scattered Photons:",self.photons)
-            dev = abs(self.N[:,-1].sum() -1)
-            if dev > 1e-6:
-                print('WARNING: the sum of the occupations does not remain stable! Deviation: {:.2E}'.format(dev))
-            if np.any(self.N < -1e-3): print('WARNING: population oscillations got negative')
+        #: execution time for the ODE solving
+        self.exectime = time.perf_counter() - start_time
+        self._verify_calculation()
         if return_fun: return return_fun(self)#{'N':self.N[-1,-1]}#[self.__dict__[key] for key in return_val]
         # if return_fun == True: use default function which returns force and pops?
-    def _evaluate(self,t_start,t_int,dt,N0mat):
-        Gamma = self.levels.exstates.Gamma
+    
+    def _verify_calculation(self):
+        dev_TH  = {'rateeqs':1e-8,'OBEs':1e-6}[self.calcmethod]
+        dev     = abs(self.N[:,-1].sum() -1)
+        #: Variable success indicates of the calcualtion could be verified.
+        self.success = True
+        self.message = ""
+        if dev > dev_TH:
+            message = 'Sum of populations not stable! Deviation: {:.2e}.\n'.format(dev)
+            print('WARNING:', message)
+            self.message += message
+            self.success = False
+        if np.any(self.N < -1e-3):
+            message = 'Populations got negative!'
+            print('WARNING:', message)
+            self.message += message
+            self.success = False
+        
+        # printing some information...    
+        if self.args['verbose']:
+            print("Execution time: {:2.4f} seconds".format(self.exectime))
+            for i,Ex_label in enumerate(self.levels.exstates_labels):
+                print("Scattered Photons ({}): {:.6f}".format(Ex_label,self.photons[i]))
+    
+    def _start_mp(self):
+        self.results = multiproc(obj=deepcopy(self),kwargs=self.args)
+        if multiprocessing.cpu_count() > 16:
+            save_object(self)
+            try:
+                sys.path.append('../')
+                import subprocess, sending_email
+                hostname = subprocess.check_output('hostname').decode("utf-8")
+                sending_email.send_message('Calculation complete!','File {} at Server {}'.format(self.description,hostname))
+            except:
+                pass
+        return None
+    
+    def initialize_N0(self,return_densitymatrix=False):
+        #___specify the initial (normalized) occupations of the levels
+        N = self.levels.lNum + self.levels.uNum
+        self.N0 = np.array(self.N0, dtype=float)
+        if len(self.N0) == 0:
+            if 'v' in self.levels.grstates[0][0].QuNrs:
+                N0_indices = [i for i,st in enumerate(self.levels.grstates[0]) if st.v==0] 
+                if len(N0_indices) == 0:
+                    self.N0     = np.ones(N)
+                else:
+                    self.N0      = np.zeros(N)
+                    for i in N0_indices:
+                        self.N0[i] = 1.0
+            else:
+                self.N0     = np.ones(N)
+        self.N0 /= self.N0.sum() #initial populations are always normalized
+        
+        if return_densitymatrix:
+            N0mat = np.zeros((N,N),dtype=np.complex64)
+            #transform these initial values into the density matrix elements N0mat
+            N0mat[(np.arange(N),np.arange(N))] = self.N0
+            return N0mat
+
+    def get_Nscattrate(self,sum_over_ElSts=False):
+        Nscattrate_arr = self.Gamma[:,None]*self.N[self.levels.lNum:,:]
+        if not sum_over_ElSts:# and (len(self.levels.exstates_labels) > 1)
+            Nscattrate_summed = np.zeros((len(self.levels.exstates_labels),self.N.shape[1]))
+            N_states = 0
+            for i,ElSt in enumerate(self.levels.exstates):
+                N = ElSt.N
+                Nscattrate_summed[i,:] = np.sum(Nscattrate_arr[N_states:N_states+N,:],axis=0)
+                N_states += N
+            return Nscattrate_summed
+        else:
+            return np.sum(Nscattrate_arr,axis=0)
+        
+    def get_Nscatt(self,sum_over_ElSts=False):
+        return cumtrapz(self.get_Nscattrate(sum_over_ElSts=sum_over_ElSts), 
+                        self.t, initial = 0.0, axis=-1)
+    
+    def get_photons(self,sum_over_ElSts=False):
+        return np.transpose(self.get_Nscatt(sum_over_ElSts=sum_over_ElSts))[-1]
+    
+    #___compute several physical variables using the solution of the ODE
+    #: time dependent scattering rate
+    Nscattrate  = property(get_Nscattrate)
+    #: time dependent scattering number
+    Nscatt      = property(get_Nscatt)
+    #: totally scattered photons
+    photons     = property(get_photons)
+                
+    def _evaluate(self,t_start,t_int,dt,N0mat): #for OBEs only?!
+        freq_unit = self.freq_unit
         #___determine the time points at which the ODE solver should evaluate the equations    
         if len(self.args['t_eval']) != 0:
             self.t_eval = np.array(self.args['t_eval'])
         else:
-            if dt == 'auto': dt = 1/np.max(self.calc_Rabi_freqs(average_levels=True)/2/pi)/9 #1/9 of one Rabi-oscillation
+            if dt == 'auto': #must be tested!?!
+                dt = 1/np.max(self.h_gek*np.sqrt(self.om_gek**2*freq_unit**2+np.abs(self.Rabi_freqs)**2)/2/pi)/8.11 #1/8 of one Rabi-oscillation
             if dt != None and dt < t_int:
                 self.t_eval = np.linspace(t_start,t_start+t_int,int(t_int/dt)+1)
             else:
                 self.t_eval, T_eval = None, None
         if np.all(self.t_eval) != None:
-            T_eval = self.t_eval * Gamma
+            T_eval = self.t_eval * freq_unit
         
         #___transform the initial density matrix N0mat in a vector
         N = self.levels.N
@@ -973,20 +1030,24 @@ class System:
         # solve initial value problem of the ordinary first order differential equation with scipy
         lNum,uNum,pNum = self.levels.lNum,self.levels.uNum,self.lasers.pNum
         kwargs = self.args['kwargs']
-        # sol = solve_ivp(ode0_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+        # sol = solve_ivp(ode0_OBEs, (t_start*freq_unit,(t_start+t_int)*freq_unit),
         #                 self.y0, t_eval=T_eval, **kwargs,
         #                 args=(lNum,uNum,pNum,self.G,self.f,self.om_eg,self.om_k,
         #                       betaB,self.dMat,self.muMat,
         #                       self.M_indices,h_gek,h_gege,self.phi)) # delete?
-        # sol = solve_ivp(ode1_OBEs, (t_start*Gamma,(t_start+t_int)*Gamma),
+        # sol = solve_ivp(ode1_OBEs, (t_start*freq_unit,(t_start+t_int)*freq_unit),
         #                 self.y0, t_eval=T_eval, **kwargs,
         #                 args=(lNum,uNum,pNum, self.M_indices,
         #                       self.Gfd,self.om_gek,self.betamu,self.dd))
-        sol = solve_ivp(ode1_OBEs_opt2, (t_start*Gamma,(t_start+t_int)*Gamma),
+        # sol = solve_ivp(ode1_OBEs_opt2, (t_start*freq_unit,(t_start+t_int)*freq_unit), #<- optimized form for one el. ex. state!
+        #                 self.y0, t_eval=T_eval, **kwargs,
+        #                 args=(lNum,uNum,pNum, self.M_indices,
+        #                       self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices))
+        sol = solve_ivp(ode1_OBEs_opt3, (t_start*freq_unit,(t_start+t_int)*freq_unit),  #<- can also handle two electr. states with diff. Gamma
                         self.y0, t_eval=T_eval, **kwargs,
-                        args=(lNum,uNum,pNum, self.M_indices,
-                              self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices))
-        
+                        args=(lNum,uNum,pNum, self.levels.calc_M_indices(),
+                              self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices,self.Gamma/freq_unit))
+        self.sol = sol
         #___transform the solution vectors back to the density matrix ymat
         y_vec = sol.y
         #: solution of the time dependent density matrix elements
@@ -1001,11 +1062,46 @@ class System:
         #: solution of the time dependent populations N
         self.N = np.real(self.ymat[(np.arange(N),np.arange(N))])
         #: array of the times at which the solutions are calculated
-        self.t = sol.t/Gamma
-            
-    def add_magnfield(self,strength,direction=[0,0,1]): #old function. could be deleted?
-        """old function. Was replaced by the methods in the class Bfield"""
-        self.Bfield.turnon(strength=strength,direction=direction)
+        self.t = sol.t/freq_unit
+        
+    def check_config(self,raise_Error=False):
+        if self.calcmethod == 'rateeqs':
+            #pre-defined kwargs for solve_ivp function
+            kwargs_default = {'method':'LSODA', 'max_step':10e-6} 
+            self.args['kwargs'] = dict(kwargs_default,**self.args['kwargs'])
+        self.lasers.check_config(raise_Error=raise_Error)
+        self.levels.check_config(raise_Error=raise_Error)
+        if 'trajectory' in self.args:
+            if (self.args['trajectory']) and (self.levels.mass==0.0):
+                raise ValueError('No mass is provided for trajectory to be calculated')
+        # check if some lasers are completely off to some states or if some states are not addressed by any laser!?
+        
+    def average_variables(maxsize=20e3):
+        '''
+        
+
+        Parameters
+        ----------
+        maxsize : int, optional
+            With this option the attributes ``N``, ``t``, ``Nscatt`` and
+            ``Nscattrate`` are shrunken to this value by averaging over the other variable
+            entries. Usefull for preventing the files to get to big in disk space.
+            The default is 20e3 which results approximately in a file size of 12MB.
+            The default is 20e3.
+        '''
+        if 't' in self.__dict__:
+            maxs = maxsize
+            if self.t.size > 2*maxs:
+                var_list = [self.N,self.t,self.Nscatt,self.Nscattrate,self.v,self.r]
+                for i,var in enumerate(var_list):
+                    sh1 = int(var.shape[-1])
+                    n1 = int(sh1 // maxs)
+                    if var.ndim > 1:
+                        var = var[:,:sh1-(sh1%n1)].reshape(var.shape[0],-1, n1).mean(axis=-1)
+                    else: var = var[:sh1-(sh1%n1)].reshape(-1, n1).mean(axis=-1)
+                    var_list[i] = var
+                self.N,self.t,self.Nscatt,self.Nscattrate,self.v,self.r = var_list
+            #self.N = np.array(self.N,dtype='float16')
 
 #%%
 class Bfield:
@@ -1032,6 +1128,7 @@ class Bfield:
         if kwargs:  self.turnon(**kwargs)
         else:       self.reset()
         self.mu_B = physical_constants['Bohr magneton'][0]
+        
     def turnon(self,strength=5e-4,direction=[0,0,1],angle=None,remix_strength=None):
         """Turn on a magnetic field with a certain strength and direction.
 
@@ -1066,6 +1163,7 @@ class Bfield:
                 alpha = np.sqrt( (v1n/(np.sin(angle)**2) - v1n)/(v_perpn**2) )
                 self.direction  = v_perp + np.tensordot(alpha,v1,axes=0)
         # self.remix_strength = remix_strength
+        
     def turnon_earth(self,vertical='z',towardsNorthPole='x'):
         """Turn on the magnetic field of the earth at Germany with a strength
         of approximately 48 uT. The vertical component is 44 uT and the horizontal
@@ -1085,12 +1183,14 @@ class Bfield:
         vec[axes[vertical]]         = 44e-6
         vec[axes[towardsNorthPole]] = 20e-6
         self.turnon(strength=np.linalg.norm(vec),direction=vec)
+        
     def reset(self):
         """Reset the magnetic field to default which is a magnetic field
         strength 0.0 and the direction [0.,0.,1.]"""
         self.strength, self.direction = 0.0, np.array([0.,0.,1.])
         if 'angle' in self.__dict__: del self.angle, self.axisforangle
         self._remix_matrix = np.array([[],[]])
+        
     def get_remix_matrix(self,grs,remix_strength=None):
         """return a matrix to remix all adjacent ground hyperfine levels
         by a magnetic field with certain field strength. The default is False.
@@ -1109,16 +1209,15 @@ class Bfield:
         array
             magnetic remixing matrix.
         """
-        matr = np.zeros((grs.lNum,grs.lNum))
-        for i in range(grs.lNum):
-            for j in range(grs.lNum):
-                if grs[i].name == 'Loss state' or grs[j].name == 'Loss state':
-                    if grs[i].name == grs[j].name:
+        #must be updated!? not only grstates can mix!
+        # maybe use OBEs muMat for Bfield strength
+        matr = np.zeros((grs.N,grs.N))
+        for i in range(grs.N):
+            for j in range(grs.N):
+                if grs[i].is_lossstate or grs[j].is_lossstate:
+                    if grs[i].is_lossstate == grs[j].is_lossstate:
                         matr[i,j] = 1
-                elif grs[i].nu      == grs[j].nu \
-                    and grs[i].F    == grs[j].F \
-                    and grs[i].J    == grs[j].J \
-                    and abs(grs[i].mF-grs[j].mF) <= 1:
+                elif grs[i].is_equal_without_mF(grs[j]) and abs(grs[i].mF-grs[j].mF) <= 1:
                     matr[i,j] = 1
         self._remix_matrix = 10**(remix_strength)*matr
         return self._remix_matrix #if remix_strength ==None: estimate it with strength & if strength=0 return empty matrix?
@@ -1261,10 +1360,10 @@ def multiproc(obj,kwargs):
 #%%
 def vtoT(v,mass=157):
     """function to convert a velocity v in m/s to a temperatur in K."""
-    return v**2 * 0.5*(mass*u)/k_B
+    return v**2 * 0.5*(mass*u_mass)/k_B
 def Ttov(T,mass=157):
     """function to convert a temperatur in K to a velocity v in m/s."""
-    return np.sqrt(k_B*T*2/(mass*u))
+    return np.sqrt(k_B*T*2/(mass*u_mass))
 
 #%%
 @jit(nopython=True,parallel=False,fastmath=True) #original (slow) ODE form from the Fokker-Planck paper
@@ -1333,6 +1432,76 @@ def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices,h
             count += 2
 
     return dy_vec
+#%%
+@jit(nopython=True,parallel=False,fastmath=True) #same as ode1_OBEs_opt2 but compatible with two different electr. ex. states
+def ode1_OBEs_opt3(T,y_vec,lNum,uNum,pNum,M_indices,Gfd,om_gek,betamu,dd,ck_indices,Gam_fac):
+    N       = lNum+uNum
+    dymat   = np.zeros((N,N),dtype=np.complex128)
+    
+    ymat    = np.zeros((N,N),dtype=np.complex128)
+    count   = 0
+    for i in range(N):
+        for j in range(i,N):
+            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
+            count += 2     
+    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
+    for index in range(N):
+        ymat[index,index] *=0.5
+    
+    for a in range(uNum):
+        for c,k in zip(ck_indices[1][a][0],ck_indices[1][a][1]):
+            for b in range(lNum):
+                dymat[b,lNum+a] += Gfd[c,a,k]* np.exp(1j*om_gek[c,a,k]*T)* ymat[b,c]
+            for b in range(a,uNum):            
+                dymat[lNum+a,lNum+b] += np.conj(Gfd[c,a,k])* np.exp(-1j*om_gek[c,a,k]*T)* ymat[c,lNum+b]
+        for n in M_indices[1][a]:
+            for b in range(lNum):
+                dymat[b,lNum+a] += betamu[1][a,n] * ymat[b,lNum+n]
+        for m in M_indices[1][a]:
+            for b in range(a,uNum):
+                dymat[lNum+a,lNum+b] -= betamu[1][m,a] * ymat[lNum+m,lNum+b]
+        for b in range(a,uNum):
+            for n in M_indices[1][b]:
+                dymat[lNum+a,lNum+b] += betamu[1][b,n] * ymat[lNum+a,lNum+n]
+            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]*(Gam_fac[a]+Gam_fac[b])/2  #!!!!!!!!!!!!
+    for b in range(uNum-1,-1,-1):       
+        for c,k in zip(ck_indices[1][b][0],ck_indices[1][b][1]):
+            for a in range(0,b+1):
+                dymat[lNum+a,lNum+b] += Gfd[c,b,k]* np.exp(1j*om_gek[c,b,k]*T)* ymat[lNum+a,c]
+
+    for a in range(lNum):
+        for c_,k in zip(ck_indices[0][a][0],ck_indices[0][a][1]):
+            for b in range(uNum):
+                dymat[a,lNum+b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,lNum+b]
+            for b in range(a,lNum):    
+                dymat[a,b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,b]
+        for m in M_indices[0][a]:
+            for b in range(uNum):
+                dymat[a,lNum+b] -= betamu[0][m,a] * ymat[m,lNum+b]
+            for b in range(a,lNum):    
+                dymat[a,b] -= betamu[0][m,a] * ymat[m,b]
+        for b in range(uNum):
+            dymat[a,lNum+b] -= 0.5*Gam_fac[b]*ymat[a,lNum+b]                     #!!!!!!!!!!!!   
+        for b in range(a,lNum):
+            for n in M_indices[0][b]:
+                dymat[a,b] += betamu[0][b,n] * ymat[a,n]
+            for c_ in range(uNum):
+                for c__ in range(uNum):
+                    dymat[a,b] += dd[a,c_,b,c__] * np.exp(1j*T*(om_gek[a,c_,0]-om_gek[b,c__,0])) * ymat[lNum+c_,lNum+c__] *(Gam_fac[c_]+Gam_fac[c__])/2#!!!!!!!!!!!!????
+    for b in range(lNum-1,-1,-1):
+        for c_,k in zip(ck_indices[0][b][0],ck_indices[0][b][1]):
+            for a in range(0,b+1):
+                dymat[a,b] -= np.conj(Gfd[b,c_,k])* np.exp(-1j*om_gek[b,c_,k]*T)* ymat[a,lNum+c_]
+                
+    dy_vec = np.zeros( N*(N+1) )
+    count = 0
+    for i in range(N):
+        for j in range(i,N):
+            dy_vec[count]   = dymat[i,j].real
+            dy_vec[count+1] = dymat[i,j].imag
+            count += 2
+
+    return dy_vec
 
 #%%
 @jit(nopython=True,parallel=False,fastmath=True) #same as ode1_OBEs_opt1 but further optimized by rearranging the loops
@@ -1365,7 +1534,7 @@ def ode1_OBEs_opt2(T,y_vec,lNum,uNum,pNum,M_indices,Gfd,om_gek,betamu,dd,ck_indi
         for b in range(a,uNum):
             for n in M_indices[1][b]:
                 dymat[lNum+a,lNum+b] += betamu[1][b,n] * ymat[lNum+a,lNum+n]
-            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]
+            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]                     #!!!!!!!!!!!!
     for b in range(uNum-1,-1,-1):       
         for c,k in zip(ck_indices[1][b][0],ck_indices[1][b][1]):
             for a in range(0,b+1):
@@ -1383,13 +1552,13 @@ def ode1_OBEs_opt2(T,y_vec,lNum,uNum,pNum,M_indices,Gfd,om_gek,betamu,dd,ck_indi
             for b in range(a,lNum):    
                 dymat[a,b] -= betamu[0][m,a] * ymat[m,b]
         for b in range(uNum):
-            dymat[a,lNum+b] -= 0.5*ymat[a,lNum+b]            
+            dymat[a,lNum+b] -= 0.5*ymat[a,lNum+b]                        #!!!!!!!!!!!!   
         for b in range(a,lNum):
             for n in M_indices[0][b]:
                 dymat[a,b] += betamu[0][b,n] * ymat[a,n]
             for c_ in range(uNum):
                 for c__ in range(uNum):
-                    dymat[a,b] += dd[a,c_,b,c__] * np.exp(1j*T*(om_gek[a,c_,0]-om_gek[b,c__,0])) * ymat[lNum+c_,lNum+c__]
+                    dymat[a,b] += dd[a,c_,b,c__] * np.exp(1j*T*(om_gek[a,c_,0]-om_gek[b,c__,0])) * ymat[lNum+c_,lNum+c__] #!!!!!!!!!!!!
     for b in range(lNum-1,-1,-1):
         for c_,k in zip(ck_indices[0][b][0],ck_indices[0][b][1]):
             for a in range(0,b+1):
@@ -1555,12 +1724,12 @@ def ode0_rateeqs_jit(t,N,lNum,uNum,pNum,Gamma,r,R1sum,R2sum,tswitch,M):
     
     for l in prange(lNum):
         for u in prange(uNum):
-            dNdt[l] += Gamma* r[l,u] * N[lNum+u] + R_sum[l,u] * (N[lNum+u] - N[l])
+            dNdt[l] += Gamma[u]* r[l,u] * N[lNum+u] + R_sum[l,u] * (N[lNum+u] - N[l])
         if not M.size == 0:
             for k in prange(lNum):
                 dNdt[l] -= M[l,k] * (N[l]-N[k])
     for u in prange(uNum):
-        dNdt[lNum+u]  = -Gamma*N[lNum+u]
+        dNdt[lNum+u]  = -Gamma[u]*N[lNum+u]
         for l in prange(lNum):
             dNdt[lNum+u] += R_sum[l,u] * (N[l] - N[lNum+u])
                           
@@ -1633,19 +1802,19 @@ def ode1_rateeqs_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cyl,k,kabs
             if w_cyl[p] != 0.0: # calculation for a beam which is widened by a cylindrical lens
                 d2_w = np.dot(dir_cyl[p],r_)**2
                 if d2_w > r_cyl_trunc[p]**2: #test if position is larger than the truncation radius along the dir_cyl direction
-                    sp[p] = 0.0  
+                    sp[:,:,p] = 0.0  
                 else:
                     d2 = np.dot(np.cross(dir_cyl[p],k[p]/kabs[p]),r_)**2
-                    sp[p] = sp[p] *np.exp(-2*(d2_w/w_cyl[p]**2 + d2/w[p]**2))
+                    sp[:,:,p] *= np.exp(-2*(d2_w/w_cyl[p]**2 + d2/w[p]**2))
             else: 
                 r_perp = np.cross( r_ , k[p]/kabs[p] )
-                sp[p] = sp[p] *np.exp(-2 * np.dot(r_perp,r_perp) / w[p]**2 )  
+                sp[:,:,p] *= np.exp(-2 * np.dot(r_perp,r_perp) / w[p]**2 )  
 
     delta_ = delta + 2*pi*beta*t #frequency chirping
     # shape of k: (pNum,3)
     # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
     # R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
-    R = Gamma/2 * (rx*sp) / ( 1+4*( delta_ - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/Gamma**2 )    
+    R = Gamma/2 * (rx*sp) / ( 1+4*( delta_ - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/(Gamma**2) ) 
     # sum R over pNum
     R_sum = np.sum(R,axis=2)
     
@@ -1653,14 +1822,14 @@ def ode1_rateeqs_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cyl,k,kabs
     # N_l' = ...
     for l in range(lNum):
         for u in range(uNum):
-            dydt[l] += Gamma* r[l,u] * y[lNum+u] + R_sum[l,u] * (y[lNum+u] - y[l])
+            dydt[l] += Gamma[0,u,0]* r[l,u] * y[lNum+u] + R_sum[l,u] * (y[lNum+u] - y[l])
     if not M.size == 0:
         for l1 in range(lNum):
             for l2 in range(lNum):
                 dydt[l1] -= M[l1,l2] * (y[l1]-y[l2])
     # N_u' = ... 
     for u in range(uNum):
-        dydt[lNum+u]  = -Gamma*y[lNum+u]
+        dydt[lNum+u]  = -Gamma[0,u,0]*y[lNum+u]
         for l in range(lNum):
             dydt[lNum+u] += R_sum[l,u] * (y[l] - y[lNum+u])
     # v' = ...
@@ -1675,8 +1844,51 @@ def ode1_rateeqs_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cyl,k,kabs
     return dydt
 
 #%%
-def save_object(obj,filename=None,maxsize=20e3):
-    """Save an entire class with all its attributes instead of saving a pyplot figure.
+@jit(nopython=True,parallel=False,fastmath=False)
+def ode1_rateeqs_jit_testI(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,k,m,tswitch,M,pos_dep,beta,I_tot):    
+    dydt = np.zeros(lNum+uNum+3+3)
+    if floor(t/tswitch)%2 == 1: rx=rx1
+    else: rx=rx2
+    sp = sp_.copy()
+    # position dependent Force on particle due to Gaussian shape of Laserbeam:
+    if pos_dep:
+        sp *= I_tot(y[-3:]) #shape of sp: (uNum,pNum), shape of I_tot: (pNum)
+
+    delta_ = delta + 2*pi*beta*t #frequency chirping
+    # shape of k: (pNum,3)
+    # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
+    # R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
+    R = np.reshape(Gamma,(1,-1,1))/2 * (rx*sp) / ( 1+4*( delta_ - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/np.reshape(Gamma,(1,-1,1))**2 )    
+    # sum R over pNum
+    R_sum = np.sum(R,axis=2)
+    
+    # __________ODE:__________
+    # N_l' = ...
+    for l in range(lNum):
+        for u in range(uNum):
+            dydt[l] += Gamma[u]* r[l,u] * y[lNum+u] + R_sum[l,u] * (y[lNum+u] - y[l])
+    if not M.size == 0:
+        for l1 in range(lNum):
+            for l2 in range(lNum):
+                dydt[l1] -= M[l1,l2] * (y[l1]-y[l2])
+    # N_u' = ... 
+    for u in range(uNum):
+        dydt[lNum+u]  = -Gamma[u]*y[lNum+u]
+        for l in range(lNum):
+            dydt[lNum+u] += R_sum[l,u] * (y[l] - y[lNum+u])
+    # v' = ...
+    for i in range(3):
+        for l in range(lNum):
+            for u in range(uNum):
+                for p in range(pNum):
+                    dydt[lNum+uNum+i] +=  hbar/m * k[p,i] * R[l,u,p] * ( y[l] - y[lNum+u] )
+    # r' = ...    
+    dydt[lNum+uNum+3:lNum+uNum+3+3] = y[lNum+uNum:lNum+uNum+3]
+              
+    return dydt
+#%%
+def save_object(obj,filename=None):
+    """Save an entire class with all its attributes (or any other python object).
     
     Parameters
     ----------
@@ -1688,31 +1900,14 @@ def save_object(obj,filename=None,maxsize=20e3):
         `description` of the object and if the object does not have this
         attribute, the filename is set to the name of the class belonging to
         the object.
-    maxsize : int, optional
-        With this option the attributes ``N``, ``t``, ``Nscatt`` and
-        ``Nscattrate`` are shrunken to this value by averaging over the other variable
-        entries. Usefull for preventing the files to get to big in disk space.
-        The default is 20e3 which results approximately in a file size of 12MB.
     """
     if filename == None:
         if hasattr(obj,'description'): filename = obj.description
         else: filename = type(obj).__name__ # instance is set to name of its class
     if type(obj).__name__ == 'System':
-        if 'return_fun' in obj.args:
-            del obj.args['return_fun'] #problem when an external function is tried to be saved
-        if 't' in obj.__dict__:
-            maxs = maxsize
-            if obj.t.size > 2*maxs:
-                var_list = [obj.N,obj.t,obj.Nscatt,obj.Nscattrate,obj.v,obj.r]
-                for i,var in enumerate(var_list):
-                    sh1 = int(var.shape[-1])
-                    n1 = int(sh1 // maxs)
-                    if var.ndim > 1:
-                        var = var[:,:sh1-(sh1%n1)].reshape(var.shape[0],-1, n1).mean(axis=-1)
-                    else: var = var[:sh1-(sh1%n1)].reshape(-1, n1).mean(axis=-1)
-                    var_list[i] = var
-                obj.N,obj.t,obj.Nscatt,obj.Nscattrate,obj.v,obj.r = var_list
-            #self.N = np.array(self.N,dtype='float16')
+        if 'args' in obj.__dict__:
+            if 'return_fun' in obj.args:
+                del obj.args['return_fun'] #problem when an external function is tried to be saved
     with open(filename+'.pkl','wb') as output:
         pickle.dump(obj,output,-1)
         
@@ -1733,58 +1928,18 @@ def open_object(filename):
     return output
 
 #%%
-def selrule(gr,ex,pol):
-    """Determines the selection rule between a ground state and an excited state
-    caused by a certain polarization.
-    
-    Parameters
-    ----------
-    gr : :class:`~Levelsystem.Groundstate`
-        Groundstate Object.
-    ex : :class:`~Levelsystem.Excitedstate`
-        Excitedstate object.
-    pol : str
-        polarization of the light interacting with the two states.
-        See :class:`~Lasersystem.Laser`
-
-    Returns
-    -------
-    int
-        either 0 or 1 for forbidden or allowed transition.
-    """
-    # from a loss state there's no dipole transition (stimulated by a laser)
-    if gr.name == 'Loss state': return 0
-    # only if the parity of both the ground and excited state are well defined
-    # the parity-change and rotational momentum selection rules should apply:
-    if not ( (gr.p + ex.p == 0) and (abs(gr.N - ex.N) <= 1) ):
-        return 0
-    elif pol == 'lin':
-        if gr.mF == ex.mF: return 1
-        else: return 0
-    elif pol == 'sigmap':
-        if gr.mF == ex.mF-1: return 1
-        else: return 0
-    elif pol == 'sigmam':
-        if gr.mF == ex.mF+1: return 1
-        else: return 0
-
-
-#%%
-#%%
 if __name__ == '__main__':
-    system = System()
+    system = System(description='testing_System_module',
+                    load_constants='BaFconstants')
     
-    pol     = 'lin'
-    system.v0 = np.array([190,0,0])
-    system.r0 = np.array([0,0,0])
+    system.levels.add_all_levels(v_max=0)
+    system.levels.X.del_lossstate()
     
-    system.lasers.add_sidebands(859.830e-9,20e-3,pol,AOM_shift=20e6,
-                                EOM_freq=39.33e6,k=[0,1,0])
+    system.lasers.add_sidebands(lamb=859.83e-9,P=20e-3,offset_freq=19e6,mod_freq=39.33e6,
+                                sidebands=[-2,-1,1,2],ratios=[0.8,1,1,0.8])
 
-    system.levels.add_all_levels(nu_max=0)
-    
-    system.Bfield.turnon(strength=5e-4,direction=[0,1,1])
-    system.levels.grstates.del_lossstate()
-    system.calc_OBEs(t_int=5e-6,dt=1e-9, method='RK45',magn_remixing=True)
-
+    system.Bfield.turnon(strength=5e-4,direction=[1,1,1])
+    system.calc_OBEs(t_int=8e-6, dt=1e-9,magn_remixing=True,verbose=True)
+    system.calc_rateeqs(t_int=8e-6,magn_remixing=True,
+                        trajectory=False,position_dep=True,verbose=True)
     

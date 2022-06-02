@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v2.5.4
+v3.0.0
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -29,11 +29,16 @@ be printed to display all attributes via::
     
     print(lasers)
     print(lasers[0])
+    
+To delete all instances use this command::
+    
+    del lasers[:]
 """
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g
 from numba import jit
 import matplotlib.pyplot as plt
+import warnings
 #%%
 class Lasersystem:
     def __init__(self,freq_pol_switch=5e6):
@@ -43,7 +48,7 @@ class Lasersystem:
         normal item indexing of a :class:`Lasersystem`'s object::
             
             lasers = Lasersystem()
-            lasers.add(lamb=860e-9,P=20e-3,pols='lin')
+            lasers.add(lamb=860e-9,P=20e-3,pol='lin')
             lasers.add(lamb=890e-9,I=1000,FWHM=2e-3)            
             laser1 = lasers[0] # call first Laser object included in lasers
             del lasers[-1] # delete last added Laser object
@@ -56,7 +61,7 @@ class Lasersystem:
         ::
             
             lasers = Lasersystem()
-            lasers.add_sidebands(lamb=860e-9,P=20e-3,pols='lin',AOM_shift=20e6,EOM_freq=39e6)
+            lasers.add_sidebands(lamb=860e-9,P=20e-3,pol='lin',offset_freq=20e6,mod_freq=39e6)
             print(lasers)
 
         Parameters
@@ -69,8 +74,9 @@ class Lasersystem:
         #: float: Polarization switching frequency. Default is 5e6.
         self.freq_pol_switch = freq_pol_switch 
         self.intensity_func = None
+        self.intensity_func_sum = None
 
-    def add(self,lamb=860e-9,P=20e-3,pols='lin',**kwargs):
+    def add(self,lamb=860e-9,P=20e-3,pol='lin',**kwargs):
         """adds an instance of :class:`Laser` to this class. 
         
         Note
@@ -84,99 +90,158 @@ class Lasersystem:
             Arbitrary keyword arguments. Same as in the ``__init__`` method of
             the class :class:`Laser` (further information)
         """
-        self.entries.append( Laser( lamb=lamb, P=P, pols=pols, **kwargs) ) 
+        self.entries.append( Laser( lamb=lamb, P=P, pol=pol, **kwargs) ) 
         self.intensity_func = None
+        self.intensity_func_sum = None
+    
+    def getarr(self,var):
+        self.check_config()
+        if not var in dir(self[0]):
+            raise ValueError('The attribute {} is not included in the Laser objects'.format(var))
+        return np.array([getattr(la,var) for la in self], dtype=float)
         
-    def add_sidebands(self,lamb=860e-9,P=20e-3,pols='lin',AOM_shift=19.0e6,
-                      EOM_freq=39.33e6,ratios=[0.8,1,1,0.8],**kwargs):
-        """Adds four ``Lasers`` as sidebands (shifted by a certain AOM and EOM
-        frequencies) instead of a single ``Laser`` object to the ``Lasersystem``.
+    def add_sidebands(self,lamb=860e-9,offset_freq=0.0,mod_freq=1e6,
+                      ratios=None,sidebands=[-1,1],**kwargs):
+        """Adds ``Laser`` instances as sidebands in order to drive multiple
+        hyperfine transitions. The individual sidebands are detuned from the center
+        frequency by the modulation frequency `mod_freq` times the values in the
+        list `sidebands`, i.e. for `mod_freq=1e6` and `sidebands=[-1,0,2]`, the
+        sidebands are detuned by -1 MHz, 0 MHz and 2 MHz. The center frequency
+        is given by the wavelength lamb and an additional general offset frequency
+        `offset_freq`.
         
         Parameters
         ----------
         lamb : :py:obj:`float`
             wavelength of the main transition.
         P : `float`
-            Power of the Laser, i.e. sum of the powers of all sidebands.
+            Power, i.e. sum of the powers of all sidebands.
             Alternativley the sum of the intensities can be provided.
-        pols : str, tuple(str,str)
-            polarization of the Laser beams.
-        AOM_shift : float
-            the center Laser frequency is shifted by an additional AOM shift 
-            (without 2 pi).
-        EOM_freq : float
-            starting from the AOM-shifted main frequency, 4 sideband Laserobjects
-            are added with shifted frequencies `[-2,-1,1,2]*EOM_freq` (without 2 pi).
+        I : `float`
+            Sum of all sideband intensities. Can be provided instead of power P.
+        offset_freq : float
+            All Laser sidebands are all additionally detuned by the value of
+            offset_freq (in Hz without 2 pi). Experimentally, this shift is often
+            realized with an AOM. The default is 0.0.
+        mod_freq : float
+            starting from the offset-shifted center frequency, sideband Laserobjects
+            are added with the detunings `sidebands`*`mod_freq` (without 2 pi).
         ratios : array_like, optional
-            ratios of the sidebands in the same order as the `EOM_freq` parameter.
+            Power/ intensity ratios of the individual sidebands. Must be provided in the
+            same order as the `mod_freq` parameter.
             (Will be normed to specify the individual sideband powers).
-            The default is [0.8,1,1,0.8].
+            The default is equally distributed power.
+        sidebands : array_like, optional
+            determines the number of sidebands and their detuning in units of
+            the `mod_freq` parameter.
         **kwargs
             optional arguments  (see :class:`Laser`).
         """
-        EOM_freqs   = (np.array([-2,-1,1,2])*np.expand_dims(EOM_freq,axis=-1)).T
+        # compatibility for old parameter names:
+        if 'AOM_shift' in kwargs:
+            offset_freq = kwargs['AOM_shift']
+            del kwargs['AOM_shift']
+        if 'EOM_freq' in kwargs:
+            mod_freq    = kwargs['EOM_freq']
+            del kwargs['EOM_freq']
+            
+        # set equally distributed power ratios of not provided
+        if ratios == None:
+            ratios = len(sidebands)*[1]
+            
         if 'I' in kwargs:
-            I_red   = np.array(ratios)/np.sum(ratios) * np.expand_dims(kwargs['I'],axis=-1)
-            del kwargs['I']
-            for i in range(4):
-                self.entries.append(Laser( lamb=lamb, I=(I_red.T)[i], pols=pols,
-                    freq_shift=AOM_shift+EOM_freqs[i], **kwargs) )
-                #save input parameters AOM_shift and EOM_freq to be able to look it up later
-                self.entries[-1].AOM_shift = AOM_shift
-                self.entries[-1].EOM_freq  = EOM_freq
+            PorI     = 'I'
+        elif 'P' in kwargs:
+            PorI     = 'P'
         else:
-            P_red   = np.array(ratios)/np.sum(ratios) * np.expand_dims(P,axis=-1)
-            for i in range(4):
-                self.entries.append(Laser( lamb=lamb, P=(P_red.T)[i], pols=pols,
-                    freq_shift=AOM_shift+EOM_freqs[i], **kwargs) )
-                self.entries[-1].AOM_shift = AOM_shift
-                self.entries[-1].EOM_freq  = EOM_freq
-        self.intensity_func = None
+            PorI     = 'P'
+            kwargs['P'] = 20e-3
+            
+        mod_freqs = (np.array(sidebands)*np.expand_dims(mod_freq,axis=-1)).T
+        PorI_arr  = np.array(ratios)/np.sum(ratios) * np.expand_dims(kwargs[PorI],axis=-1)
+        
+        for i in range(len(sidebands)):
+            kwargs[PorI] = (PorI_arr.T)[i]
+            self.add(lamb=lamb, freq_shift=offset_freq+mod_freqs[i], **kwargs)
+            #save input parameters offset_freq and mod_freq to be able to look it up later
+            self.entries[-1].offset_freq = offset_freq
+            self.entries[-1].mod_freq  = mod_freq
     
-    def get_intensity_func(self):
+    def get_intensity_func(self,sum_lasers=True,use_jit=True):
         '''generates a function which uses all the current parameters of all
         lasers in this Lasersystem for calculating the total intensity.
         This function can also be called directly by calling the method
         :func:`I_tot` with an input parameter r as
         position at which the total intensity is calculated.
-        The function is jitted with the numba package to be much faster.
+        
+        Parameters
+        ----------
+        sum_lasers : bool, optional
+            If True, the returned intensity function evaulates the intensities
+            of all laser instances for returning the local total intensity sum.
+            If False, the returned intensity function only returns an array with
+            the length of defined laser instances. This array contains the factors
+            which corresponds to the local intensity of each laser divided by
+            its maximum intensity at the center of the Gaussian distribution.
+            The default is True.
+        use_jit : bool, optional
+            The returned function can be compiled in time to a very fast C code
+            using the numba package. However, the compilation time can be a few
+            seconds long the first time the function is called. For all later
+            calls it is then much faster. The default is True.
 
         Returns
         -------
         function
-            is the same as :func:`I_tot`
+            it's the same function which is used in the method :func:`I_tot`
         '''
+        if sum_lasers:
+            if self.intensity_func_sum != None:
+                return self.intensity_func_sum
+        else: 
+            if self.intensity_func != None:
+                return self.intensity_func
+        
         pNum    = self.pNum
-        I_arr   = np.array([la.I for la in self])
-        w       = np.array([la.w for la in self])
-        w_cyl   = np.array([la._w_cylind for la in self])
-        r_cyl_trunc = np.array([la._r_cylind_trunc for la in self])
-        dir_cyl = np.array([la._dir_cylind for la in self],dtype=float) #unit vectors
-        k       = np.array([la.k for la in self],dtype=float) #unit vectors
-        r_k     = np.array([la.r_k for la in self],dtype=float)
+        I_arr   = self.getarr('I')
+        w       = self.getarr('w')
+        w_cyl   = self.getarr('_w_cylind')
+        r_cyl_trunc = self.getarr('_r_cylind_trunc')
+        dir_cyl = self.getarr('_dir_cylind') #unit vectors
+        k       = self.getarr('k') #unit vectors
+        r_k     = self.getarr('r_k')
         
         # very fast function which calculates the total intensity only for the
         # parameters which are defined before
-        @jit(nopython=True,parallel=False,fastmath=True)
+        # @jit(nopython=False,parallel=False,fastmath=True,forceobj=True)
         def I_tot(r):
-            I=0.0
+            factors = np.zeros(pNum)
             for p in range(pNum):
                 r_ = r - r_k[p]
                 if w_cyl[p] != 0.0: # calculation for a beam which is widened by a cylindrical lens
                     d2_w = np.dot(dir_cyl[p],r_)**2
                     if d2_w > r_cyl_trunc[p]**2: #test if position is larger than the truncation radius along the dir_cyl direction
-                        continue   
+                        continue
                     else:
                         d2 = np.dot(np.cross(dir_cyl[p],k[p]),r_)**2
-                        I += I_arr[p] *np.exp(-2*(d2_w/w_cyl[p]**2 + d2/w[p]**2))
+                        factors[p] = np.exp(-2*(d2_w/w_cyl[p]**2 + d2/w[p]**2))
                 else: 
                     r_perp = np.cross( r_ , k[p] )
-                    I += I_arr[p] *np.exp(-2 * np.dot(r_perp,r_perp) / w[p]**2 )   
-            return I
-        self.intensity_func = I_tot
+                    factors[p] = np.exp(-2 * np.dot(r_perp,r_perp) / w[p]**2 )
+            if sum_lasers:
+                return np.sum(factors*I_arr)
+            else:
+                return factors
+            
+        if use_jit:
+            I_tot = jit(nopython=True,parallel=False,fastmath=True)(I_tot)
+            if sum_lasers:
+                self.intensity_func_sum = I_tot
+            else:
+                self.intensity_func = I_tot
         return I_tot
     
-    def I_tot(self,r):
+    def I_tot(self,r,**kwargs):
         '''calculates the total intensity of all lasers in this Lasersystem at
         a specific position `r`. For this calculation the function generated by
         :func:`get_intensity_func` is used.
@@ -185,16 +250,15 @@ class Lasersystem:
         ----------
         r : 1D array of size 3
             position at which the total intensity is calculated.
+        **kwargs : keywords
+            optional keywords of the method :func:`get_intensity_func` can be provided.
 
         Returns
         -------
         float
             total intensity at the position r.
         '''
-        if self.intensity_func != None:
-            return self.intensity_func(r)
-        else:
-            return self.get_intensity_func()(r)
+        return self.get_intensity_func(**kwargs)(r)
         
     def plot_I_2D(self,ax='x',axshift=0,limits=([-0.05,0.05],[-0.05,0.05])):
         """plot the intensity distribution of all laser beams by using the
@@ -226,11 +290,11 @@ class Lasersystem:
             for j in range(201):
                 r[ax_] = axshift
                 r[axes_] = x1[i],x2[j]
-                Z[i,j] = self.I_tot(r)
+                Z[i,j] = self.I_tot(r,sum_lasers=True,use_jit=True)
         
         X1,X2 = np.meshgrid(x1,x2)
-        plt.figure('Intensity distribution of all laser beams at {}={:.2f}mm'.format(
-            ax,axshift*1e3))
+        # plt.figure('Intensity distribution of all laser beams at {}={:.2f}mm'.format(
+            # ax,axshift*1e3))
         plt.contourf(X1*1e3,X2*1e3,Z.T,levels=20)
         cbar = plt.colorbar()
         cbar.ax.set_ylabel('Intensity $I_{tot}$ in W/m$^2$')
@@ -243,6 +307,7 @@ class Lasersystem:
         #delete lasers with del system.lasers[<normal indexing>], or delete all del system.lasers[:]
         del self.entries[index]
         self.intensity_func = None
+        self.intensity_func_sum = None
         
     def __getitem__(self,index):
         #if indeces are integers or slices (e.g. obj[3] or obj[2:4])
@@ -257,6 +322,15 @@ class Lasersystem:
             la = self.entries[i]
             print('>>> Laserbeam {:2d}: {}'.format(i,la))
         return self.description
+    
+    def check_config(self,raise_Error=False):
+        if self.pNum == 0:
+            Err_str = 'There are no lasers defined!'
+            if raise_Error: raise Exception(Err_str)
+            else: warnings.warn(Err_str)
+        #maybe also check if some dipole matrices are completely zero or
+        # if the wavelengths are in wrong order of magnitude??
+        
     @property
     def description(self):
         """str: Displays a short description with the number of included laser objects."""
@@ -277,10 +351,11 @@ class Lasersystem:
 #%%
 class Laser:
     name = None #cooling / repumping laser
-    def __init__(self,lamb=860e-9,freq_shift=0,pols='lin',pol_direction=None,
+    def __init__(self,lamb=860e-9,freq_shift=0,pol='lin',pol_direction=None,
                  P=20e-3,I=None,FWHM=5e-3,w=None,
                  w_cylind=.0,r_cylind_trunc=5e-2,dir_cylind=[1,0,0],
-                 freq_Rabi=None,k=[0,0,1],r_k=[0,0,0],beta=0.,phi=0.0):        
+                 freq_Rabi=None,k=[0,0,1],r_k=[0,0,0],beta=0.,phi=0.0,
+                 pol2=None,pol2_direction=None):
         """Containing all properties of a laser which can be assembled in the
         Lasersystem class.
         
@@ -295,13 +370,13 @@ class Laser:
         freq_shift : float, optional
             Shift of the laser's frequency (without 2 pi) additional to the
             frequency determined by Parameter lamb. The default is 0.0.
-        pols : str, tuple(str,str), optional
+        pol : str, tuple(str,str), optional
             polarization of the laserbeam. Can be either 'lin', 'sigmap' or
             'sigmam' for linear or circular polarized light of the laser.
             For polarization switching a tuple of two polarizations is needed.
             The default is 'lin'.
         pol_direction : str, optional
-            optional addition to the ``pols`` parameter to be considered in the
+            optional addition to the ``pol`` parameter to be considered in the
             OBEs calculation. Can be either 'x','y','z' for linear polarization
             or 'xy','xz','yz' for circular polarization. Given the default value
             None the linear polarization is aong the quantization axis 'z'
@@ -361,7 +436,7 @@ class Laser:
         Raises
         ------
         Exception
-            When the given type of the ``pols`` Parameter is not accepted.
+            When the given type of the ``pol`` Parameter is not accepted.
             
         Example
         -------
@@ -407,44 +482,49 @@ class Laser:
         self.phi    = phi
         
         #___define the laser polarizations (and polarization direction)
-        if type(pols) == tuple and len(pols) == 2:
-            pol1, pol2 = self._test_pol(pols[0]), self._test_pol(pols[1])
-            self.pol_switching = True
-        elif type(pols) == str:
-            pol1, pol2 = self._test_pol(pols), self._test_pol(pols)
-            self.pol_switching = False
-            if pol_direction == None:
-                if pol1 == 'lin':      f_q = np.array([0.,1.,0.]) #q= 0; mF -> mF'= mF
-                elif pol1 == 'sigmam': f_q = np.array([0.,0.,1.]) #q=+1; mF -> mF'= mF-1
-                elif pol1 == 'sigmap': f_q = np.array([1.,0.,0.]) #q=-1; mF -> mF'= mF+1
-            else:
-                p = pol_direction
-                x = np.array([+1., 0,-1.])/np.sqrt(2)
-                y = np.array([+1., 0,+1.])*1j/np.sqrt(2)
-                z = np.array([ 0, +1, 0 ])
+        self.f_q = self._get_polarization_comps(pol,pol_direction)
+        if pol2 != None:
+            self.pol_switching  = True
+            self.f_q2           = self._get_polarization_comps(pol2,pol2_direction)
+        else:
+            self.pol_switching  = False
+            self.f_q2           = self.f_q.copy()   
+        
+    def _get_polarization_comps(self,pol,pol_direction):
+        # check if pol has the right datatype and then if it has the right value
+        if type(pol) != str:
+            raise Exception("Wrong datatype or length of <pol>: only str allowed")
+        pol_list = ['lin','sigmap','sigmam']
+        if not (pol in pol_list):
+            raise Exception("'{}' is not valid for <pol>, it can only be '{}','{}', or '{}'".format(pol,*pol_list))
+        
+        if pol_direction == None:
+            if pol == 'lin':      f_q = np.array([0.,1.,0.]) #q= 0; mF -> mF'= mF
+            elif pol == 'sigmam': f_q = np.array([0.,0.,1.]) #q=+1; mF -> mF'= mF-1
+            elif pol == 'sigmap': f_q = np.array([1.,0.,0.]) #q=-1; mF -> mF'= mF+1
+        else:
+            p = pol_direction
+            x = np.array([+1., 0,-1.])/np.sqrt(2)
+            y = np.array([+1., 0,+1.])*1j/np.sqrt(2)
+            z = np.array([ 0, +1, 0 ])
+            if isinstance(p,(list,np.ndarray)):
+                f_q = p[0]*x + p[1]*y + p[2]*z # not yet programmed in the best way!?
+            elif isinstance(p,str):
                 if len(p) == 1:
                     if p == 'x':   f_q = x
                     elif p == 'y': f_q = y
                     elif p == 'z': f_q = z
                 if len(p) == 2:
-                    if pol1 == 'sigmam':
+                    if pol == 'sigmam':
                         a1,a2 = -1., -1j
-                    elif pol1 == 'sigmap':
+                    elif pol == 'sigmap':
                         a1,a2 = +1., -1j
                     if p == 'xy':   f_q = a1*x + a2*y
                     elif p == 'xz': f_q = a1*z + a2*x
                     elif p == 'yz': f_q = a1*y + a2*z
-            self.f_q = np.array([ -f_q[2], +f_q[1], -f_q[0] ]) / np.linalg.norm(f_q)
-        else:
-            raise Exception("Wrong datatype or length of <pol>: either tuple((2)) or str allowed")
-        self.pol1,self.pol2 = pol1,pol2
-        
-    def _test_pol(self,pol):
-        pol_list = ['lin','sigmap','sigmam','x','y','z','xy','xz','yz']
-        if pol in pol_list:
-            return pol
-        else:
-            raise Exception("'{}' is not valid, pol can only be '{}','{}', or '{}'".format(pol,*pol_list))
+            else: #maybe also check if the string values of pol_direction is correct?!
+                raise Exception("Wrong datatype of <pol_direction>")
+        return np.array([ -f_q[2], +f_q[1], -f_q[0] ]) / np.linalg.norm(f_q)
             
     def __str__(self):
         #__str__ method is called when an object of a class is printed with print(obj)
@@ -458,7 +538,7 @@ class Laser:
             if isinstance(value,(float,np.float64)): out+= '{:.2e}, '.format(value)
             elif isinstance(value,(list,np.ndarray)) and len(value) >5: out+= '{}..., '.format(value[:5])
             else: out+= '{}, '.format(value)
-        #'lamb={:.2e}, I={:.2e}, P={:.2e}, FWHM={:.2e} ,f={:.2e}, pols={}, pol_switching={}'.format(self.lamb,self.I,self.P,self.FWHM,(self.pol1,self.pol2),self.pol_switching)    
+        #'lamb={:.2e}, I={:.2e}, P={:.2e}, FWHM={:.2e} ,f={:.2e}, pol={}, pol_switching={}'.format(self.lamb,self.I,self.P,self.FWHM,(self.pol,self.pol2),self.pol_switching)    
         return out[:-2]
     
     @property
@@ -470,6 +550,7 @@ class Laser:
         self._w = w
         self._FWHM = 2*w / ( np.sqrt(2)/np.sqrt(np.log(2)) )
         self.intensity_func = None
+        self.intensity_func_sum = None
     @property
     def FWHM(self):
         """calculates the  FWHM (full width at half maximum) of the Gaussian
@@ -481,6 +562,7 @@ class Laser:
         self._FWHM = FWHM
         self._w = np.sqrt(2)/np.sqrt(np.log(2))*FWHM/2 # ~= 1.699*FWHM/2
         self.intensity_func = None
+        self.intensity_func_sum = None
     @property
     def P(self):
         """calculates the Power of the single beam"""
@@ -500,6 +582,7 @@ class Laser:
             #: float: :math:`I =P/A` with the Area :math:`A=\pi w_1 w_2/2` of a 2dim Gaussian beam
             self.I  = 2*self.P/(pi*self.w**2)
         self.intensity_func = None
+        self.intensity_func_sum = None
     @property
     def kabs(self):
         """calculates the absolute value of the wave vector
