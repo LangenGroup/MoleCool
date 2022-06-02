@@ -41,6 +41,7 @@ The properties of the Levelsystem which are reuqired for simulation the rate equ
 or optical Bloch equations are either imported from a .json file or constructed
 automatically and can be modified afterwards.
 These properties comprise most importantly:
+    
     * the electric dipole matrix and branching ratios
     * transition frequenies
     * magnetic g-factors
@@ -120,13 +121,14 @@ class Levelsystem:
         Then the default constants and properties can be nicely viewed with
         the function :func:`print_properties`. Afterwards the values in these
         pandas.DataFrames (here: vibrational branchings, transition wavelength,
-        and g-factor) can be easily modified via `<DataFrame>.iloc[<index>]`::
+        and g-factor) can be easily modified via `<DataFrame>.iloc[<index>]`.
         
         Tip
         ---
         Important properties within an instance :class:`Levelsystem` can be
-        accessed with the get_<property>() methods or directly via the properties
-        without 'get_' in their names, like:
+        accessed with the ´get_<property>()´ methods or directly via the properties
+        without ´get_´ in their names, like:
+            
             * dMat          # electric dipole matrix
             * dMat_red      # reduced electric dipole matrix
             * vibrbranch    # vibrational branching ratios
@@ -749,7 +751,7 @@ class Levelsystem:
     @property
     def N(self):
         '''Returns the total number of states defined in all electronic
-        states as an integer, i.e. N = :func:`lNum` + `uNum`.'''
+        states as an integer, i.e. N = :func:`lNum` + :func:`uNum`.'''
         return self.lNum + self.uNum
     
     @property
@@ -1106,6 +1108,7 @@ class State:
         Tip
         ---
         Like for the other classes, you can simply print the state instance::
+            
             mystate = State(J=0.5,F=1,mF=0)
             print(mystate)
         """
