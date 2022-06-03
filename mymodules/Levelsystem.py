@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.0.0
+v3.0.1
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -643,26 +643,28 @@ class Levelsystem:
         if self._M_indices != None: return self._M_indices
         M_indices_g,M_indices_e = [],[]
         
-        states_list = [st for GrSt in self.grstates for st in GrSt.states]
-        for l1,st1 in enumerate(states_list):
-            list_M = []
-            if st1.is_lossstate:
-                M_indices_g.append(np.array([l1]))
-                continue
-            for l2,st2 in enumerate(states_list):
-                if st2.is_lossstate:
+        for GrSt in self.grstates:      
+            states_list = [st for st in GrSt.states]
+            for l1,st1 in enumerate(states_list):
+                list_M = []
+                if st1.is_lossstate:
+                    M_indices_g.append(np.array([l1]))
                     continue
-                if st1.is_equal_without_mF(st2):
-                    list_M.append(l2)
-            M_indices_g.append(np.array(list_M))
+                for l2,st2 in enumerate(states_list):
+                    if st2.is_lossstate:
+                        continue
+                    if st1.is_equal_without_mF(st2):
+                        list_M.append(l2)
+                M_indices_g.append(np.array(list_M))
             
-        states_list = [st for ExSt in self.exstates for st in ExSt.states]
-        for st1 in states_list:
-            list_M = []
-            for l2,st2 in enumerate(states_list):
-                if st1.is_equal_without_mF(st2):
-                    list_M.append(l2)
-            M_indices_e.append(np.array(list_M))
+        for ExSt in self.exstates:
+            states_list = [st for st in ExSt.states]
+            for st1 in states_list:
+                list_M = []
+                for l2,st2 in enumerate(states_list):
+                    if st1.is_equal_without_mF(st2):
+                        list_M.append(l2)
+                M_indices_e.append(np.array(list_M))
             
         self._M_indices = (tuple(M_indices_g),tuple(M_indices_e))
         return self._M_indices

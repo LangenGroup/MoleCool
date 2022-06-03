@@ -146,7 +146,7 @@ class Lasersystem:
             del kwargs['EOM_freq']
             
         # set equally distributed power ratios of not provided
-        if ratios == None:
+        if np.all(ratios) == None:
             ratios = len(sidebands)*[1]
             
         if 'I' in kwargs:
