@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.8
+v0.2.9
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -60,6 +60,7 @@ import pandas as pd
 from scipy.constants import c,h,hbar,pi,g,physical_constants
 from scipy.constants import k as k_B
 from scipy.constants import u as u_mass
+from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
 from System import open_object, save_object
 
 from collections.abc import Iterable
@@ -67,10 +68,25 @@ import _pickle as pickle
 from copy import deepcopy
 from tqdm import tqdm
 import warnings
-import pywigxjpf as wig
 import matplotlib.pyplot as plt
 #: Constant for converting a unit in wavenumbers (cm^-1) into MHz.
 cm2MHz = 299792458.0*100*1e-6 #using scipys value for the speed of light
+
+try:
+    import pywigxjpf as wig
+    def w3j(j_1, j_2, j_3, m_1, m_2, m_3):
+        """returns Wigner 3j-symbol with arguments (j_1, j_2, j_3, m_1, m_2, m_3)"""
+        return wig.wig3jj(int(2*j_1), int(2*j_2), int(2*j_3), int(2*m_1), int(2*m_2), int(2*m_3))
+    def w6j(j_1, j_2, j_3, j_4, j_5, j_6):
+        """returns Wigner 6j-symbol with arguments (j_1, j_2, j_3, j_4, j_5, j_6)"""
+        return wig.wig6jj(int(2*j_1), int(2*j_2), int(2*j_3), int(2*j_4), int(2*j_5), int(2*j_6))
+except ModuleNotFoundError:
+    def w3j(j_1, j_2, j_3, m_1, m_2, m_3):
+        """returns Wigner 3j-symbol with arguments (j_1, j_2, j_3, m_1, m_2, m_3)"""
+        return float(wigner_3j(j_1, j_2, j_3, m_1, m_2, m_3))
+    def w6j(j_1, j_2, j_3, j_4, j_5, j_6):
+        """returns Wigner 6j-symbol with arguments (j_1, j_2, j_3, j_4, j_5, j_6)"""
+        return float(wigner_6j(j_1, j_2, j_3, j_4, j_5, j_6))
 #%% classes
 class Molecule:
     def __init__(self,I1=0,I2=0,Bfield=0.0,mass=None,load_constants=None,
@@ -135,11 +151,14 @@ class Molecule:
             pass
         #elements, isotopes, natural abundance, nuclear spin magn moment, ..
         
-        max_two_j = 2*80
-        # wig.wig_table_init(max_two_j,3)
-        wig.wig_table_init(max_two_j,6)
-        wig.wig_temp_init(max_two_j)
-    
+        try: #only works if module could be imported
+            max_two_j = 2*80
+            # wig.wig_table_init(max_two_j,3)
+            wig.wig_table_init(max_two_j,6)
+            wig.wig_temp_init(max_two_j)
+        except NameError:
+            pass
+        
     def add_electronicstate(self,*args,**kwargs):
         """adds an electronic state (ground or excited state) as instance of
         the class :class:`ElectronicState` to this :class:`~Molecule.Molecule`.
@@ -1398,14 +1417,6 @@ def ishalfint(x,raise_err=False):
         return False
     else:
         return True
-def w3j(j_1, j_2, j_3, m_1, m_2, m_3):
-    """returns Wigner 3j-symbol with arguments (j_1, j_2, j_3, m_1, m_2, m_3)"""
-    # return float(wigner_3j(j_1, j_2, j_3, m_1, m_2, m_3))
-    return wig.wig3jj(int(2*j_1), int(2*j_2), int(2*j_3), int(2*m_1), int(2*m_2), int(2*m_3))
-def w6j(j_1, j_2, j_3, j_4, j_5, j_6):
-    """returns Wigner 6j-symbol with arguments (j_1, j_2, j_3, j_4, j_5, j_6)"""
-    # return float(wigner_6j(j_1, j_2, j_3, j_4, j_5, j_6))
-    return wig.wig6jj(int(2*j_1), int(2*j_2), int(2*j_3), int(2*j_4), int(2*j_5), int(2*j_6))
 
 def eigensort(x,y_arr):
     """sorts an eigenvalue matrix, e.g. eigenvalues as a function of a
