@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.2.9
+v0.3.0
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -25,14 +25,15 @@ Example for calculating and plotting a spectrum of 138BaF::
                     'b_F':0.002209862,'c':0.000274323})
     const_ex_138 = ElectronicStateConstants(const={
                     'A':632.28175,'A_D':3.1e-5,'B_e':0.2117414,
-                    'D_e':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980})
+                    'D_e':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980,
+                    'T_e':11946.31676963})
     
     # create a Molecule instance with nuclear spin 1/2
-    BaF = Molecule(I1=0.5,transfreq=11946.31676963)
+    BaF = Molecule(I1=0.5)
     
     # add a ground and an excited electronic state and build up hyperfine states
     BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138)
-    BaF.add_electronicstate('A',2,'Pi', const=const_ex_138)
+    BaF.add_electronicstate('A',2,'Pi', Gamma=2.8421, const=const_ex_138)
     BaF.X.build_states(Fmax=9)
     BaF.A.build_states(Fmax=9)
     
@@ -90,8 +91,7 @@ except ModuleNotFoundError:
 #%% classes
 class Molecule:
     def __init__(self,I1=0,I2=0,Bfield=0.0,mass=None,load_constants=None,
-                 temp=5.0,Gamma=21.0,naturalabund=1.0,transfreq=0.0,
-                 label='BaF',verbose=True):        
+                 temp=5.0,naturalabund=1.0,label='BaF',verbose=True):        
         """This class represents a molecule containing all electronic and
         hyperfine states in order to calculate branching ratios and thus
         to plot the spectrum.
@@ -106,26 +106,16 @@ class Molecule:
         Bfield : float, optional
             strength of a external magnetic field in T. The default is 0.0.
         mass : float, optional
-            mass of the molecule. The default is None.
+            mass of the molecule in atomic mass units. The default is None.
         load_constants : string, optional
             if provided the molecular constants are loaded from an external
             file. The default is None.
         temp : float, optional
             temperatur of the molecule in K. The default is 5.0.
-        Gamma : float, optional
-            natural linewidth of the excited state as an angular frequency
-            (2pi * MHz). The default is 21.0.
         naturalabund : float, optional
             natural abundance in the range from 0.0 to 1.0 of different isotopes
             of a molecule in order to weight the spectra for different isotopes.
             The default is 1.0.
-        transfreq : float, optional
-            transition frequency between the ground and excited state in units
-            of wavenumbers 1/cm. The default is 0.0. This value `transfreq` is
-            used as offset for the calculation of the spectrum but if the constants
-            `T_e` or `w_e` in :class:`ElectronicStateConstants` are non-zero,
-            these values are used instead to calculate the energy offset
-            (see :meth:`ElectronicStateConstants.electrovibr_energy`).
         label : string, optional
             label or name of the molecule. The default is 'BaF'.
         verbose : bool, optional
@@ -135,12 +125,8 @@ class Molecule:
         self.I1         = I1
         self.I2         = I2
         self.Bfield     = Bfield
-        self.mass       = mass
+        self.mass       = mass * u_mass
         self.temp       = temp
-        cm2MHz = c*100*1e-6
-        # these two values are actually dependent on the electronic state!??
-        self.Gamma      = Gamma/cm2MHz #in MHz (without 2pi) and then to cm^-1
-        self.transfreq  = transfreq #in cm^-1
         self.naturalabund = naturalabund
         self.label      = label
         self.verbose    = verbose
@@ -236,16 +222,11 @@ class Molecule:
         
         # eigenstate dipole matrix via matrix multiplication of eigenstates and pure basis dipole matrix 
         self.dipmat = np.matmul(np.matmul(X.Ev.T,H_dpure),A.Ev)
-        # transition energies
-        E_vibX, E_vibA = X.const.electrovibr_energy, A.const.electrovibr_energy
-        if (E_vibX == 0.0) and (E_vibA == 0.0):
-            E_offset = self.transfreq
-        else:
-            E_offset = E_vibA - E_vibX
+        # transition frequency as energy offset
+        E_offset = A.const.electrovibr_energy - X.const.electrovibr_energy
         self.E = A.Ew[None,:] - X.Ew[:,None] + E_offset
         
-        if include_Boltzmann:
-            cm2MHz      = c*100*1e-6
+        if include_Boltzmann and (self.temp>0.0):
             fac         = 1*cm2MHz*1e6*h/k_B
             E_lowest    = np.min(X.Ew)
             Boltzmannfac= np.exp(-(X.Ew-E_lowest)[:,None]/fac/self.temp)
@@ -264,7 +245,9 @@ class Molecule:
         The resulting frequency and intensity arrays are not only returned but
         also stored as variables ``Eplt`` and ``I`` in the :class:`~Molecule.Molecule`
         instance. The widths of the single transitions are determined by the
-        natural linewidth ``Gamma`` of the respective :class:`~Molecule.Molecule` instance.
+        natural linewidth ``Gamma`` of the respective :class:`~Molecule.ElectronicState`
+        instance (Lorentzian profile) and the temperature (Gaussian profile).
+        The convolution of both profiles is then given by the Voigt profile.
 
         Parameters
         ----------
@@ -286,19 +269,21 @@ class Molecule:
         """
         grstate, exstate = self.branratios_labels
         X, A        = self.__dict__[grstate], self.__dict__[exstate]
-        Gamma       = self.Gamma
+        Gamma       = A.Gamma
         if limits == None: #limits of the energiy range for the spectrum to be plotted
             Emin,Emax   = np.min(self.E)-0.1 , np.max(self.E)+0.1
         else:
             Emin,Emax = limits
         Eplt        = np.linspace(Emin,Emax,plotpoints)
         I           = np.zeros(Eplt.size)
+        from scipy.special import voigt_profile
+        sigma = (Emax+Emin)/2 *np.sqrt(8*k_B*self.temp*np.log(2)/(self.mass*c**2))
         for i in range(X.N):
             for j in range(A.N):
                 branratio = self.branratios[i,j]
                 if branratio == 0.0: continue
-                I += branratio / ((self.E[i,j]-Eplt)**2+(Gamma/2)**2)
-        I *= self.naturalabund*Gamma/(2*pi)
+                I += branratio * voigt_profile(self.E[i,j]-Eplt,sigma,Gamma/2)
+        I *= self.naturalabund
         self.Eplt,self.I = Eplt,I
         return self.Eplt, self.I
     
@@ -326,22 +311,18 @@ class Molecule:
     def __str__(self):
         """prints all general information of the Molecule with its electronic states"""
         
-        str1 = 'Molecule {}: with the nuclear spins I1 = {}, I2 = {} and mass {}'.format(
-            self.label,self.I1,self.I2,self.mass)
+        str1 = 'Molecule {}: with the nuclear spins I1 = {}, I2 = {} and mass {} u'.format(
+            self.label,self.I1,self.I2,self.mass/u_mass)
         str1+= '\n magnetic field strength: {:.2e}G, temperature: {:.2f}K'.format(
             self.Bfield*1e4,self.temp)
-        str1+= '\nIncluding the following defined electronic states:\n'
+        str1+= '\nIncluding the following defined electronic states:'
         for state in [*self.grstates,*self.exstates]:
-            str1+='* {}\n'.format(self.__dict__[state])
-            
-        cm2MHz = c*100*1e-6
-        # these two values are actually dependent on the electronic state!??
-        self.Gamma #in MHz (without 2pi) and then to cm^-1
-        # self.transfreq #in cm^-1
+            str1+='\n\n* {}'.format(self.__dict__[state])
+        
         return str1
 #%%
-class ElectronicStateConstants: 
-    #: electronic energy offset constant
+class ElectronicStateConstants:
+    #: electronic energy offset constant (this constant equals the transition frequency if no vibrational constants are given. (see :meth:`ElectronicStateConstants.electrovibr_energy`).) 
     const_elec      = ['T_e']
     #: vibrational constants
     const_vib       = ['w_e','w_e x_e','w_e y_e']
@@ -416,7 +397,6 @@ class ElectronicStateConstants:
             contains some values for which the respective key is not defined.
         """
         units = ['1/cm','MHz']
-        cm2MHz = c*100*1e-6 # convert from 1/cm into MHz
         # load all constants from constants_zero into the class' instance
         # & update non-zero values from the const dictionary
         self.__dict__.update(self.constants_zero.copy())
@@ -457,7 +437,6 @@ class ElectronicStateConstants:
         const_vars = ['const_elec','const_vib','const_rot','const_sr','const_so',
                       'const_HFS','const_eq0Q','const_LD','const_Zeeman']
         index, values, values2  = [],[],[]
-        cm2MHz = c*100*1e-6
         precision = 9
         precision_old = pd.get_option('display.precision')
         pd.set_option("display.precision", precision)
@@ -630,7 +609,7 @@ class ElectronicStateConstants:
     
 #%%        
 class ElectronicState:    
-    def __init__(self,label,Smultipl,L,Hcase='a',nu=0,const={}):
+    def __init__(self,label,Smultipl,L,Hcase='a',nu=0,const={},Gamma=None):
         """This class represents an electronic ground or excited state manifold
         which are part of the molecular level structure.
         After an electronic state is created with certain constants of the effective
@@ -664,6 +643,11 @@ class ElectronicState:
             During initialization of the class :class:`ElectronicState`
             an attribute ``const`` as an instance of :class:`ElectronicStateConstants`
             is created. The default is {}.
+        Gamma : float, optional
+            if the electronic state has the function of an excited state, the
+            natural linewidth :math:`\Gamma` must be given for generating a spectrum.
+            The natural linewidth Gamma must be given in MHz as an non-angular
+            frequency (i.e. Gamma = 1/(2*pi*lifetime)*1e-6. The default is None.
         """
         #determine from label X,A,B,.. if state is electronic ground/ excited state
         if label[0] == 'X':                       
@@ -689,6 +673,11 @@ class ElectronicState:
             self.const.nu = nu
         else:
             self.const = ElectronicStateConstants(const=const,nu=nu)
+        
+        if Gamma:
+            self.Gamma  = Gamma/cm2MHz #in MHz (without 2pi) and then to cm^-1
+        else:
+            self.Gamma  = None
         
         # vibrational level
         self.nu         = nu #have to be called after init of self.const
@@ -995,7 +984,7 @@ class ElectronicState:
             self.calc_eigenstates()
             Ew_B_arr[k,:] = self.Ew
         
-        mu_B,cm2MHz = physical_constants['Bohr magneton'][0], c*100*1e-6
+        mu_B = physical_constants['Bohr magneton'][0]
         dB          = Bfield[1] - Bfield[0]
         gfactors    = np.zeros(N)
         mF_arr      = np.zeros(N)
@@ -1066,9 +1055,12 @@ class ElectronicState:
     def __str__(self):
         """prints all general information of the ElectronicState"""
         Lnames = ['Sigma','Pi','Delta','Phi','Gamma']
-        return '{:13s} {}(^{}){} - Hunds case {} - {} shell electronic state'.format(
+        linewidth = ''
+        if self.Gamma:
+            linewidth += '\n  - linewidth: 2 pi * {:.2f} MHz'.format(self.Gamma*cm2MHz)
+        return '{:13s} {}(^{}){}:\n  - Hunds case {}\n  - {} shell electronic state'.format(
             self.grex,self.label,self.Smultipl,Lnames[self.L],self.Hcase,self.shell) \
-            + '\n  --> includes {} states'.format(self.N)
+            + linewidth + '\n  --> includes {} states'.format(self.N)
 
     @property
     def nu(self):
@@ -1454,66 +1446,65 @@ def eigensort(x,y_arr):
 
 #%%
 if __name__ == '__main__':
-    cm2MHz = 29979.2458 # actually c*100*1e-6 ?
     # BaF constants for the isotopes 138 and 137 from Steimle paper 2011
     const_gr_138 = {'B_e':0.21594802,'D_e':1.85e-7,'gamma':0.00269930,
                     'b_F':0.002209862,'c':0.000274323} #,'g_l':-0.028}#gl constant??
     const_ex_138 = {'A_e':632.28175,'A_D':3.1e-5,
                     'B_e':0.2117414, 'D_e':2.0e-7,'p':-0.25755-2*(-0.0840),'q':-0.0840,
-                    "g'_l":-0.536,"g'_L":0.980}
+                    "g'_l":-0.536,"g'_L":0.980,'T_e':11946.31676963}
     
     const_gr_137 = {'B_e':0.21613878,'D_e':1.85e-7,'gamma':0.002702703,
                     'b_F':0.077587, 'c':0.00250173,'eq0Q':-0.00390270*2,
                     'b_F_2':0.002209873,'c_2':0.000274323}
     const_ex_137 = {'B_e':0.211937,'D_e':2e-7,'A_e':632.2802,'A_D':3.1e-5,
-                    'p':-0.2581-2*(-0.0840),'q':-0.0840,'d':0.0076}
-    
+                    'p':-0.2581-2*(-0.0840),'q':-0.0840,'d':0.0076,
+                    'T_e':11946.3152748}
+    Gamma       = 2.8421
+    mass138     = 138 + 19
+    mass137     = 137 + 19
     #%% bosonic 138BaF
-    BaF = Molecule(I1=0.5,transfreq=11946.31676963,naturalabund=0.717,
-                    Gamma=21.0,label='138 BaF')
-    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138)
-    BaF.add_electronicstate('A',2,'Pi', const=const_ex_138)
+    BaF = Molecule(I1=0.5,naturalabund=0.717,label='138 BaF',mass=mass138)
+    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138) #for ground state
+    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma,const=const_ex_138) #for excited state
     BaF.X.build_states(Fmax=9)
     BaF.A.build_states(Fmax=9)
-    BaF.calc_branratios(threshold=0.05)
+    print(BaF)
+    BaF.calc_branratios(threshold=0.0)
     
-    #%% plotting spectra with an offset
+    #%% plotting spectra
     plt.figure('Spectra of two BaF isotopes')
     BaF.calc_spectrum(limits=(11627.0,11632.8))#11634.15,11634.36)#12260.5,12260.7)
-    plt.plot(BaF.Eplt, BaF.I+800,label='$^{138}$BaF')
+    plt.plot(BaF.Eplt,BaF.I,label='$^{138}$BaF')
     plt.xlabel('transition frequency in 1/cm')
     plt.ylabel('intensity')
     plt.legend()
     
     print(BaF.X.const.show('non-zero'))
     #%% fermionic 137BaF
-    BaF2 = Molecule(I1=1.5,I2=0.5,transfreq=11946.3152748,naturalabund=0.112,
-                    Gamma=21.,label='137 BaF')
+    BaF2 = Molecule(I1=1.5,I2=0.5,naturalabund=0.112,label='137 BaF',mass=mass137)
     BaF2.add_electronicstate('X',2,'Sigma',const=const_gr_137)
-    BaF2.add_electronicstate('A',2,'Pi',const=const_ex_137)
+    BaF2.add_electronicstate('A',2,'Pi',Gamma=Gamma,const=const_ex_137)
     BaF2.X.build_states(Fmax=9.5)
     BaF2.A.build_states(Fmax=9.5)
-    BaF2.calc_branratios(threshold=0.05)
+    BaF2.calc_branratios()
     
     #%% plotting spectra with an offset
     BaF2.calc_spectrum(limits=(11627.0,11632.8))#11634.15,11634.36)#12260.5,12260.7)
-    plt.plot(BaF2.Eplt,BaF2.I+600,label='$^{137}$BaF')
+    plt.plot(BaF2.Eplt,BaF2.I-10,label='$^{137}$BaF')
     plt.legend()
     
     #%% ground state Zeeman splitting due to external magnetic field in 138BaF
-    BaF = Molecule(I1=0.5,transfreq=11946.31676963,naturalabund=0.717,
-                    Gamma=21.0,label='138 BaF',verbose=False)
-    BaF.add_electronicstate('X',2,'Sigma',const=const_gr_138) #for ground state
-    BaF.add_electronicstate('A',2,'Pi',const=const_ex_138) #for excited state
+    BaF = Molecule(I1=0.5,naturalabund=0.717,label='138 BaF',verbose=False,mass=mass138)
+    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138) #for ground state
+    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma,const=const_ex_138) #for excited state
     BaF.X.build_states(Fmax=3,Fmin=0)
     BaF.A.build_states(Fmax=3,Fmin=0)
     
     BaF.X.plot_Zeeman(100e-4)
     
     #%% getting g-factors
-    BaF = Molecule(I1=0.5,transfreq=11946.31676963,naturalabund=0.717,
-                   Gamma=21.0,label='138 BaF')
-    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138)
-    BaF.add_electronicstate('A',2,'Pi', const=const_ex_138)
+    BaF = Molecule(I1=0.5,naturalabund=0.717,label='138 BaF',mass=mass138)
+    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138) #for ground state
+    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma,const=const_ex_138) #for excited state
     BaF.X.build_states(Fmax=4)
     BaF.X.get_gfactors()
