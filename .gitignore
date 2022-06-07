@@ -5,7 +5,7 @@ __pycache__/
 
 # documentation build, auto-generated Example file
 build/
-Example.rst
+Examples.rst
 
 #temporary python files
 mymodules/tmp/
