@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.0.1
+v3.0.2
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -102,7 +102,8 @@ class Levelsystem:
             levels.S12.add(J=1/2,F=[1,2])
             state1 = levels.S12[0]
             print(state1)
-            del levels.S12[-1] # delete last added State instance    
+            del levels.S12[-1] # delete last added State instance 
+            del levels['S12']  # delete complete electronic state
 
         Parameters
         ----------
@@ -140,23 +141,11 @@ class Levelsystem:
         #: list containing the labels of the excited electronic states
         self.exstates_labels   = [] #to be appended later
         self.verbose                    = verbose
+        # loading the dictionary with the constants from json file
         self.load_constants             = load_constants
         self.const_dict                 = get_constants_dict(load_constants)
-        self.mass                       = self.const_dict.get('mass',0.0)*u_mass #if no value is defined, mass will be set to 0
-        # The following variables with one underscore are meant to not directly accessed
-        # outside of this class. They can be called and and their values can be modified
-        # by using the respective methods "get_<variable>"
-        self._dMat                      = {} #dict with first key as gs label and second key (of the nested dict) as exs label
-        self._dMat_red                  = {}
-        self._vibrbranch                = {}
-        self._wavelengths               = {}
-        # The following variables with two underscores are only for internal use inside the class
-        self.__dMat_arr                 = None
-        self.__branratios_arr           = None
-        self.__freq_arr                 = None
-        self._muMat                     = None
-        self._M_indices                 = None
-        self._Gamma                     = None
+        # initialize all property instances
+        self.reset_properties()
         
     def __getitem__(self,index):
         if self.N == 0: raise Exception('No states are defined/ included within this Electronic State!')
@@ -166,20 +155,17 @@ class Levelsystem:
         #if indices are tuples instead (e.g. obj[1,3,2])
         return [self.states[i] for i in index]
     
-    def __delitem__(self,index):
-        """delete levels using del system.levels[<normal indexing>], or delete all del system.levels[:]"""
-        if (type(index) == slice):  indices = sorted(range(self.N)[index],reverse=True)
-        else:                       indices = [index]
-        for i in indices:
-            if i >= self.lNum:      del self.exstates_labels.entries[i-self.lNum]
-            else:                   del self.grstates_labels.entries[i]
-        # del self.entries[index] #does not work why?
-        self.__dMat_arr                 = None #also reset other variables???
-        self.__branratios_arr           = None
-        self.__freq_arr                 = None
-        self._muMat                     = None
-        self._M_indices                 = None
-        self._Gamma                     = None
+    def __delitem__(self,label):
+        """delete electronic states del system.levels[<electronic state label>], or delete all del system.levels[:]"""
+        if type(label) != str:
+            raise ValueError('index for an electronic state to be deleted must be provided as string of the label')
+        if label in self.grstates_labels:
+            self.grstates_labels.remove(label)
+        else:
+            self.exstates_labels.remove(label)
+        del self.__dict__[label]
+        self.reset_properties()
+        print('ElectronicState {} deleted and all properties resetted!'.format(label))
         
     def add_all_levels(self,v_max):
         """Function to add all ground and excited states of a molecule with a
@@ -230,14 +216,14 @@ class Levelsystem:
             load_constants = self.load_constants
         if not ('verbose' in kwargs):
             kwargs['verbose'] = self.verbose
+        if label in [*self.grstates_labels,*self.exstates_labels]:
+            raise Exception('There is already an electronic state {} defined!'.format(label))
         if gs_exs == 'gs':
             if len(self.grstates_labels) == 1:
-                raise Exception('There is already an electronic ground state defined!')
+                raise Exception('There is already one electronic ground state defined!')
             self.__dict__[label] = ElectronicGrState(load_constants=load_constants,label=label,**kwargs)
             self.grstates_labels.append(label)
         elif gs_exs == 'exs':
-            if label in self.exstates_labels:
-                raise Exception('There is already an electronic excited state {} defined!'.format(label))
             self.__dict__[label] = ElectronicExState(load_constants=load_constants,label=label,**kwargs)
             self.exstates_labels.append(label)
         else:
@@ -352,8 +338,9 @@ class Levelsystem:
             dMat_red = pd.DataFrame(1.0,index=self.__dict__[gs].DFzeros_without_mF().index,
                                     columns=self.__dict__[exs].DFzeros_without_mF().index)
             if self.verbose:
-                warnings.warn('There is no dipole matrix or reduced dipole matrix available! So a reduced matrix has been created only with ones:')
-                print(dMat_red)
+                warn_txt = 'There is no dipole matrix or reduced dipole matrix available!' + \
+                    'So a reduced matrix has been created only with ones:\n{}'.format(dMat_red)
+                warnings.warn(warn_txt)
                 
         if gs in self._dMat_red:
             self._dMat_red[gs][exs] = dMat_red    
@@ -598,33 +585,33 @@ class Levelsystem:
         
         Returns
         -------
-        numpy.ndarray
+        tuple of numpy.ndarray
             magnetic moment operator matrix.
-        """
+        """    
         if self._muMat != None: return self._muMat
         # mu Matrix for magnetic remixing:
         # this matrix includes so far also off-diagonal non-zero elements (respective to F,F')
         # which will not be used in the OBEs calculation
-        lNum, uNum = self.lNum, self.uNum
-        self._muMat  = (np.zeros((lNum,lNum,3)), np.zeros((uNum,uNum,3)))
+        self._muMat  = (np.zeros((self.lNum,self.lNum,3)),
+                        np.zeros((self.uNum,self.uNum,3)))
         for i0, ElSts in enumerate([self.grstates,self.exstates]):
-            DF = pd.concat([ElSt.get_gfac() for ElSt in ElSts])
-            states = [st for ElSt in ElSts for st in ElSt.states]
-            for i1, st1 in enumerate(states):
-                if st1.is_lossstate:
-                    self._muMat[i0][i1,:,:] = np.zeros((lNum,3)) #only continue?!
-                    continue
-                val = self.state_in_DF(st1,DF)
-                F,m = st1.F, st1.mF
-                for i2, st2 in enumerate(states):
-                    if st2.is_lossstate:
-                        self._muMat[i0][i1,i2,q+1] = 0.0 #only continue?!
-                        continue
-                    n = st2.mF
-                    for q in [-1,0,1]:
-                        if val != None:
-                            self._muMat[i0][i1,i2,q+1] = -val* (-1)**(F-m)* \
-                                np.sqrt(F*(F+1)*(2*F+1)) * float(wigner_3j(F,1,F,-m,q,n))
+            N = 0
+            for ElSt in ElSts:
+                DF = ElSt.get_gfac()
+                for i1, st1 in enumerate(ElSt.states):
+                    if st1.is_lossstate:
+                        continue # all elements self._muMat[i0][i1,N:ElSt.N,:] remain zero
+                    val = self.state_in_DF(st1,DF)
+                    F,m = st1.F, st1.mF
+                    for i2, st2 in enumerate(ElSt.states):
+                        if st2.is_lossstate:
+                            continue # all elements self._muMat[i0][i1,i2,:] remain zero
+                        n = st2.mF
+                        for q in [-1,0,1]:
+                            if val != None:
+                                self._muMat[i0][N+i1,N+i2,q+1] = -val* (-1)**(F-m)* \
+                                    np.sqrt(F*(F+1)*(2*F+1)) * float(wigner_3j(F,1,F,-m,q,n))
+                N += ElSt.N
         return self._muMat
     
     def calc_M_indices(self):
@@ -670,6 +657,14 @@ class Levelsystem:
         return self._M_indices
     
     def calc_Gamma(self):
+        """Method calculates the natural decay rate Gamma (in angular frequency)
+        for each single excited state.
+
+        Returns
+        -------
+        np.ndarray
+            Gamma array of length uNum as angular frequency [Hz].
+        """
         if np.all(self._Gamma) != None:
             return self._Gamma
         else:
@@ -686,6 +681,10 @@ class Levelsystem:
         self.calc_muMat()
         self.calc_M_indices()
         self.calc_Gamma()
+        
+        # mark that properties are calculated for not adding/deleting more states
+        for ElSt in self.electronic_states:
+            ElSt.properties_not_calculated = False
     #%%
     def __str__(self):
         """__str__ method is called when an object of a class is printed with print(obj)"""
@@ -717,28 +716,60 @@ class Levelsystem:
                       sep='\n')
         
     def check_config(self,raise_Error=False):
-        if self.N == 0:
-            Err_str = 'There are no states defined!'
+        """checking the configuration of the Levelsystem to be used in calculating
+        laser cooling dynamics. E.g. involves to check whether the states are 
+        correctly defined.
+        
+        Parameters
+        ----------
+        raise_Error : bool, optional
+            If the configuration is not perfect, this method raises an error message
+            or only prints a warning depending on `raise_Error`. The default is False.
+        """
+        if len(self.grstates_labels) > 1:
+            Err_str = 'Only one electronic ground state can be defined' + \
+                '({} are given)'.format(len(self.grstates_labels))
             if raise_Error: raise Exception(Err_str)
             else: warnings.warn(Err_str)
-        else:
-            Err_str = 'Electronic state {} contains no levels!'
-            for ElSt in self.electronic_states:
-                if ElSt.N == 0:
-                    if raise_Error: raise Exception(Err_str.format(ElSt.label))
-                    else: warnings.warn(Err_str.format(ElSt.label))
+            
+        Err_str = 'Electronic state {} contains no levels!'
+        for ElSt in self.electronic_states:
+            if ElSt.N == 0:
+                if raise_Error: raise Exception(Err_str.format(ElSt.label))
+                else: warnings.warn(Err_str.format(ElSt.label))
+                
+    def reset_properties(self):
+        """Method resets and initializes all property objects (e.g. dMat, dMat_red,
+        vibrbranch, wavelengths, muMat, Mindices, Gamma).
+        """
+        self.mass                       = self.const_dict.get('mass',0.0)*u_mass #if no value is defined, mass will be set to 0
+        # The following variables with one underscore are meant to not directly accessed
+        # outside of this class. They can be called and and their values can be modified
+        # by using the respective methods "get_<variable>"
+        self._dMat                      = {} #dict with first key as gs label and second key (of the nested dict) as exs label
+        self._dMat_red                  = {}
+        self._vibrbranch                = {}
+        self._wavelengths               = {}
+        # The following variables with two underscores are only for internal use inside the class
+        self.__dMat_arr                 = None
+        self.__branratios_arr           = None
+        self.__freq_arr                 = None
+        self._muMat                     = None
+        self._M_indices                 = None
+        self._Gamma                     = None
 
     @property
     def description(self):
-        """str: Displays a short description with the number of included laser objects."""
+        """str: Displays a short description with the number of included state objects."""
         return "{:d}+{:d} - Levelsystem".format(self.lNum,self.uNum)
+    
     @property
     def states(self):
-        states_list = []
-        for ElSt in self.electronic_states:
-            for st in ElSt.states:
-                states_list.append(st)
-        return states_list
+        """Returns a combined list of all state objects defined in the individual
+        electronic states.
+        """
+        return [st for ElSt in self.electronic_states for st in ElSt.states]
+    
     @property
     def lNum(self):
         '''Returns the total number of states defined in the ground electronic
@@ -762,11 +793,13 @@ class Levelsystem:
         '''Returns a list containing all defined instances of ground electronic
         states (:class:`ElectronicGrState`).'''
         return [self.__dict__[ElSt] for ElSt in self.grstates_labels]
+    
     @property
     def exstates(self):
         '''Returns a list containing all defined instances of excited electronic
         states (:class:`ElectronicExState`).'''
         return [self.__dict__[ElSt] for ElSt in self.exstates_labels]
+    
     @property
     def electronic_states(self):
         '''Returns a list containing all defined instances of electronic
@@ -788,8 +821,9 @@ class ElectronicState():
         # imported from the same variable in the Levelsystem class
         self.load_constants     = load_constants
         self.const_dict         = get_constants_dict(load_constants)
-        self._freq              = []
-        self._gfac              = []
+        self.properties_not_calculated = True
+        self._freq = []
+        self._gfac = []
 
     def add(self,**QuNrs):
         """Method adds an instance of :class:`State` to this electronic state.
@@ -851,8 +885,11 @@ class ElectronicState():
                 state = State(is_lossstate=False,**QuNrs)
                 if self.state_exists(state):
                     raise Exception('{} already exists!'.format(state))
-                else:
+                if self.properties_not_calculated:
                     self.states.append(state)
+                else:
+                    raise Exception('After any property is initialized, one can not add more states')
+                    
         elif isinstance(F, Iterable):
             for F_i in F:
                 self.add(**{**QuNrs,'F':F_i})
@@ -955,6 +992,14 @@ class ElectronicState():
         #if indices are tuples instead (e.g. obj[1,3,2])
         return [self.states[i] for i in index] 
     
+    def __delitem__(self,index):
+        """delete states using del system.levels[<normal indexing>], or delete all del system.levels[:]"""
+        if self.properties_not_calculated:
+            print('{} deleted!'.format(self.states[index]))
+            del self.states[index]
+        else:
+            raise Exception('After any property is initialized, one can not delete states anymore')
+    
     def __str__(self):
         """__str__ method is called when an object of a class is printed with print(obj)"""
         for i,st in enumerate(self.states):
@@ -982,9 +1027,10 @@ class ElectronicState():
         numpy.ndarray
             Quantum numbers of all excited levels without the magnetic sublevels mF.
         """
+        self.properties_not_calculated = False
         QuNrs = self[0].QuNrs_without_mF
         rows = []
-        for i,st in enumerate(self):
+        for i,st in enumerate(self.states):
             if not st.is_lossstate:
                 rows.append(tuple(st.__dict__[QuNr] for QuNr in QuNrs))
         Index= pd.MultiIndex.from_frame(pd.DataFrame(set(rows), columns=QuNrs))
@@ -1089,7 +1135,7 @@ class ElectronicExState(ElectronicState):
         super().print_properties()
         n=40
         print('\nGamma (in MHz):\n{} {}'.format(self.gs_exs, self.label), self.Gamma)
-
+        
 #%% #########################################################################
 class State:
     def __init__(self,is_lossstate=False,**QuNrs):
