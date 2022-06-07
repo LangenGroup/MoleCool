@@ -40,6 +40,11 @@ autodoc_mock_imports=['numpy','matplotlib','scipy','sympy','numba','pandas','tqd
 
 autoclass_content = "both"
 
+# This value selects if automatically documented members are sorted alphabetical
+# (value 'alphabetical'), by member type (value 'groupwise') or by source order
+# (value 'bysource'). The default is alphabetical.
+autodoc_member_order = "bysource"
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -60,3 +65,15 @@ html_theme = 'sphinx_rtd_theme' # 'sphinxdoc' 'alabaster'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 # html_static_path = ['_static']
+
+# -- Examples.rst ------------------------------------------------------------
+
+# Manually generating Examples.rst file for showing the source codes of all
+# .py files located in the mymodules/Examples folder.
+
+pathtoEx = r'../../mymodules/Examples/'
+files = os.listdir(pathtoEx)
+with open('Examples.rst', 'w') as rstfile:
+    for i,filename in enumerate(files):
+        if filename[-3:] == '.py':
+            rstfile.write(filename + '\n' + len(filename)*'=' + '\n\n' + '.. literalinclude:: ' + pathtoEx + filename + '\n\n')
