@@ -1075,6 +1075,7 @@ class ElectronicState:
             raise ValueError('given value {} is no integer!'.format(val))
         self.const.nu = val
         self.__nu = val
+        self.eigenst_already_calc = False
         
     @property
     def N(self):
