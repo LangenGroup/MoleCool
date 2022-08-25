@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.0.0
+v3.0.3
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -120,6 +120,7 @@ from copy import deepcopy
 from tqdm import tqdm
 import warnings
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pl
 import matplotlib.ticker as mtick
@@ -1102,6 +1103,117 @@ class System:
                     var_list[i] = var
                 self.N,self.t,self.Nscatt,self.Nscattrate,self.v,self.r = var_list
             #self.N = np.array(self.N,dtype='float16')
+            
+    def draw_levels(self,GrSts=None,ExSts=None,branratios=True,lasers= True,
+                    QuNrs_sep=['v'], br_fun='lin', br_TH=1*1e-2, # 1e-16 default
+                    freq_clip_TH= 'auto', cmap='viridis'):
+        # from mpl.patches import ConnectionPatch
+        def draw_line(subfig,axes,xys,arrowstyle='->',dxyB=[0.,0.],**kwargs):
+            con = mpl.patches.ConnectionPatch(
+                xyA=xys[0], coordsA=axes[0].transData,
+                xyB=xys[1]+dxyB, coordsB=axes[1].transData,
+                arrowstyle=arrowstyle,
+                shrinkB=1,
+                **kwargs
+                )
+            subfig.add_artist(con)
+            axes[1].plot(*(xys[1]+dxyB)) #invisible line for automatically adjusting axis limits
+            
+        levels = self.levels
+        if GrSts == None:
+            GrSts = levels.grstates
+        if ExSts == None:
+            ExSts = levels.exstates
+        
+        # create big figure, and nested subfigures and subplot axes
+        fig          = plt.figure(constrained_layout=True)
+        # subfigures subfigs for dividing main axes content and axes for legends
+        subfigs      = fig.subfigures(1, 2, hspace=0.0, width_ratios=[5,1])
+        # Two main subfigures for ground and excited electronic state
+        height_ratios_main = [1, 2]
+        subfigs_main = subfigs[0].subfigures(2, 1, wspace=0.0, height_ratios=height_ratios_main )
+        subfigs_ExSts= subfigs_main[0].subfigures(1, len(ExSts), hspace=0.0, width_ratios=[Exs.N for Exs in levels.exstates],squeeze=False )[0]
+        subfigs_GrSts= subfigs_main[1].subfigures(1, len(GrSts), hspace=0.0, width_ratios=[Grs.N for Grs in levels.grstates],squeeze=False )[0]
+        # Two subfigure instances for legend and colorbar with each a single subplot axis
+        subfigs_leg  = subfigs[1].subfigures(2, 1, wspace=0.0, height_ratios=height_ratios_main )
+        axs_legend = subfigs_leg[1].subplots(1, 1)
+        ax_cbar   = subfigs_leg[0].subplots(1, 1)
+        make_axes_invisible(axs_legend)
+        #needed for drawing arrows on top over multiple figures
+        subfig_last = subfigs_GrSts[-1]
+        
+        # draw only levels first
+        coords_u = [ElSt.draw_levels(fig=subfigs_ExSts[i],QuNrs_sep=QuNrs_sep,xlabel_pos='top')
+                                     for i, ElSt in enumerate(ExSts)]
+        coords_l = [ElSt.draw_levels(fig=subfigs_GrSts[i],QuNrs_sep=QuNrs_sep)
+                                     for i, ElSt in enumerate(GrSts)]
+        
+        coords_l = coords_l[0] # condition that only one ground state is defined
+        
+        cmap        = mpl.cm.get_cmap()
+        
+        # map branching ratios onto a color using a certain function:
+        if branratios:
+            branratios  = levels.calc_branratios()
+            from scipy.interpolate import interp1d
+            if not callable(br_fun):
+                br_fun_dict = {'log10':np.log10,'lin':lambda x:x,'sqrt':np.sqrt}
+                if not br_fun in br_fun_dict: raise Exception('Not valid argument given for br_fun!')
+                br_fun      = br_fun_dict[br_fun]
+            # isolate all branratios over a certain threshold in a separate flattened array and apply function
+            br_flat     = br_fun(branratios[branratios > br_TH])
+            # map branratio onto interval [0,1] for colormap
+            map_br      = interp1d([br_flat.min(),br_flat.max()],[1,0])
+            
+            # iterate over states and draw branratios
+            N_ElSt = 0 # offset for multiple Excited electronic states
+            for ElSt,coords_u_ in zip(ExSts,coords_u):
+                for l,u in np.argwhere(branratios[:,N_ElSt:N_ElSt+ElSt.N] > br_TH):
+                    draw_line(subfig_last,
+                              axes=(coords_l['axes'][l], coords_u_['axes'][u]),
+                              xys=(coords_l['xy'][l], coords_u_['xy'][u]),
+                              arrowstyle='-',dxyB=[-0.2,0],alpha=0.5,
+                              linewidth=0.6,linestyle='--',
+                              color= cmap(map_br(br_fun(branratios[l,u]))))
+                N_ElSt += ElSt.N
+            # draw colorbar
+            norm        = mpl.colors.Normalize(vmax=br_flat.max(),vmin=br_flat.min())
+            bounds      = np.array(ax_cbar.get_position().bounds)
+            ax_cbar.set_position(bounds*np.array([1,1,0.2,1])) #left bottom width height
+            ax_cbar.tick_params(labelsize='small')
+            fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap.reversed()),
+                         ticks=np.linspace(br_flat.min(),br_flat.max(),5),
+                         format='%.2f',
+                         cax=ax_cbar, orientation='vertical', label='bran. ratio')
+        else:
+            make_axes_invisible(ax_cbar)
+            
+        # draw lasers onto their addressing transitions as arrows:
+        if lasers:
+            self.calc_OBEs(t_int=1e-11, t_start=0., dt=None, t_eval = [],
+                          magn_remixing=False, freq_clip_TH=freq_clip_TH, steadystate=False,
+                          position_dep=False, rounded=False,
+                          verbose=False, mp=False, return_fun=None, method='RK45')
+            N_ElSt = 0
+            for ElSt,coords_u_ in zip(ExSts,coords_u):
+                for l,u,k in np.argwhere(np.abs(self.Gfd[:,N_ElSt:N_ElSt+ElSt.N,:])>0):
+                    det = self.om_gek[l,u,k]*self.freq_unit/2/pi*1e-6
+                    draw_line(subfig_last,
+                              axes=(coords_l['axes'][l], coords_u_['axes'][u]),
+                              xys =(coords_l['xy'][l],   coords_u_['xy'][u]),
+                              arrowstyle='->',linestyle='-',dxyB=[+0.2,det],
+                              alpha=0.8,color='C'+str(k))#,
+                              # color= plt.cm.viridis(map_br(br_fun(branratios[l,u]))))
+                N_ElSt += ElSt.N
+            
+            # legend for lasers
+            import matplotlib.lines as mlines
+            handles = [mlines.Line2D([],[],lw=1,color='C'+str(k),label='{:d}: {:.0f}'.format(
+                k, la.lamb*1e9))#, la.P*1e3
+                for k,la in enumerate(self.lasers)]
+                
+            axs_legend.legend(handles=handles,loc='upper left',bbox_to_anchor=(0, 1),
+                              title='index: $\lambda$',fontsize='x-small')
 
 #%%
 class Bfield:
@@ -1926,6 +2038,30 @@ def open_object(filename):
     with open(filename+'.pkl','rb') as input:
         output = pickle.load(input)
     return output
+
+def make_axes_invisible(axes,xaxis=False,yaxis=False,
+                        invisible_spines=['top','bottom','left','right']):
+    """For advanced plotting: This function makes certain properties of an
+    matplotlib axes object invisible. By default everything of a new created
+    axes object is invisible.
+
+    Parameters
+    ----------
+    axes : matplotlib.axes.Axes object or iterable of objects
+        axes for which properties should be made inivisible.
+    xaxis : bool, optional
+        If xaxis is made invisible. The default is False.
+    yaxis : bool, optional
+        If yaxis is made invisible. The default is False.
+    invisible_spines : list of strings, optional
+        spines to be made invisible. The default is ['top','bottom','left','right'].
+    """
+    if not isinstance(axes,Iterable): axes = [axes]
+    for ax in axes:
+        ax.axes.get_xaxis().set_visible(xaxis)
+        ax.axes.get_yaxis().set_visible(yaxis)
+        for pos in invisible_spines:
+            ax.spines[pos].set_visible(False)
 
 #%%
 if __name__ == '__main__':
