@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.0.3
+v3.0.4
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -937,6 +937,32 @@ class ElectronicState():
                     
     def draw_levels(self, fig=None, QuNrs_sep=['v'], level_length=0.8,
                     xlabel_pos='bottom'):
+        """This method draws all levels of the Electronic state sorted
+        by certain Qunatum numbers.
+
+        Parameters
+        ----------
+        fig : Matplotlib.figure object, optional
+            Figure object into which the axes are drawn. The default is None which
+            corresponds to a default figure.
+        QuNrs_sep : list of str, optional
+            Quantum numbers for separating all levels into subplots.
+            By default the levels are grouped into subplots by the vibrational
+            Quantum number, i.e. ['v'].
+        level_length : float, optional
+            The length of each level line. 1.0 corresponds to no space between
+            neighboring level lines. The default is 0.8.
+        xlabel_pos : str, optional
+            Position of the xticks and their labels. Can be 'top' or 'bottom'.
+            The default is 'bottom'.
+
+        Returns
+        -------
+        coords : dict
+            Dictionary with the coordinates of the single levels in the respective
+            subplots. Two keys: 'axes' objects for every level index, and
+            'xy' np.array of size 2 for the level coordinates within each subplot.
+        """
         # check and verify the Quantum numbers for separation of the subplots QuNrs_sep
         QuNrs = self[0].QuNrs # the first states Quantum numbers (same as for all others)
         if len(QuNrs_sep) != 0:

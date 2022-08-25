@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.0.3
+v3.0.4
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -1104,9 +1104,42 @@ class System:
                 self.N,self.t,self.Nscatt,self.Nscattrate,self.v,self.r = var_list
             #self.N = np.array(self.N,dtype='float16')
             
-    def draw_levels(self,GrSts=None,ExSts=None,branratios=True,lasers= True,
-                    QuNrs_sep=['v'], br_fun='lin', br_TH=1*1e-2, # 1e-16 default
-                    freq_clip_TH= 'auto', cmap='viridis'):
+    def draw_levels(self,GrSts=None,ExSts=None,branratios=True,lasers=True,
+                    QuNrs_sep=['v'], br_fun='identity', br_TH=0.01, # 1e-16 default
+                    freq_clip_TH='auto', cmap='viridis'):
+        """This method draws all levels of certain Electronic states sorted
+        by certain Qunatum numbers. Additionally, the branching ratios and the
+        transitions addressed by the lasers can be added.
+
+        Parameters
+        ----------
+        GrSts : list of str, optional
+            list of labels of ground electronic states to be displayed.
+            The default is None which corresponds to all ground states.
+        ExSts : list of str, optional
+            list of labels of excited electronic states to be displayed.
+            The default is None which corresponds to all excited states.
+        branratios : bool, optional
+            Whether to show the branching ratios. The default is True.
+        lasers : bool, optional
+            Whether to show the transitions addressed by the lasers.
+            The default is True.
+        QuNrs_sep : list of str or tuple of two lists of str, optional
+            Quantum numbers for separating all levels into subplots.
+            By default the levels are grouped into subplots by the vibrational
+            Quantum number, i.e. ['v'] or (['v'],['v']) for ex. and gr. states.
+        br_fun : str or callable, optional
+            Function to be applied onto the branching ratios. Can be either
+            'identity', 'log10', 'sqrt', or a custom defined function.
+            The default is 'identity'.
+        br_TH : float, optional
+            Threshold for the branching ratios to be shown. The default is 0.01.
+        freq_clip_TH : TYPE, optional
+            Same argument as in OBE's calculation method ':func:`calc_OBEs`.
+            The default is 'auto'.
+        cmap : str, optional
+            Colormap to be applied to the branching ratios. The default is 'viridis'.
+        """
         # from mpl.patches import ConnectionPatch
         def draw_line(subfig,axes,xys,arrowstyle='->',dxyB=[0.,0.],**kwargs):
             con = mpl.patches.ConnectionPatch(
@@ -1122,13 +1155,17 @@ class System:
         levels = self.levels
         if GrSts == None:
             GrSts = levels.grstates
+        else:
+            GrSts = [levels.__dict__[label] for label in GrSts]
         if ExSts == None:
             ExSts = levels.exstates
-        
+        else:
+            ExSts = [levels.__dict__[label] for label in ExSts]
+            
         # create big figure, and nested subfigures and subplot axes
         fig          = plt.figure(constrained_layout=True)
         # subfigures subfigs for dividing main axes content and axes for legends
-        subfigs      = fig.subfigures(1, 2, hspace=0.0, width_ratios=[5,1])
+        subfigs      = fig.subfigures(1, 2, hspace=0.0, width_ratios=[4,1])
         # Two main subfigures for ground and excited electronic state
         height_ratios_main = [1, 2]
         subfigs_main = subfigs[0].subfigures(2, 1, wspace=0.0, height_ratios=height_ratios_main )
@@ -1143,21 +1180,24 @@ class System:
         subfig_last = subfigs_GrSts[-1]
         
         # draw only levels first
-        coords_u = [ElSt.draw_levels(fig=subfigs_ExSts[i],QuNrs_sep=QuNrs_sep,xlabel_pos='top')
+        if isinstance(QuNrs_sep,tuple): QuNrs_sep_u, QuNrs_sep_l = QuNrs_sep
+        else:                           QuNrs_sep_u, QuNrs_sep_l = 2*[QuNrs_sep]
+        
+        coords_u = [ElSt.draw_levels(fig=subfigs_ExSts[i],QuNrs_sep=QuNrs_sep_u,xlabel_pos='top')
                                      for i, ElSt in enumerate(ExSts)]
-        coords_l = [ElSt.draw_levels(fig=subfigs_GrSts[i],QuNrs_sep=QuNrs_sep)
+        coords_l = [ElSt.draw_levels(fig=subfigs_GrSts[i],QuNrs_sep=QuNrs_sep_l)
                                      for i, ElSt in enumerate(GrSts)]
         
         coords_l = coords_l[0] # condition that only one ground state is defined
         
-        cmap        = mpl.cm.get_cmap()
+        cmap        = mpl.cm.get_cmap(cmap)
         
         # map branching ratios onto a color using a certain function:
         if branratios:
             branratios  = levels.calc_branratios()
             from scipy.interpolate import interp1d
             if not callable(br_fun):
-                br_fun_dict = {'log10':np.log10,'lin':lambda x:x,'sqrt':np.sqrt}
+                br_fun_dict = {'log10':np.log10,'identity':lambda x:x,'sqrt':np.sqrt}
                 if not br_fun in br_fun_dict: raise Exception('Not valid argument given for br_fun!')
                 br_fun      = br_fun_dict[br_fun]
             # isolate all branratios over a certain threshold in a separate flattened array and apply function
@@ -1208,12 +1248,14 @@ class System:
             
             # legend for lasers
             import matplotlib.lines as mlines
-            handles = [mlines.Line2D([],[],lw=1,color='C'+str(k),label='{:d}: {:.0f}'.format(
-                k, la.lamb*1e9))#, la.P*1e3
+            handles = [mlines.Line2D([],[],lw=1,color='C'+str(k),label='{:d}: {:.0f}, {:.1f}'.format(
+                k, la.lamb*1e9, la.P*1e3))
                 for k,la in enumerate(self.lasers)]
                 
-            axs_legend.legend(handles=handles,loc='upper left',bbox_to_anchor=(0, 1),
-                              title='index: $\lambda$',fontsize='x-small')
+            legend = axs_legend.legend(handles=handles,loc='upper left',
+                                       bbox_to_anchor=(0, 1),fontsize='x-small',
+                                       title='i: $\lambda$ [nm], $P$ [mW]')
+            plt.setp(legend.get_title(),fontsize='x-small')
 
 #%%
 class Bfield:
