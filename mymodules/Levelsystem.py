@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.0.2
+v3.0.4
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -82,6 +82,7 @@ from scipy.constants import c,h,hbar,pi,g
 from scipy.constants import u as u_mass
 import constants
 from collections.abc import Iterable
+import matplotlib.pyplot as plt
 import warnings
 import os
 import numbers
@@ -532,7 +533,7 @@ class Levelsystem:
         self.__freq_arr *= 2*pi #make angular frequencies
         return self.__freq_arr
     
-    def states_in_DF(self,st1,st2,DF):
+    def states_in_DF(self,st1,st2,DF): #move this and the other function outside of the class with an kwarg verbose.
         ind_names = list(DF.index.names)
         col_names = list(DF.keys().names)
         for index1,row1 in DF.iterrows():
@@ -933,6 +934,93 @@ class ElectronicState():
             else:
                 for dict_QuNrs in list_of_dicts:
                     self.add(**dict_QuNrs)
+                    
+    def draw_levels(self, fig=None, QuNrs_sep=['v'], level_length=0.8,
+                    xlabel_pos='bottom'):
+        """This method draws all levels of the Electronic state sorted
+        by certain Qunatum numbers.
+
+        Parameters
+        ----------
+        fig : Matplotlib.figure object, optional
+            Figure object into which the axes are drawn. The default is None which
+            corresponds to a default figure.
+        QuNrs_sep : list of str, optional
+            Quantum numbers for separating all levels into subplots.
+            By default the levels are grouped into subplots by the vibrational
+            Quantum number, i.e. ['v'].
+        level_length : float, optional
+            The length of each level line. 1.0 corresponds to no space between
+            neighboring level lines. The default is 0.8.
+        xlabel_pos : str, optional
+            Position of the xticks and their labels. Can be 'top' or 'bottom'.
+            The default is 'bottom'.
+
+        Returns
+        -------
+        coords : dict
+            Dictionary with the coordinates of the single levels in the respective
+            subplots. Two keys: 'axes' objects for every level index, and
+            'xy' np.array of size 2 for the level coordinates within each subplot.
+        """
+        # check and verify the Quantum numbers for separation of the subplots QuNrs_sep
+        QuNrs = self[0].QuNrs # the first states Quantum numbers (same as for all others)
+        if len(QuNrs_sep) != 0:
+            for QuNr_sep in QuNrs_sep:
+                if not (QuNr_sep in QuNrs):
+                    raise Exception('wrong input parameter')
+        else:
+            QuNrs_sep = [QuNrs[0]]
+        
+        # assign state indices to certain Quantum number tuples, i.e. certain sublpots
+        QuNrs_sets = {}
+        for l,st in enumerate(self.states):
+            QuNr_set = tuple(st.__dict__[QuNr_sep] for QuNr_sep in QuNrs_sep) #what happens with loss state here?
+            if QuNr_set in QuNrs_sets:
+                QuNrs_sets[QuNr_set].append(l)
+            else:
+                QuNrs_sets[QuNr_set] = [l]
+
+        # calculate frequency shifts of each state #these lines should be an extra method to be used in calc_freq() method!?!
+        self._freq_arr = np.zeros(self.N)
+        DF = self.get_freq()
+        for l,st in enumerate(self.states):
+            if st.is_lossstate: #leave this restriction here?!
+                continue
+            val = Levelsystem.state_in_DF(Levelsystem(),st,DF)
+            if val != None: self._freq_arr[l] = val*1e6
+        
+        # create figure and subplot axes
+        if fig == None:
+            fig = plt.figure('Levels of {}'.format(self.label))
+        gs_kw = dict(width_ratios=[len(inds) for inds in QuNrs_sets.values()])#,right=0.9,left=0.1,top=1.0)
+        axs = fig.subplots(1, len(QuNrs_sets), gridspec_kw=gs_kw)
+        if not isinstance(axs,Iterable): axs = [axs]
+        
+        # coordinates: axes objects for every level index, and xy level coords within each subplot
+        coords = dict(axes=[None]*self.N,xy=np.zeros((self.N,2)))
+        # draw levels and xticks
+        axs[0].set_ylabel('Frequency [MHz]')
+        for ax,QuNrs_set,inds in zip(axs,QuNrs_sets.keys(),QuNrs_sets.values()):
+            if QuNrs_sep == [QuNrs[0]]:
+                title = self.label
+            else:
+                title_bracket = ','.join(['{}={}'.format(QuNr_sep,QuNrs_set[i])
+                                          for i,QuNr_sep in enumerate(QuNrs_sep)])
+                title = '{}$({})$'.format(self.label,title_bracket)
+            ax.set_xlabel(title)
+            ax.xaxis.set_label_position(xlabel_pos)
+            ax.xaxis.set_ticks_position(xlabel_pos)
+            for i,ind in enumerate(inds):
+                coords['xy'][ind,:] = i, self._freq_arr[ind]*1e-6
+                coords['axes'][ind] = ax
+                ax.plot([i-level_length/2,i+level_length/2],[self._freq_arr[ind]*1e-6]*2,
+                        color='k',linestyle='-',linewidth=1.)
+            ax.set_xticks(np.arange(len(inds)))
+            ax.set_xticklabels([str(ind) for ind in inds])
+        
+        return coords
+        
     #%%
     def get_freq(self):
         """Function returns a list of matrices for nicely displaying
