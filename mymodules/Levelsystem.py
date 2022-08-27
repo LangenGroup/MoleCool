@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.0.4
+v3.0.5
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -511,25 +511,31 @@ class Levelsystem:
         states = self.states
         lNum = self.lNum
         
-        DF = pd.concat([self.get_wavelengths(self.grstates_labels[0],exs)
-                        for exs in self.exstates_labels],axis=1)
-        for l,gr in enumerate(states[:lNum]):
-            for u,ex in enumerate(states[lNum:]):
-                val = self.states_in_DF(gr,ex,DF)
-                if (val != None) and (val != 0): self.__freq_arr[l,u] = c/(val*1e-9)
-        
-        DF = pd.concat([ElSt.get_freq() for ElSt in self.grstates])
-        for l,st in enumerate(states[:lNum]):
+        N_ElSts = 0
+        for ElSt in self.exstates:
+            DF = self.get_wavelengths(self.grstates_labels[0],ElSt.label)
+            for l,gr in enumerate(self.grstates[0].states):
+                for u,ex in enumerate(ElSt.states):
+                    val = self.states_in_DF(gr,ex,DF)
+                    if (val != None) and (val != 0):
+                        self.__freq_arr[l,N_ElSts+u] = c/(val*1e-9)
+            N_ElSts += ElSt.N
+            
+        DF = self.grstates[0].get_freq()
+        for l,st in enumerate(self.grstates[0].states):
             if st.is_lossstate: #leave this restriction here?!
                 continue
             val = self.state_in_DF(st,DF)
             if val != None: self.__freq_arr[l,:] -= val*1e6
-
-        DF = pd.concat([ElSt.get_freq() for ElSt in self.exstates])
-        for u,st in enumerate(states[lNum:]):
-            val = self.state_in_DF(st,DF)
-            if val != None: self.__freq_arr[:,u] += val*1e6
         
+        N_ElSts = 0
+        for ElSt in self.exstates:
+            DF = ElSt.get_freq()
+            for u,st in enumerate(ElSt.states):
+                val = self.state_in_DF(st,DF)
+                if val != None: self.__freq_arr[:,N_ElSts+u] += val*1e6
+            N_ElSts += ElSt.N
+            
         self.__freq_arr *= 2*pi #make angular frequencies
         return self.__freq_arr
     
@@ -936,7 +942,7 @@ class ElectronicState():
                     self.add(**dict_QuNrs)
                     
     def draw_levels(self, fig=None, QuNrs_sep=['v'], level_length=0.8,
-                    xlabel_pos='bottom'):
+                    xlabel_pos='bottom',ylabel=True,yaxis_unit='MHz'):
         """This method draws all levels of the Electronic state sorted
         by certain Qunatum numbers.
 
@@ -955,6 +961,12 @@ class ElectronicState():
         xlabel_pos : str, optional
             Position of the xticks and their labels. Can be 'top' or 'bottom'.
             The default is 'bottom'.
+        ylabel : bool, optional
+            Wheter the ylabel should be drawn onto the y-axis.
+        yaxis_unit : str or float, optional
+            Unit of the y-axis. Can be either 'MHz','1/cm', or 'Gamma' for the
+            natural linewidth. Alternatively, an arbitrary unit (in MHz) can be
+            given as float. Default is 'MHz'.
 
         Returns
         -------
@@ -989,6 +1001,23 @@ class ElectronicState():
                 continue
             val = Levelsystem.state_in_DF(Levelsystem(),st,DF)
             if val != None: self._freq_arr[l] = val*1e6
+        self._freq_arr *= 2*pi #make angular frequencies
+        freq_arr = self._freq_arr/2/pi*1e-6 # in MHz  
+            
+        # frequency unit for y-axis
+        if isinstance(yaxis_unit,str):
+            if yaxis_unit == 'Gamma' and self.gs_exs == 'gs':
+                warnings.warn("Gamma (natural decay rate) is not defined for an\
+                             electronic ground state. So, 'MHz' is set instead.")
+                ylabel_unit, yaxis_unit = 'MHz', 1.0
+            elif yaxis_unit == 'Gamma' and self.gs_exs == 'exs':
+                ylabel_unit, yaxis_unit = '$\Gamma$', self.Gamma
+            else:
+                ylabel_unit = yaxis_unit
+                cm2MHz      = 299792458.0*100*1e-6
+                yaxis_unit  = {'MHz':1.0, '1/cm':cm2MHz}[yaxis_unit]
+        else:
+            ylabel_unit = '{:.2f} MHz'.format(yaxis_unit)
         
         # create figure and subplot axes
         if fig == None:
@@ -998,9 +1027,11 @@ class ElectronicState():
         if not isinstance(axs,Iterable): axs = [axs]
         
         # coordinates: axes objects for every level index, and xy level coords within each subplot
-        coords = dict(axes=[None]*self.N,xy=np.zeros((self.N,2)))
+        coords = dict(axes=[None]*self.N,
+                      xy=np.zeros((self.N,2)),
+                      yaxis_unit=yaxis_unit)
         # draw levels and xticks
-        axs[0].set_ylabel('Frequency [MHz]')
+        if ylabel: axs[0].set_ylabel('Freq. [{}]'.format(ylabel_unit))
         for ax,QuNrs_set,inds in zip(axs,QuNrs_sets.keys(),QuNrs_sets.values()):
             if QuNrs_sep == [QuNrs[0]]:
                 title = self.label
@@ -1012,9 +1043,10 @@ class ElectronicState():
             ax.xaxis.set_label_position(xlabel_pos)
             ax.xaxis.set_ticks_position(xlabel_pos)
             for i,ind in enumerate(inds):
-                coords['xy'][ind,:] = i, self._freq_arr[ind]*1e-6
+                coords['xy'][ind,:] = i, freq_arr[ind]/yaxis_unit
                 coords['axes'][ind] = ax
-                ax.plot([i-level_length/2,i+level_length/2],[self._freq_arr[ind]*1e-6]*2,
+                ax.plot([i-level_length/2,i+level_length/2],
+                        [freq_arr[ind]/yaxis_unit]*2,
                         color='k',linestyle='-',linewidth=1.)
             ax.set_xticks(np.arange(len(inds)))
             ax.set_xticklabels([str(ind) for ind in inds])

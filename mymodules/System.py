@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.0.4
+v3.0.5
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -1106,7 +1106,7 @@ class System:
             
     def draw_levels(self,GrSts=None,ExSts=None,branratios=True,lasers=True,
                     QuNrs_sep=['v'], br_fun='identity', br_TH=0.01, # 1e-16 default
-                    freq_clip_TH='auto', cmap='viridis'):
+                    freq_clip_TH='auto', cmap='viridis',yaxis_unit='MHz'):
         """This method draws all levels of certain Electronic states sorted
         by certain Qunatum numbers. Additionally, the branching ratios and the
         transitions addressed by the lasers can be added.
@@ -1139,6 +1139,10 @@ class System:
             The default is 'auto'.
         cmap : str, optional
             Colormap to be applied to the branching ratios. The default is 'viridis'.
+        yaxis_unit : str or float, optional
+            Unit of the y-axis. Can be either 'MHz','1/cm', or 'Gamma' for the
+            natural linewidth. Alternatively, an arbitrary unit (in MHz) can be
+            given as float. Default is 'MHz'.
         """
         # from mpl.patches import ConnectionPatch
         def draw_line(subfig,axes,xys,arrowstyle='->',dxyB=[0.,0.],**kwargs):
@@ -1165,12 +1169,12 @@ class System:
         # create big figure, and nested subfigures and subplot axes
         fig          = plt.figure(constrained_layout=True)
         # subfigures subfigs for dividing main axes content and axes for legends
-        subfigs      = fig.subfigures(1, 2, hspace=0.0, width_ratios=[4,1])
+        subfigs      = fig.subfigures(1, 2, hspace=0.0, width_ratios=[5,1.5])
         # Two main subfigures for ground and excited electronic state
         height_ratios_main = [1, 2]
         subfigs_main = subfigs[0].subfigures(2, 1, wspace=0.0, height_ratios=height_ratios_main )
-        subfigs_ExSts= subfigs_main[0].subfigures(1, len(ExSts), hspace=0.0, width_ratios=[Exs.N for Exs in levels.exstates],squeeze=False )[0]
-        subfigs_GrSts= subfigs_main[1].subfigures(1, len(GrSts), hspace=0.0, width_ratios=[Grs.N for Grs in levels.grstates],squeeze=False )[0]
+        subfigs_ExSts= subfigs_main[0].subfigures(1, len(ExSts), hspace=0.0, width_ratios=[Exs.N for Exs in ExSts],squeeze=False )[0]
+        subfigs_GrSts= subfigs_main[1].subfigures(1, len(GrSts), hspace=0.0, width_ratios=[Grs.N for Grs in GrSts],squeeze=False )[0]
         # Two subfigure instances for legend and colorbar with each a single subplot axis
         subfigs_leg  = subfigs[1].subfigures(2, 1, wspace=0.0, height_ratios=height_ratios_main )
         axs_legend = subfigs_leg[1].subplots(1, 1)
@@ -1183,14 +1187,24 @@ class System:
         if isinstance(QuNrs_sep,tuple): QuNrs_sep_u, QuNrs_sep_l = QuNrs_sep
         else:                           QuNrs_sep_u, QuNrs_sep_l = 2*[QuNrs_sep]
         
-        coords_u = [ElSt.draw_levels(fig=subfigs_ExSts[i],QuNrs_sep=QuNrs_sep_u,xlabel_pos='top')
+        coords_u = [ElSt.draw_levels(fig=subfigs_ExSts[i], QuNrs_sep=QuNrs_sep_u,
+                                     yaxis_unit=yaxis_unit, ylabel=not bool(i),
+                                     xlabel_pos='top')
                                      for i, ElSt in enumerate(ExSts)]
-        coords_l = [ElSt.draw_levels(fig=subfigs_GrSts[i],QuNrs_sep=QuNrs_sep_l)
+        coords_l = [ElSt.draw_levels(fig=subfigs_GrSts[i], QuNrs_sep=QuNrs_sep_l,
+                                     yaxis_unit=yaxis_unit)
                                      for i, ElSt in enumerate(GrSts)]
         
         coords_l = coords_l[0] # condition that only one ground state is defined
         
         cmap        = mpl.cm.get_cmap(cmap)
+        
+        # offset for multiple Excited electronic states
+        def Exs_ind_offset(label):
+            if not isinstance(label,str):
+                label = label.label #if label is ElectronicState object instead of label
+            ind = self.levels.exstates_labels.index(label)
+            return sum([self.levels.exstates[i].N for i in range(ind)])
         
         # map branching ratios onto a color using a certain function:
         if branratios:
@@ -1206,16 +1220,15 @@ class System:
             map_br      = interp1d([br_flat.min(),br_flat.max()],[1,0])
             
             # iterate over states and draw branratios
-            N_ElSt = 0 # offset for multiple Excited electronic states
             for ElSt,coords_u_ in zip(ExSts,coords_u):
-                for l,u in np.argwhere(branratios[:,N_ElSt:N_ElSt+ElSt.N] > br_TH):
+                N = Exs_ind_offset(ElSt)
+                for l,u in np.argwhere(branratios[:,N:N+ElSt.N] > br_TH): #does not work when ExSts are switched, e.g. ['B','A']??!
                     draw_line(subfig_last,
                               axes=(coords_l['axes'][l], coords_u_['axes'][u]),
                               xys=(coords_l['xy'][l], coords_u_['xy'][u]),
                               arrowstyle='-',dxyB=[-0.2,0],alpha=0.5,
                               linewidth=0.6,linestyle='--',
-                              color= cmap(map_br(br_fun(branratios[l,u]))))
-                N_ElSt += ElSt.N
+                              color= cmap(map_br(br_fun(branratios[l,N+u]))))
             # draw colorbar
             norm        = mpl.colors.Normalize(vmax=br_flat.max(),vmin=br_flat.min())
             bounds      = np.array(ax_cbar.get_position().bounds)
@@ -1223,33 +1236,35 @@ class System:
             ax_cbar.tick_params(labelsize='small')
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap.reversed()),
                          ticks=np.linspace(br_flat.min(),br_flat.max(),5),
-                         format='%.2f',
+                         format='{:.2%}'.format,
                          cax=ax_cbar, orientation='vertical', label='bran. ratio')
         else:
             make_axes_invisible(ax_cbar)
             
         # draw lasers onto their addressing transitions as arrows:
         if lasers:
+            ls_fun = lambda x: ['-','-.',':'][x//10]
             self.calc_OBEs(t_int=1e-11, t_start=0., dt=None, t_eval = [],
                           magn_remixing=False, freq_clip_TH=freq_clip_TH, steadystate=False,
                           position_dep=False, rounded=False,
                           verbose=False, mp=False, return_fun=None, method='RK45')
-            N_ElSt = 0
+            
             for ElSt,coords_u_ in zip(ExSts,coords_u):
-                for l,u,k in np.argwhere(np.abs(self.Gfd[:,N_ElSt:N_ElSt+ElSt.N,:])>0):
-                    det = self.om_gek[l,u,k]*self.freq_unit/2/pi*1e-6
+                N = Exs_ind_offset(ElSt)
+                for l,u,k in np.argwhere(np.abs(self.Gfd[:,N:N+ElSt.N,:])>0):
+                    det = self.om_gek[l,N+u,k]*self.freq_unit/2/pi*1e-6/coords_u_['yaxis_unit']
                     draw_line(subfig_last,
                               axes=(coords_l['axes'][l], coords_u_['axes'][u]),
                               xys =(coords_l['xy'][l],   coords_u_['xy'][u]),
-                              arrowstyle='->',linestyle='-',dxyB=[+0.2,det],
-                              alpha=0.8,color='C'+str(k))#,
-                              # color= plt.cm.viridis(map_br(br_fun(branratios[l,u]))))
-                N_ElSt += ElSt.N
+                              arrowstyle='->',linestyle=ls_fun(k),dxyB=[+0.2,det],
+                              alpha=0.8,color='C'+str(k))
             
             # legend for lasers
             import matplotlib.lines as mlines
-            handles = [mlines.Line2D([],[],lw=1,color='C'+str(k),label='{:d}: {:.0f}, {:.1f}'.format(
-                k, la.lamb*1e9, la.P*1e3))
+            handles = [mlines.Line2D([],[],lw=1,color='C'+str(k),ls=ls_fun(k),
+                                     label='{:d}: {:.0f}, {:.1f}'.format(
+                                         k, la.lamb*1e9, la.P*1e3)
+                                     )
                 for k,la in enumerate(self.lasers)]
                 
             legend = axs_legend.legend(handles=handles,loc='upper left',
