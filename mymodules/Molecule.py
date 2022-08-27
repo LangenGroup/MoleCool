@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.0
+v0.3.1
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -81,6 +81,10 @@ try:
     def w6j(j_1, j_2, j_3, j_4, j_5, j_6):
         """returns Wigner 6j-symbol with arguments (j_1, j_2, j_3, j_4, j_5, j_6)"""
         return wig.wig6jj(int(2*j_1), int(2*j_2), int(2*j_3), int(2*j_4), int(2*j_5), int(2*j_6))
+    max_two_j = 2*80
+    # wig.wig_table_init(max_two_j,3)
+    wig.wig_table_init(max_two_j,6)
+    wig.wig_temp_init(max_two_j)
 except ModuleNotFoundError:
     def w3j(j_1, j_2, j_3, m_1, m_2, m_3):
         """returns Wigner 3j-symbol with arguments (j_1, j_2, j_3, m_1, m_2, m_3)"""
@@ -303,8 +307,8 @@ class Molecule:
         st_l_arr, st_u_arr = np.where( (self.E > Emin) & (self.E < Emax) & (self.branratios > 0.0))
         for i in range(st_l_arr.size):
             st_l,st_u = st_l_arr[i], st_u_arr[i]
-            print('lower eigenstate {:3} & upper eigenstate {:3}, branratio {:3.0f}%, energy {:.7e}'.format(
-                st_l,st_u,self.branratios[st_l,st_u]*100,self.E[st_l,st_u]))
+            print('lower eigenstate {:3} & upper eigenstate {:3}, branratio{:5.1f}%, energy {:8f} THz'.format(
+                st_l,st_u,self.branratios[st_l,st_u]*100,self.E[st_l,st_u]*cm2MHz*1e-6))
         # for st_l in np.unique(st_l_arr):
         #     print(self.X.Ev[:,st_l])
         
@@ -680,7 +684,7 @@ class ElectronicState:
             self.Gamma  = None
         
         # vibrational level
-        self.nu         = nu #have to be called after init of self.const
+        self.__nu         = nu #have to be called after init of self.const
         #self.parity or symmetry for Sigma states --> + or -
         if self.S > 0:  self.shell = 'open'
         else:           self.shell = 'closed'
@@ -923,7 +927,11 @@ class ElectronicState:
             #render dataframe as html
             html = DF1.to_html()
             #write html to file
-            text_file = open("eigenstates.html", "w")
+            if isinstance(createHTML,str):
+                filename = createHTML
+            else:
+                filename = "eigenstates"
+            text_file = open(filename+".html", "w")
             text_file.write(html)
             text_file.close()
         else:
@@ -1071,6 +1079,7 @@ class ElectronicState:
     
     @nu.setter
     def nu(self,val):
+        if (val == self.const.nu) & (val == self.__nu): return
         if not isint(val):
             raise ValueError('given value {} is no integer!'.format(val))
         self.const.nu = val
