@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.0.5
+v3.0.6
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -566,7 +566,7 @@ class System:
         # if not average_levels: self.Rabi_freqs = np.transpose(Rabi_freqs,axes=(1,2,0))
         # return Rabi_freqs
     
-    def plot_F(self,figname=None):
+    def plot_F(self,figname=None,axes=['x','y','z']):
         """plot the Force over time for all three axes 'x','y', and'z'."""
         if figname == None:
             plt.figure('F ({}): {}, {}, {}'.format(
@@ -576,7 +576,8 @@ class System:
         lamb = c/(self.levels.calc_freq()[0,0]/2/pi)
         F = self.F/ (hbar*2*pi/860e-9*self.Gamma[0]/2)
         ls_arr = ['-','--','-.']
-        for i,axis in enumerate(['x','y','z']):
+        for axis in axes:
+            i = {'x':0,'y':1,'z':2}[axis]
             plt.plot(self.t*1e6,F[i,:],label='$F_{}$'.format(axis),ls=ls_arr[i])
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Force $F$ in $\hbar k \Gamma_{}/2$'.format(self.levels.exstates_labels[0]))

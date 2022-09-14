@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v3.0.0
+v3.0.6
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -260,9 +260,9 @@ class Lasersystem:
         '''
         return self.get_intensity_func(**kwargs)(r)
         
-    def plot_I_2D(self,ax='x',axshift=0,limits=([-0.05,0.05],[-0.05,0.05])):
-        """plot the intensity distribution of all laser beams by using the
-        method :func:`get_intensity_func`.
+    def plot_I_2D(self,ax='x',axshift=0,limits=([-0.05,0.05],[-0.05,0.05]),Npoints=201):
+        """plot the 2D intensity distribution of all laser beams along two axes
+        by using the method :func:`get_intensity_func`.
         
         Parameters
         ----------
@@ -276,6 +276,8 @@ class Lasersystem:
             determines the minimum and maximum limit for both axes which lies
             in the plane to be plotted.
             The default is ([-0.05,0.05],[-0.05,0.05]).
+        Npoints : int, optional
+            Number of plotting points for each axis. The default is 201.
         """
         axshift = float(axshift)
         xyz = {'x':0,'y':1,'z':2}
@@ -283,11 +285,11 @@ class Lasersystem:
         del xyz[ax]
         axes_ = np.array([*xyz.values()])
         lim1,lim2 = limits
-        x1,x2 = np.linspace(lim1[0],lim1[1],201),np.linspace(lim2[0],lim2[1],201)
+        x1,x2 = np.linspace(lim1[0],lim1[1],Npoints),np.linspace(lim2[0],lim2[1],Npoints)
         Z = np.zeros((len(x1),len(x2)))
         r = np.zeros(3)
-        for i in range(201):
-            for j in range(201):
+        for i in range(Npoints):
+            for j in range(Npoints):
                 r[ax_] = axshift
                 r[axes_] = x1[i],x2[j]
                 Z[i,j] = self.I_tot(r,sum_lasers=True,use_jit=True)
@@ -302,6 +304,50 @@ class Lasersystem:
         plt.xlabel('position {} in mm'.format(keys[0]))
         plt.ylabel('position {} in mm'.format(keys[1]))
     
+    def plot_I_1D(self,ax='x',axshifts=[0,0],limits=[-0.05,0.05],
+                  Npoints=1001,label=None):
+        """plot the 1D intensity distribution of all laser beams along an axis
+        by using the method :func:`get_intensity_func`.
+
+        Parameters
+        ----------
+        ax : str, optional
+            axis along which the intensity distribution is plotted. The default is 'x'.
+        axshifts : list, optional
+            shifts in m of the other two axes besides `ax`. The default is [0,0].
+        limits : list, optional
+            determines the minimum and maximum limit for the axis `ax`.
+            The default is [-0.05,0.05].
+        Npoints : int, optional
+            Number of plotting points along the axis `ax`. The default is 1001.
+        label : str, optional
+            label for the plotted curve. If None, the label shows the values of
+            `axshifts`. The default is None.
+        """
+        axshifts = np.array(axshifts,dtype=float) # shifting other two axes with offset
+        xyz = {'x':0,'y':1,'z':2}
+        ax_ = xyz[ax] # index of the axis on which we want to plot the intensity
+        del xyz[ax]
+        axes = list(xyz.keys())
+        axes_ = np.array([*xyz.values()])
+        
+        # plt.figure('Intensity over x')
+        x_arr = np.linspace(limits[0],limits[1],Npoints)
+        y_arr = np.zeros(Npoints)
+        
+        r = np.zeros((Npoints,3))
+        r[:,axes_] += axshifts
+        r[:,ax_]    = x_arr
+        for i,r_i in enumerate(r):
+            y_arr[i] = self.I_tot(r_i,sum_lasers=True,use_jit=True)
+            
+        if label == None:
+            label = '{}={:.2f}mm, {}={:.2f}mm'.format(axes[0],axshifts[0]*1e3,axes[1],axshifts[1]*1e3)
+        plt.plot(x_arr*1e3,y_arr,label=label)
+        plt.legend()
+        plt.xlabel('position {} in mm'.format(ax))
+        plt.ylabel('Intensitiy $I$ in W/m$^2$')
+        
     def __delitem__(self,index):
         """delete lasers using del system.lasers[<normal indexing>], or delete all del system.lasers[:]"""
         #delete lasers with del system.lasers[<normal indexing>], or delete all del system.lasers[:]
