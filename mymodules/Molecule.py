@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.1
+v0.3.2
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -547,21 +547,65 @@ class ElectronicStateConstants:
 
         return const_new
     
-    def to_dict(self):
-        """Converts the defined constants to a dictionary which also includes
-        the calculated values :meth:`B_v` and :meth:`D_v`.
-
+    def to_dict(self,include_vdep_consts=True,exclude_default=False):
+        """Converts the defined constants to a dictionary which can also include
+        calculated values, e.g. :meth:`B_v` and :meth:`D_v`.
+        
+        Parameters
+        ----------
+        include_vdep_consts : bool, optional
+            whether the dictionary includes also the calculated values, e.g.
+            :meth:`B_v`,:meth:`D_v`, and :meth:`A_v`. The default is True.
+        exclude_default : bool, optional
+            whether the dictionary includes all possible constants (False) or only
+            the constants which differ from the default values (True).
+            The default is False.
+            
         Returns
         -------
         dic : dict
             dictionary with all defined constants.
         """
         dic = {key : self.__dict__[key] for key in self.const_all}
-        dic['A_v'] = self.A_v
-        dic['B_v'] = self.B_v
-        dic['D_v'] = self.D_v
+        
+        if exclude_default:
+            for key,value in dic.copy().items():
+                if value == self.constants_zero[key]:
+                    dic.pop(key)
+                    
+        if include_vdep_consts:
+            dic['A_v'] = self.A_v
+            dic['B_v'] = self.B_v
+            dic['D_v'] = self.D_v
+            
         return dic
+    
+    def update(self,const,exclude_default=True,use_consts=[]):
+        """Update the constants defined in the current constants instance
+        (:class:`ElectronicStateConstants`) with the ones from another one.
 
+        Parameters
+        ----------
+        const : :class:`ElectronicStateConstants`
+            the instance including the constants values for updating the current
+            constants instance.
+        exclude_default : bool, optional
+            Same keyword argument as in :meth:`to_dict`. The default is True.
+        use_consts : list, optional
+            If it is desired to only update a certain set of constants, one can
+            specify these constants in a list of strings, e.g. ['b_F','c'].
+            The default is [].
+        """
+        # convert constants to dictionary dic
+        dic = const.to_dict(include_vdep_consts=False,exclude_default=exclude_default)
+        
+        # if use_consts does not contain any elements, use all constants in dic
+        if len(use_consts) == 0:
+            use_consts = list(dic.keys())
+        
+        for key in use_consts:
+            self[key] = dic[key] #update constants from dic
+            
     def DunhamCoeffs(self):
         """Handling the Dunham coefficients. Under construction.."""
         pass
@@ -636,7 +680,9 @@ class ElectronicState:
             respective Greek symbol :math:`\Sigma,\Pi,\Delta,\Phi,...`.
         Hcase : string, optional
             Hund's case describing the states within the electronic
-            state manifold. The default is 'a'.
+            state manifold.
+            Possible values: 'a' for pure Hund's case a, 'a_p' for parity
+            conserved case a, and 'b' for case b. The default is 'a'.
         nu : int, optional
             vibrational quantum number for the vibrational levels.
             The default is 0.
@@ -670,6 +716,8 @@ class ElectronicState:
         else:
             self.L  = {'Sigma':0, 'Pi':1, 'Delta':2, 'Phi':3, 'Gamma':4}[L]
         # Hund's case
+        if not Hcase in ['a','a_p','b']:
+            raise Exception('Provided Hunds case {} is not valid!'.format(Hcase))
         self.Hcase      = Hcase
         #constants
         if type(const) == ElectronicStateConstants:
@@ -887,7 +935,8 @@ class ElectronicState:
         
         self.eigenst_already_calc = True
         
-    def get_eigenstates(self,precision=4,onlygoodQuNrs=True,createHTML=False):
+    def get_eigenstates(self,precision=4,onlygoodQuNrs=True,createHTML=False,
+                        Hcasebasis=False):
         """
         returns the sorted eigenenergies and respective eigenstates determined
         by the method :func:`calc_eigenstates` in a nice format via the datatype
@@ -901,9 +950,13 @@ class ElectronicState:
         onlygoodQuNrs : bool, optional
             specifies if only the good Quantum numbers are included for getting
             a better overview of the printed DataFrame. The default is True.
-        createHTML : bool, optional
+        createHTML : bool or str, optional
             if True a Html file `eigenstates.html` with the DataFrame is generated
-            for a better view of the eigenstates. The default is False.
+            for a better view of the eigenstates. If a string is given, the file
+            will be saved as the respective filename. The default is False.
+        Hcasebasis : bool, optional
+            If the basis of the eigenenergies is given in pure Hund's case a
+            states (False) or in the specified Hund's case basis. The default is False.
 
         Returns
         -------
@@ -918,10 +971,16 @@ class ElectronicState:
         if not self.eigenst_already_calc: self.calc_eigenstates()
         
         col_arr = [np.arange(len(self.Ew)),np.around(self.Ew,precision)]
-        DF1 = pd.DataFrame(self.Ev, 
-                           index=pd.MultiIndex.from_frame(
-                               self.get_purestates(onlygoodQuNrs=onlygoodQuNrs)),
-                           columns=pd.MultiIndex.from_arrays(col_arr,names=('eigenvector i','eigenvalue')))
+        if Hcasebasis and (self.Hcase != 'a'):
+            DF1 = pd.DataFrame(np.matmul(self.calc_basis_change(),self.Ev), 
+                               index=pd.MultiIndex.from_frame(
+                                   self.get_states_as_DF(onlygoodQuNrs=onlygoodQuNrs,Hcasebasis=True)),
+                               columns=pd.MultiIndex.from_arrays(col_arr,names=('eigenvector i','eigenvalue')))
+        else:
+            DF1 = pd.DataFrame(self.Ev, 
+                               index=pd.MultiIndex.from_frame(
+                                   self.get_states_as_DF(onlygoodQuNrs=onlygoodQuNrs)),
+                               columns=pd.MultiIndex.from_arrays(col_arr,names=('eigenvector i','eigenvalue')))
         DF1 = DF1.round(precision)
         if createHTML:
             #render dataframe as html
@@ -937,9 +996,8 @@ class ElectronicState:
         else:
             return DF1
         
-    def get_purestates(self,onlygoodQuNrs=False):
-        """
-        returns the pure states included in the instance :class:`ElectronicState`
+    def get_states_as_DF(self,onlygoodQuNrs=False,Hcasebasis=False):
+        """returns the states included in the instance :class:`ElectronicState`
         in a nice format via the datatype `pandas.DataFrame` in order to be printed.
         But at first any states have to be added via :func:`build_states`.
 
@@ -948,16 +1006,49 @@ class ElectronicState:
         onlygoodQuNrs : bool, optional
             specifies if only the good Quantum numbers are included for getting
             a better overview of the printed DataFrame. The default is False.
+        Hcasebasis : bool, optional
+            specifies whether the pure states or the states in the respective
+            Hund's case basis are shown.
 
         Returns
         -------
         pandas.DataFrame
             the rounded DataFrame comprising the pure states to be nicely printed
         """
-        for i,st in enumerate(self.states):
+        if Hcasebasis:
+            if len(self.states_Hcase) == 0:
+                self.calc_basis_change()
+            states = self.states_Hcase
+        else:
+            states = self.states
+            
+        for i,st in enumerate(states):
             if i==0: DF = st.DF(onlygoodQuNrs)
-            else: DF = DF.append(st.DF(onlygoodQuNrs),ignore_index=True)
+            else:    DF = DF.append(st.DF(onlygoodQuNrs),ignore_index=True)
         return DF
+    
+    def calc_basis_change(self):
+        '''Calculates the Hund's case states from the pure case a states and determines
+        the transformation matrix from the pure state basis to another Hund's case basis.
+
+        Returns
+        -------
+        np.ndarray
+            Transformation matrix from pure to Hund's case basis.
+        '''
+        self.states_Hcase = []
+        self.HcaseBasis = np.zeros((self.N,self.N))
+        for i_p,st_p in enumerate(self.states):
+            lincom = st_p.to_Hcase(Hcase=self.Hcase)
+            for prefac,st_H in zip(lincom['prefacs'],lincom['states']):
+                if not st_H in self.states_Hcase:
+                    i_H = len(self.states_Hcase)
+                    self.states_Hcase.append(st_H)
+                else:
+                    i_H = self.states_Hcase.index(st_H)
+                self.HcaseBasis[i_H,i_p] = prefac
+                
+        return self.HcaseBasis
     
     def get_gfactors(self,Bmax=0.01e-4):
         """calculates the mixed g-factors for every hyperfine level eigenstate.
@@ -1099,7 +1190,10 @@ class ElectronicState:
     
 #%%
 class Hcasea:
-    goodQuNrs = ['L','Si','Om','J','F'] #different for Fermions and bosons?
+    #: good QuNrs for a pure Hund's case a
+    goodQuNrs = ['L','Si','Om','J','F'] #different for Fermions and bosons? #difference between L and La (Lambda)?
+    description = 'Hunds case a (pure state)'
+    
     def __init__(self,**kwargs):
         """Instance of the class represents a molecular state as Hund's case a.
 
@@ -1112,27 +1206,94 @@ class Hcasea:
         self.__dict__.update(kwargs)
         self.QuNrs = list(kwargs.keys()) # convert to list since otherwise an error arises with pickle
         # check if all quantum numbers except L and Si are positive!!?
-    def __str__(self):
-        print(self.DF())
-        return 'Hunds case a'
+        self.linearcombi = {}
     
+    def to_Hcase(self,Hcase='b',printing=False):
+        """transforms the pure Hund's case a state into another Hund's case basis.        
+
+        Parameters
+        ----------
+        Hcase : str, optional
+            Hund's case basis for transformation. The default is 'b'.
+        printing : bool, optional
+            if the linear combination of the states of the new basis is printed.
+            The default is False.
+
+        Returns
+        -------
+        dict
+            linear combination of the states of the new Hund's case basis as a
+            dictionary with the keys `prefacs` and `states`.
+        """
+        if not Hcase in self.linearcombi:
+            states, prefacs  = [], []
+            if Hcase == 'a':
+                states.append(self)
+                prefacs.append(+1)
+            elif Hcase == 'a_p':
+                for P,prefac in zip([+1,-1], np.array([+1,self.L])*(-1)**(self.J-self.S)/np.sqrt(2)):
+                    if prefac == 0: continue
+                    states.append(Hcasea_p(L=abs(self.L),P=P,Om=abs(self.Om),J=self.J,F=self.F,S=self.S,I1=self.I1,I2=self.I2))
+                    prefacs.append(prefac)
+            elif Hcase == 'b':
+                for N in addJ(self.S,self.J):
+                    prefac = np.sqrt(2*N+1)*phs(self.J+self.Om)*w3j(self.S,N,self.J,self.Si,self.L,-self.Om)
+                    if prefac == 0: continue
+                    states.append(Hcaseb(L=self.L,N=N,J=self.J,F=self.F,S=self.S,I1=self.I1,I2=self.I2))
+                    prefacs.append(prefac)
+            else: # Transformation for the fermions is missing?!
+                raise ValueError("Invalid string value '{}' for `Hcase` parameter".format(Hcase))
+            self.linearcombi[Hcase] = dict(states=states, prefacs=prefacs)
+        
+        if printing:
+            for prefac, state in zip(self.linearcombi[Hcase]['prefacs'],
+                                     self.linearcombi[Hcase]['states']):
+                print('{:+.4f} *\n{}'.format(prefac,state,end='\n'))
+        
+        return self.linearcombi[Hcase]
+
     def DF(self,onlygoodQuNrs=False):
+        """return a DataFrame as nice representation of the state with all quantum numbers.
+
+        Parameters
+        ----------
+        onlygoodQuNrs : bool, optional
+            if all quantum numbers or only the good ones are shown. The default is False.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame showing the quantum numbers.
+        """
         if onlygoodQuNrs:
             QuNrs = self.goodQuNrs
-        else: QuNrs = self.QuNrs
-        return pd.DataFrame([[self.__dict__[Nr] for Nr in QuNrs]],columns=QuNrs)
-    # maybe new hunds case for two nuclear spins with an option: stron coupling I1 and weak I2 =True
-    def to_Hcaseb(self):
-        # return Hcaseb(quNrs,states=[],prefactors=[])
-        prefacs = []
-        for N in addJ(self.S,self.J):
-            prefac = np.sqrt(2*N+1)*phs(self.J+self.Om)*w3j(self.S,N,self.J,self.Si,self.L,-self.Om)
-            print('{:+.4f} * |N={}> '.format(prefac,N),end=' ')
+        else:
+            QuNrs = self.QuNrs
+        return pd.DataFrame([[self.__dict__[Nr] for Nr in QuNrs]],columns=QuNrs) 
+
+    def __str__(self):
+        return self.DF().to_string() + '\n' + self.description
+
+    def __eq__(self, other):
+        if len(self.QuNrs) != len(other.QuNrs):
+            return False
+        else:
+            for QuNr in self.QuNrs:
+                if self.__dict__[QuNr] != other.__dict__[QuNr]:
+                    return False
+        return True
+
+class Hcasea_p(Hcasea):
+    #: good QuNrs for a Hund's case a (parity conserved)
+    goodQuNrs = ['P','Om','J','F'] #different for Fermions and bosons?
+    description = 'Hunds case a (parity conserved)'
     
-# class Eigenstates: #??
-#     def __init__(self):
-#         pass
-        
+class Hcaseb(Hcasea):
+    #: good QuNrs for a pure Hund's case b
+    goodQuNrs = ['L','N','J','F'] #different for Fermions and bosons?
+    description = 'Hunds case b'
+    
+# maybe new hunds case for two nuclear spins with an option: stron coupling I1 and weak I2 =True   
 
 #%% Hamiltonians
 def H_tot(x,y,const):
@@ -1474,8 +1635,8 @@ if __name__ == '__main__':
     mass137     = 137 + 19
     #%% bosonic 138BaF
     BaF = Molecule(I1=0.5,naturalabund=0.717,label='138 BaF',mass=mass138)
-    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138) #for ground state
-    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma,const=const_ex_138) #for excited state
+    BaF.add_electronicstate('X',2,'Sigma', Hcase='b',const=const_gr_138) #for ground state
+    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma, Hcase='a_p',const=const_ex_138) #for excited state
     BaF.X.build_states(Fmax=9)
     BaF.A.build_states(Fmax=9)
     print(BaF)
@@ -1505,8 +1666,8 @@ if __name__ == '__main__':
     
     #%% ground state Zeeman splitting due to external magnetic field in 138BaF
     BaF = Molecule(I1=0.5,naturalabund=0.717,label='138 BaF',verbose=False,mass=mass138)
-    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138) #for ground state
-    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma,const=const_ex_138) #for excited state
+    BaF.add_electronicstate('X',2,'Sigma', Hcase='b',const=const_gr_138) #for ground state
+    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma, Hcase='a_p',const=const_ex_138) #for excited state
     BaF.X.build_states(Fmax=3,Fmin=0)
     BaF.A.build_states(Fmax=3,Fmin=0)
     
@@ -1514,7 +1675,7 @@ if __name__ == '__main__':
     
     #%% getting g-factors
     BaF = Molecule(I1=0.5,naturalabund=0.717,label='138 BaF',mass=mass138)
-    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138) #for ground state
-    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma,const=const_ex_138) #for excited state
+    BaF.add_electronicstate('X',2,'Sigma', Hcase='b',const=const_gr_138) #for ground state
+    BaF.add_electronicstate('A',2,'Pi',Gamma=Gamma, Hcase='a_p',const=const_ex_138) #for excited state
     BaF.X.build_states(Fmax=4)
     BaF.X.get_gfactors()
