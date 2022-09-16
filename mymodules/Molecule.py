@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.2
+v0.3.3
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -94,7 +94,7 @@ except ModuleNotFoundError:
         return float(wigner_6j(j_1, j_2, j_3, j_4, j_5, j_6))
 #%% classes
 class Molecule:
-    def __init__(self,I1=0,I2=0,Bfield=0.0,mass=None,load_constants=None,
+    def __init__(self,I1=0,I2=0,Bfield=0.0,mass=0,load_constants=None,
                  temp=5.0,naturalabund=1.0,label='BaF',verbose=True):        
         """This class represents a molecule containing all electronic and
         hyperfine states in order to calculate branching ratios and thus
@@ -243,7 +243,7 @@ class Molecule:
         #set all branching ratios smaller than the threshold to zero
         self.branratios = np.where(self.branratios<=threshold*np.max(self.branratios),0.0,self.branratios)
     
-    def calc_spectrum(self,limits=None,plotpoints=40000):
+    def calc_spectrum(self,limits=None,sigma=None,plotpoints=40000):
         """ calculates the spectrum in a certain frequency range using the
         branching ratios previously calculated in the method :func:`calc_branratios`.
         The resulting frequency and intensity arrays are not only returned but
@@ -260,6 +260,10 @@ class Molecule:
             or tuple of size 2 in units of wavenumbers 1/cm. By default the
             complete range containing all transitions is chosen. 
             The default is None.
+        sigma : float, optional
+            if desired, one can manually define the width of the Doppler-broadening,
+            which would actually arise due to a non-zero temperature (by default),
+            to a specific value (in cm^-1). The default is None.
         plotpoints : int, optional
             integer number specifying the number of intervals for the plotting
             frequency range, i.e. the plot resolution. The default is 40000.
@@ -281,7 +285,8 @@ class Molecule:
         Eplt        = np.linspace(Emin,Emax,plotpoints)
         I           = np.zeros(Eplt.size)
         from scipy.special import voigt_profile
-        sigma = (Emax+Emin)/2 *np.sqrt(8*k_B*self.temp*np.log(2)/(self.mass*c**2))
+        if sigma == None:
+            sigma = (Emax+Emin)/2 *np.sqrt(8*k_B*self.temp*np.log(2)/(self.mass*c**2))
         for i in range(X.N):
             for j in range(A.N):
                 branratio = self.branratios[i,j]
