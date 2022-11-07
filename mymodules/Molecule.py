@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.3
+v0.3.4
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -343,7 +343,7 @@ class ElectronicStateConstants:
     const_so        = ['A_e','alpha_A','A_D']
     #: hyperfine constants
     const_HFS       = ['a','b_F','c','d','c_I',
-                       'a_2','b_F_2','c_2'] #for the second nuclear spin if I2 is non-zero
+                       'a_2','b_F_2','c_2','d_2'] #for the second nuclear spin if I2 is non-zero
     #: electric quadrupol interaction
     const_eq0Q      = ['eq0Q']
     #: Lambda-doubling constants
@@ -533,12 +533,15 @@ class ElectronicStateConstants:
         const_new['p']          = self['p']*rho**2
         const_new['q']          = self['q']*rho**4
         # spin-orbit
+        # A_e has no isotopic shift (doi:10.1006/jmsp.2000.8252)
         const_new['alpha_A']    = self['alpha_A']*rho
         const_new['A_D']        = self['A_D']*rho**2
         # rotation
-        const_new['B_e']        = self['B_e']*rho**2
-        const_new['alpha_e']    = self['alpha_e']*rho**3
-        const_new['gamma_e']    = self['gamma_e']*rho**4
+        const_new['B_e']        = self['B_e']*rho**2        # Y_01 Dunham coeffs.
+        const_new['alpha_e']    = self['alpha_e']*rho**3    #-Y_11
+        const_new['gamma_e']    = self['gamma_e']*rho**4    #-Y_21
+        const_new['D_e']        = self['D_e']*rho**4        # Y_02
+        const_new['beta_e']     = self['beta_e']*rho**5     # Y_12
         # vibration
         const_new['w_e']        = self['w_e'] * rho
         const_new['w_e x_e']    = self['w_e x_e'] * rho**2
@@ -1338,8 +1341,16 @@ def H_tot(x,y,const):
                 + const['c_2']*np.sqrt(30)/3*phs(q+S-Si)*cb(S)*w3j(S,1,S,-Si,q,Si_)*w3j(1,2,1,-q,0,q)
                 )
         # kd(L,L_): Delta Lambda may not be strictly true
-        H_hfs2 = kd(L,L_)*phs(F1_+I2+F)*phs(J+I1+F1_+1)*cb(I2)*sb(F1)*sb(F1_)*sb(J)*sb(J_) \
-                *w6j(I2,F1_,F,F1,I2,1)*w6j(J_,F1_,I1,F1,J,1) * sum1
+        term1 = kd(L,L_)*sum1
+        
+        sum2 = 0.0
+        for q in [-1,+1]:
+            sum2 += kd(L, L_-2*q)*phs(J-Om+q+S-Si)*cb(S) \
+                    *w3j(J,1,J_,-Om,-q,Om_)*w3j(S,1,S,-Si,q,Si_)
+        term2 = const['d_2']*sum2
+        
+        H_hfs2 = phs(F1_+I2+F)*phs(J+I1+F1_+1)*cb(I2)*sb(F1)*sb(F1_)*sb(J)*sb(J_) \
+                *w6j(I2,F1_,F,F1,I2,1)*w6j(J_,F1_,I1,F1,J,1) * (term1 + term2)
         
         # exit if Delta F1 != 0     <-- why can one do that?
         if kd(F1,F1_) == 0: return H_hfs2
