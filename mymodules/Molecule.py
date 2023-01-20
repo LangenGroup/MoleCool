@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.4
+v0.3.5
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -545,6 +545,7 @@ class ElectronicStateConstants:
         # vibration
         const_new['w_e']        = self['w_e'] * rho
         const_new['w_e x_e']    = self['w_e x_e'] * rho**2
+        const_new['w_e y_e']    = self['w_e y_e'] * rho**3
         const_new['T_e']        = self['T_e'] / rho_el
         #nuclear spin --> these constants must belong to the correct atom in the molecule!?
         # maybe define atom1 and atom2 in the Molecule instance with respective g_N factors
