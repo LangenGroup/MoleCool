@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.0.5
+v3.0.7
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -451,10 +451,11 @@ class Levelsystem:
         self.__dMat_arr = np.zeros((self.lNum,self.uNum,3))
         
         #levels._dMat.xs((1.5,2,-1),level=('J','F','mF'),axis=0,drop_level=True).xs((0.5,1,-1),level=("J'","F'","mF'"),axis=1,drop_level=True)
-        N_grstates, N_exstates = 0,0
+        N_grstates = 0
         for Grs_lab, Grs in zip(self.grstates_labels, self.grstates):
+            N_exstates = 0
             for Exs_lab,Exs in zip(self.exstates_labels, self.exstates):
-                DF_vb   = self.get_vibrbranch(  gs=Grs_lab, exs=Exs_lab)
+                DF_vb   = self.get_vibrbranch(gs=Grs_lab, exs=Exs_lab)
                 if 'v' in Grs[0].QuNrs:
                     DF_vb   = DF_vb.iloc[np.argwhere(DF_vb.index.get_level_values('v') < Grs.v_max+0.1)[:,0]]
                 DF_vb  /= DF_vb.sum(axis=0) # normalized DF_vb must be multiplied afterwards with a factor due to transition dipole moment
@@ -508,33 +509,32 @@ class Levelsystem:
         """
         if np.all(self.__freq_arr) != None: return self.__freq_arr
         self.__freq_arr = np.zeros((self.lNum,self.uNum))
-        states = self.states
-        lNum = self.lNum
         
-        N_ElSts = 0
-        for ElSt in self.exstates:
-            DF = self.get_wavelengths(self.grstates_labels[0],ElSt.label)
-            for l,gr in enumerate(self.grstates[0].states):
-                for u,ex in enumerate(ElSt.states):
-                    val = self.states_in_DF(gr,ex,DF)
-                    if (val != None) and (val != 0):
-                        self.__freq_arr[l,N_ElSts+u] = c/(val*1e-9)
-            N_ElSts += ElSt.N
-            
-        DF = self.grstates[0].get_freq()
-        for l,st in enumerate(self.grstates[0].states):
-            if st.is_lossstate: #leave this restriction here?!
-                continue
-            val = self.state_in_DF(st,DF)
-            if val != None: self.__freq_arr[l,:] -= val*1e6
+        N_grstates = 0
+        for Grs_lab, Grs in zip(self.grstates_labels, self.grstates):
+            N_exstates = 0
+            for Exs_lab,Exs in zip(self.exstates_labels, self.exstates):
+                DF = self.get_wavelengths(gs=Grs_lab, exs=Exs_lab)
+                for l,gr in enumerate(Grs.states):
+                    for u,ex in enumerate(Exs.states):
+                        val = self.states_in_DF(gr,ex,DF)
+                        if (val != None) and (val != 0):
+                            self.__freq_arr[N_grstates+l,N_exstates+u] = c/(val*1e-9)
+                N_exstates += Exs.N
+            N_grstates += Grs.N
         
-        N_ElSts = 0
-        for ElSt in self.exstates:
-            DF = ElSt.get_freq()
-            for u,st in enumerate(ElSt.states):
-                val = self.state_in_DF(st,DF)
-                if val != None: self.__freq_arr[:,N_ElSts+u] += val*1e6
-            N_ElSts += ElSt.N
+        for i0, ElSts in enumerate([self.grstates,self.exstates]):
+            N_ElSts = 0
+            for ElSt in ElSts:
+                DF = ElSt.get_freq()
+                for i_st,st in enumerate(ElSt.states):
+                    if st.is_lossstate: #leave this restriction here?!
+                        continue
+                    val = self.state_in_DF(st,DF)
+                    if val != None:
+                        if i0 == 0:   self.__freq_arr[N_ElSts+i_st,:] -= val*1e6
+                        elif i0 == 1: self.__freq_arr[:,N_ElSts+i_st] += val*1e6
+                N_ElSts += ElSt.N
             
         self.__freq_arr *= 2*pi #make angular frequencies
         return self.__freq_arr
@@ -543,7 +543,9 @@ class Levelsystem:
         ind_names = list(DF.index.names)
         col_names = list(DF.keys().names)
         for index1,row1 in DF.iterrows():
+            if DF.shape[0] == 1: index1 = (index1,) #index1 must be a iterable tuple even if it containts only 1 element
             for index2,row2 in row1.iteritems():
+                if DF.shape[1] == 1: index2 = (index2,)
                 allTrue = [True]
                 for i,ind_name in enumerate(ind_names):
                     if not np.all(allTrue): break
@@ -635,32 +637,26 @@ class Levelsystem:
             of the ground or excited state.
         """
         if self._M_indices != None: return self._M_indices
-        M_indices_g,M_indices_e = [],[]
         
-        for GrSt in self.grstates:      
-            states_list = [st for st in GrSt.states]
-            for l1,st1 in enumerate(states_list):
-                list_M = []
-                if st1.is_lossstate:
-                    M_indices_g.append(np.array([l1]))
-                    continue
-                for l2,st2 in enumerate(states_list):
-                    if st2.is_lossstate:
+        M_indices = [[],[]]
+        for i0, ElSts in enumerate([self.grstates,self.exstates]):
+            N = 0
+            for ElSt in ElSts:
+                states_list = [st for st in ElSt.states]
+                for l1,st1 in enumerate(states_list):
+                    list_M = []
+                    if st1.is_lossstate:
+                        M_indices[i0].append(np.array([N+l1]))
                         continue
-                    if st1.is_equal_without_mF(st2):
-                        list_M.append(l2)
-                M_indices_g.append(np.array(list_M))
-            
-        for ExSt in self.exstates:
-            states_list = [st for st in ExSt.states]
-            for st1 in states_list:
-                list_M = []
-                for l2,st2 in enumerate(states_list):
-                    if st1.is_equal_without_mF(st2):
-                        list_M.append(l2)
-                M_indices_e.append(np.array(list_M))
-            
-        self._M_indices = (tuple(M_indices_g),tuple(M_indices_e))
+                    for l2,st2 in enumerate(states_list):
+                        if st2.is_lossstate:
+                            continue
+                        if st1.is_equal_without_mF(st2):
+                            list_M.append(N+l2)
+                    M_indices[i0].append(np.array(list_M))
+                N += ElSt.N
+        
+        self._M_indices = (tuple(M_indices[0]),tuple(M_indices[1]))
         return self._M_indices
     
     def calc_Gamma(self):
