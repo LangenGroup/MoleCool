@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.0.6
+v3.0.8
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -178,7 +178,9 @@ class System:
                             'period'      : None}
         """dictionary for parameters specifying the multiprocessing of calculations."""
         self.multiprocessing = {'processes' : multiprocessing.cpu_count()-1,#None
-                                'maxtasksperchild' : None}
+                                'maxtasksperchild' : None,
+                                'show_progressbar' : True,
+                                'savetofile'       : True}
         if verbose:
             print("System is created with description: {}".format(self.description))
         
@@ -276,10 +278,7 @@ class System:
         self.k      = self.lasers.getarr('k')*self.lasers.getarr('kabs')[:,None] #no unit vectors
         self.delta  = self.lasers.getarr('omega')[None,None,:] - self.levels.calc_freq()[:,:,None]
         # saturation parameter of intensity (lNum,uNum,pNum)
-        self.sp     = self.lasers.getarr('I')[None,None,:]/(
-            pi*c*h*self.Gamma[None,:]/(3*( 2*pi*c/self.levels.calc_freq() )**3) )[:,:,None]
-        # self.sp     = np.array([ la.I / ( pi*c*h*self.Gamma[0]/(3*la.lamb**3) ) 
-                                # for la in self.lasers ])[None,None,:] #old implementation
+        self.sp     = self.lasers.getarr('I')[None,None,:]/(self.levels.Isat[:,:,None])
         #polarization switching time
         tswitch     = 1/self.lasers.freq_pol_switch
         self.rx1    = np.abs(np.dot(self.levels.calc_dMat(),self.lasers.getarr('f_q').T))**2
@@ -519,8 +518,7 @@ class System:
         for every laser (with 2*pi included)."""
         
         # saturation parameter of intensity (lNum,uNum,pNum)
-        self.sp = self.lasers.getarr('I')[None,None,:]/(
-            pi*c*h*self.Gamma[None,:]/(3*( 2*pi*c/self.levels.calc_freq() )**3) )[:,:,None]
+        self.sp = self.lasers.getarr('I')[None,None,:]/(self.levels.Isat[:,:,None])
         self.Rabi_freqs = self.Gamma[None,:,None]*np.sqrt(self.sp/2)*np.dot(
                             self.levels.calc_dMat(), self.lasers.getarr('f_q').T )
         
@@ -539,32 +537,6 @@ class System:
                     la.I                    *= ratio**2   
         
         return self.Rabi_freqs
-                    
-        # for k,la in enumerate(self.lasers):
-        #     Rabi_set = la.freq_Rabi
-        #     if Rabi_set != None:
-        #         ratio = Rabi_set/self.calc_Rabi_freqs(average_levels=True)[k]
-        #         self.Rabi[:,k]         *= ratio
-        #         self.lasers[k].I    *= ratio**2   
-        
-        #must be checked below!?! This is important for dt = 'auto' and Rabi_freq parameter in a Laser
-        # Rabi_freqs = []
-        # dMat = self.levels.calc_dMat()
-        # for k,la in enumerate(self.lasers):
-        #     Rabi_freqs_arr = np.abs(self.G[k]/np.sqrt(2)*np.dot(dMat, self.f[k,:])* Gamma)
-        #     if average_levels:
-        #         weights= np.exp(-4*(self.omega_eg-self.omega_k[k])**2/(Gamma**2))
-        #         # protection against the case when all weights are zero because the
-        #         # detuning is too large so that exp() gets 0.0
-        #         if np.all(weights==0.0): weights = weights*0 + 1
-        #         weights = weights*np.sign(Rabi_freqs_arr) * np.abs(np.dot(dMat, self.f[k,:]))**2
-        #         # print(Rabi_freqs_arr,'\n',weights)
-        #         Rabi_freqs.append( (Rabi_freqs_arr*weights).sum()/weights.sum() )
-        #     else: 
-        #         Rabi_freqs.append( Rabi_freqs_arr )
-        # Rabi_freqs = np.array(Rabi_freqs)
-        # if not average_levels: self.Rabi_freqs = np.transpose(Rabi_freqs,axes=(1,2,0))
-        # return Rabi_freqs
     
     def plot_F(self,figname=None,axes=['x','y','z']):
         """plot the Force over time for all three axes 'x','y', and'z'."""
@@ -601,45 +573,19 @@ class System:
                 F = np.zeros((3,self.t.size))
                 F[:,1:] = np.diff(self.v)/np.diff(self.t)*self.levels.mass
         if self.calcmethod == 'OBEs':
-            freq_unit   = self.freq_unit
-            T       = freq_unit*self.t
-            # F       = np.zeros((3,self.t.size)) #size of t?
-            # for k in range(self.lasers.pNum):
-            #     for q in [-1,0,1]:
-            #         for c in range(self.levels.lNum):
-            #             for c_ in range(self.levels.uNum): #sign has to be + !!!
-            #                 F += 2*np.real(hbar*freq_unit*self.G[k]/2/(2**0.5) \
-            #                     *np.exp(1j*self.phi[k]+1j*T*(self.om_eg[c,c_]-self.om_k[k])) \
-            #                     *self.dMat[c,c_,q+1]*self.ymat[self.levels.lNum+c_,c][None,:] \
-            #                     *1j*self.k[k,:][:,None] *self.f[k,q+1] )
-            # F = 2*np.real(hbar*freq_unit*self.G[:,None,None,None,None,None]/2/(2**0.5) \
-                # *np.exp(1j*self.phi[:,None,None,None,None,None]+1j*T*(self.om_eg[None,None,:,:,None,None]-self.om_k[:,None,None,None,None,None])) *np.transpose(self.h_gek,axes=(2,0,1))[:,None,:,:,None,None]\
-                # *np.transpose(self.dMat,axes=(2,0,1))[None,:,:,:,None,None]*np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,:],axes=(1,0,2))[None,None,:,:,None,:] \
-                # *1j*self.k[:,None,None,None,:,None] *self.f[:,:,None,None,None,None] ).sum(axis=(0,1,2,3))
-            size    = T.size
-            F       = np.zeros((3,size))
-            for i,t1 in enumerate(range(0,size,size//50)):
-                t2  = t1 + size//50
-                if t2 > size: t2 = size
-                F[:,t1:t2]  += 2*hbar*freq_unit*np.real(np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,t1:t2],axes=(1,0,2))[:,:,None,None,:] \
+            T       = self.freq_unit*self.t
+            T_size  = T.size
+            size    = self.levels.lNum*self.levels.uNum*self.lasers.pNum*3*T_size #total size of the force array below
+            T_step  = T_size//(size//int(10e6) + 1)
+            
+            F       = np.zeros((3,T_size))
+            for i,t1 in enumerate(range(0,T_size,T_step)): #ensure that not too much memory is needed for huge np arrays
+                t2  = t1 + T_step
+                if t2 > T_size: t2 = T_size
+                F[:,t1:t2]  += np.real(np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,t1:t2],axes=(1,0,2))[:,:,None,None,:] \
                                      *self.Gfd[:,:,:,None,None]*np.exp(1j*T[None,None,None,None,t1:t2]*self.om_gek[:,:,:,None,None]) \
                                      *self.k[None,None,:,:,None] ).sum(axis=(0,1,2))
-        return F
-    
-    @property
-    def Isat(self):
-        """Calculates the two-level saturation intensity in W/m^2 for each laser component."""
-        return np.array([pi*c*h*self.freq_unit/(3*la.lamb**3)
-                         for la in self.lasers ])
-    
-    @property
-    def Isat_eff(self):
-        """Calculates the effective multi-level saturation intensity in W/m^2.
-        This quantity can be derived by rearranging the rate equations into a general
-        approximate expression for the scattering rate. Here, the assumptions
-        that all detunings are equal, all intensities are equal, and all excited
-        states are equally populated are used."""
-        return 2*self.levels.lNum**2/self.levels.N*self.Isat.mean()
+        return 2*hbar*self.freq_unit*F
     
     #%%
     def calc_trajectory(self,t_int=20e-6,t_start=0.,dt=None,t_eval=None,
@@ -703,7 +649,7 @@ class System:
             else:
                 from scipy.interpolate import interp1d
                 a   = interp1d(v, self.F_profile['F']/self.levels.mass, kind=interpol_kind)
-                GNe = interp1d(v, self.F_profile['Ne']*self.levels.exstates.Gamma, kind=interpol_kind)
+                GNe = interp1d(v, self.F_profile['Ne']*self.levels.exstates.Gamma, kind=interpol_kind) #Gamma with index!?!
                 force_axis = np.array(force_axis)/np.linalg.norm(force_axis)
                 for i,v0 in enumerate(v0_arr):
                     y0 = np.array([*v0, *r0_arr[i],0.])
@@ -751,7 +697,7 @@ class System:
             determines the threshold frequency at which the coupling of a single
             transition detuned by a frequency from a specific laser component
             is neglected. If a float is provided, only the transitions with
-            detunings smaller than `freq_clip_TH` times Gamma are driven by the
+            detunings smaller than `freq_clip_TH` times Gamma[0] are driven by the
             light field. If `freq_clip_TH` == 'auto', the threshold frequencies for
             all transitions are chosen seperately by considering the transition
             strengths and intensities of each laser component.            
@@ -910,8 +856,8 @@ class System:
         #: execution time for the ODE solving
         self.exectime = time.perf_counter() - start_time
         self._verify_calculation()
-        if return_fun: return return_fun(self)#{'N':self.N[-1,-1]}#[self.__dict__[key] for key in return_val]
-        # if return_fun == True: use default function which returns force and pops?
+        if return_fun == True: return {'system':self}
+        if return_fun: return {**return_fun(self),'steps':step+1,'exectime':self.exectime}
     
     def _verify_calculation(self):
         dev_TH  = {'rateeqs':1e-8,'OBEs':1e-6}[self.calcmethod]
@@ -938,7 +884,7 @@ class System:
     
     def _start_mp(self):
         self.results = multiproc(obj=deepcopy(self),kwargs=self.args)
-        if multiprocessing.cpu_count() > 16:
+        if self.multiprocessing['savetofile']:# multiprocessing.cpu_count() > 16:
             save_object(self)
             try:
                 sys.path.append('../')
@@ -1404,7 +1350,7 @@ class Bfield:
         eps = np.array([ -eps[2], +eps[1], -eps[0] ])
         if type(strength)   == np.ndarray: strength = strength[:,None,None]
         if type(ex)         == np.ndarray: eps = (eps.T)[None,:]
-        self._Bvec_sphbasis = eps*strength#/ (hbar*self.levels.exstates.Gamma/self.mu_B)
+        self._Bvec_sphbasis = eps*strength
         return self._Bvec_sphbasis
         
 #%%
@@ -1495,7 +1441,11 @@ def multiproc(obj,kwargs):
     # results = [list(r.get().values()) for r in result_objects]
     # keys = result_objects[0].get().keys() #switch this task with the one above?
     results, keys = [], []
-    for r in tqdm(result_objects,smoothing=0.0):
+    if obj.multiprocessing['show_progressbar']:
+        iterator = tqdm(result_objects,smoothing=0.0)
+    else:
+        iterator = result_objects
+    for r in iterator:
         results.append(list(r.get().values()))
     keys = result_objects[0].get().keys() #switch this task with the one above?
     pool.close()    # Prevents any more tasks from being submitted to the pool.
@@ -2123,8 +2073,7 @@ def make_axes_invisible(axes,xaxis=False,yaxis=False,
 
 #%%
 if __name__ == '__main__':
-    system = System(description='testing_System_module',
-                    load_constants='BaFconstants')
+    system = System(description='testing_System_module',load_constants='138BaF')
     
     system.levels.add_all_levels(v_max=0)
     system.levels.X.del_lossstate()

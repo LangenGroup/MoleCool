@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.0.7
+v3.0.8
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -543,9 +543,9 @@ class Levelsystem:
         ind_names = list(DF.index.names)
         col_names = list(DF.keys().names)
         for index1,row1 in DF.iterrows():
-            if DF.shape[0] == 1: index1 = (index1,) #index1 must be a iterable tuple even if it containts only 1 element
+            if len(ind_names) == 1: index1 = (index1,) #index1 must be a iterable tuple even if it containts only 1 element
             for index2,row2 in row1.iteritems():
-                if DF.shape[1] == 1: index2 = (index2,)
+                if len(col_names) == 1: index2 = (index2,)
                 allTrue = [True]
                 for i,ind_name in enumerate(ind_names):
                     if not np.all(allTrue): break
@@ -808,6 +808,25 @@ class Levelsystem:
         '''Returns a list containing all defined instances of electronic
         states, i.e. stacking list of :func:`grstates` and :func:`exstates`.'''
         return [*self.grstates,*self.exstates]
+   
+    @property
+    def Isat(self):
+        """Calculates the two-level saturation intensity in W/m^2 for all transitions."""
+        return pi*c*h*self.calc_Gamma()[None,:]/(3*( 2*pi*c/self.calc_freq() )**3)
+    
+    def Isat_eff(self,GrSt,ExSt):
+        """Calculates the effective multi-level saturation intensity in W/m^2
+        between two electronic states whose states are all coupled together.
+        This quantity can be derived by rearranging the rate equations into a general
+        approximate expression for the scattering rate. Here, the assumptions
+        that all detunings are equal, all intensities are equal, and all excited
+        states are equally populated are used."""
+        index = 0
+        for i in range(self.exstates_labels.index(ExSt)):
+            index += self.__dict__[self.exstates_labels[i]].N
+        lNum = self.__dict__[GrSt].N
+        uNum = self.__dict__[ExSt].N
+        return 2*lNum**2/(lNum+uNum)*self.Isat[:,index:index+uNum]
    
 #%% #########################################################################
 class ElectronicState():
@@ -1165,6 +1184,7 @@ class ElectronicState():
             raise Exception("There is no Quantum number 'v' defined for the states of {}".format(self.label))
         return max([st.v for st in self.states])
         
+    
 #%%
 class ElectronicGrState(ElectronicState):
     def __init__(self,*args,**kwargs):
