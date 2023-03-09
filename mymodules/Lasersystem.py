@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v3.0.6
+v3.0.8
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -499,18 +499,18 @@ class Laser:
         self._dir_cylind = np.array(dir_cylind)/np.expand_dims(np.linalg.norm(dir_cylind,axis=-1),axis=-1) #unit vector
         #___definition of the beam width:
         #   if a 1/e^2 radius is given. It is used for further calculations. Otherwise the FWHM value is used.
-        if np.all(w):
+        if np.any(w != None):
             self.w = w # old **default** value: (2*(pi*1.5e-3**2))**0.5 --> arbitrary value to compare to old MATLAB rate equations
-        elif np.all(FWHM):
+        elif np.any(FWHM != None):
             self.FWHM = FWHM
         #___intensity definition or calculation via P and beam widths w & w_cylind:
         #: Rabi frequency in terms of angular frequency 2 pi
         self.freq_Rabi = freq_Rabi
-        if np.all(freq_Rabi):
+        if np.any(freq_Rabi != None):
             self.I  = 1.0 #arbitrarily setting initial value for intensity since it is adjusted later during the calculation where the levels are involved.
             self._P = None
         # intensity I is important quantity for calculations instead of the power P.
-        elif np.any(I):
+        elif np.any(I != None):
             self.I  = I
             self._P = None
         else:
