@@ -6,7 +6,9 @@ Created on Thu Mar  9 14:44:48 2023
 
 v3.1.0
 
-This Module contains all definitions of the rate and optical Bloch equations.
+This Module contains the definitions of all ordinary differential equations (ODEs)
+which are used in scipy's solve_ivp function e.g. within the rate and optical
+Bloch equations (e.g. :meth:`~System.System.calc_OBEs`).
 """
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g,physical_constants

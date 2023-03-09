@@ -7,8 +7,8 @@ This python software includes two different programs:
 
 1. Molecular Dynamics Simulation Code
 	The first code only uses pre-defined constants (like the dipole matrix,
-	hyperfine freqs, g-factors, ...) from the module :py:mod:`constants` which
-	are	required to calculate dynamics via the rate or optical Bloch equations.
+	hyperfine freqs, g-factors, ...) from a .json file which are required
+	to calculate dynamics via the rate or optical Bloch equations.
 	
 2. Molecular Spectra Calculation Code
 	In comparison, the second code only uses constants of the effective

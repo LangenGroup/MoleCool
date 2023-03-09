@@ -232,7 +232,7 @@ class Levelsystem:
     #%% get functions
     def get_dMat(self,gs=None,exs=None):
         """Function which returns the electric dipole matrix. This matrix is
-        either simply loaded from the :py:class:`constants` module or constructed
+        either simply loaded from the .json file or constructed
         with the reduced electric dipole matrix given by the function
         :func:`get_dMat_red`.
         
@@ -298,7 +298,7 @@ class Levelsystem:
     
     def get_dMat_red(self,gs=None,exs=None):
         """Function which returns the reduced electric dipole matrix. This matrix is
-        either simply loaded from the :py:class:`constants` module or constructed
+        either simply loaded from the .json file or constructed
         with the electric dipole matrix given by the function :func:`dMat_red`. If no
         dipole matrix or a reduced one is available a new reduced matrix is
         constructed with only ones for each transition which can be adjusted
@@ -353,8 +353,8 @@ class Levelsystem:
     def get_vibrbranch(self,gs=None,exs=None):
         """Function returns a matrix for the vibrational branching ratios between
         vibrational excited levels with :math:`\\nu` and ground levels wth
-        :math:`\\nu'`.This matrix is either simply loaded from the
-        :py:class:`constants` module or constructed with the same branching ratios
+        :math:`\\nu'`.This matrix is either simply loaded from the .json file
+        or constructed with the same branching ratios
         for all transitions.        
 
         Returns
@@ -394,7 +394,7 @@ class Levelsystem:
         the wavelengths between the vibrational transitions and the 
         frequencies between hyperfine transitions to conveniently specifying
         or modifying all participating transitions. These wavelengths and
-        frequencies are loaded from the :py:class:`constants` module if
+        frequencies are loaded from the .json file if
         available. Otherwise all wavelengths are set to 860e-9 and all other
         hyperfine frequencies to zero to be adjusted.
 
@@ -1075,8 +1075,8 @@ class ElectronicState():
         the wavelengths between the vibrational transitions and the 
         frequencies between hyperfine transitions to conveniently specifying
         or modifying all participating transitions. These wavelengths and
-        frequencies are loaded from the :py:class:`constants` module if
-        available. Otherwise all wavelengths are set to 860e-9 and all other
+        frequencies are loaded from the .json file if available.
+        Otherwise all wavelengths are set to 860e-9 and all other
         hyperfine frequencies to zero to be adjusted.
 
         Returns
@@ -1098,7 +1098,7 @@ class ElectronicState():
         """Function returns a list of matrices for nicely displaying
         the g-factors of the ground states and the excited states respectively
         to conveniently specifying or modifying them. These g-factors are
-        loaded from the :py:class:`constants` module if available. Otherwise
+        loaded from the .json file if available. Otherwise
         g-factors are set to 0 to be adjusted.
         
         Returns

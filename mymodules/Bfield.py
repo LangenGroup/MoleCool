@@ -110,8 +110,8 @@ class Bfield:
     
         Parameters
         ----------
-        grs : :class:`~Levelsystem.Groundstates`
-            groundstates for which the matrix is to be build.
+        grs : :class:`~Levelsystem.ElectronicGrState`
+            for which the matrix is to be build.
         remix_strength : float
             measure of the magnetic field strength (i.e. the magnetic remixing
             matrix is multiplied by 10^remix_strength). Reasonable values are

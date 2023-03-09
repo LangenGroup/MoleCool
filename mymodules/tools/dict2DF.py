@@ -6,20 +6,15 @@ Created on Wed May 13 18:27:42 2020
 
 v3.0.0
 
-Module containing specific constants of a certain atom, molecule,
-or more general systems which define the levelsystem required to simulate
-laser cooling dynmics with the rate equations or optical Bloch equations.
-Theses constants will be imported into the class :class:`~Levelsystem.Levelsystem`.
+This module contains several functions as tools for converting the .json files
+with all the specific constants of a certain atom, molecule into pandas.DataFrames.
+These DataFrames will be imported in the class :class:~`Levelsystem.Levelsystem`
+where one can have a look in a nice representation and also further
+customize them in a simple way.
 
-This module is constructed in such way so that it can be modified or extended
-by other users to hold the constants for their specific level system.
-    
-But for nicely displaying these constants or properties as matrices please use
-the respective methods in the class :class:`~Levelsystem.Levelsystem`,
-e.g. for the electric dipole matrix :func:`~Levelsystem.Levelsystem.get_dMat`.
 So, to nicely print all properties and constants for e.g. 138BaF try::
     
-    levels = Levelsystem(load_constants='BaFconstants')
+    levels = Levelsystem(load_constants='138BaF')
     levels.add_all_levels(0)
     levels.print_properties()
 """

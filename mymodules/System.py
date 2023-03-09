@@ -6,8 +6,9 @@ Created on Tue June 09 10:17:00 2020
 
 v3.1.0
 
-This module contains the main class :class:`System` which provides all information
-about the Lasers, Levels and can carry out simulation calculations, e.g.
+This module contains the main class :class:`~System.System` which provides all
+information about the lasers light fields, the atomic or molecular level structure,
+and the magnetic field to carry out simulation calculations, e.g.
 via the rate equations or Optical Bloch equations (OBEs).
 
 Examples
@@ -127,26 +128,12 @@ import matplotlib.ticker as mtick
 np.set_printoptions(precision=4,suppress=True)
 #%%
 class System:
-    """System containing instances of :py:class:`~Lasersystem.Lasersystem`
-    and :class:`~Levelsystem.Levelsystem` class.
-    
-    An instance of this class is the starting point to define a System on which
-    one desires to calculate the time evolution via the rate equations.
-
-    Example
-    -------
-    After the Lasers and Levels have been defined in the :class:`System` object
-    `system`, the rate equations can be applied and the results can be plotted
-    via:
-        
-        >>> system.calc_rateeqs()
-        >>> system.plot_N()
-    """
     def __init__(self, description=None,load_constants='',verbose=True):
-        """creates empty instances of the class :class:`~Lasersystem.Lasersystem`
-        and the class :class:`~Levelsystem.Levelsystem` as ``self.lasers`` and
-        ``self.levels``.
-
+        """An instance of this class is the starting point for simulating any
+        atomic or molecular dynamics simulations. Specficially, it define an object
+        to not only store all important information about the system but also to
+        calculate any time evolution.
+    
         Parameters
         ----------
         description : str, optional
@@ -154,10 +141,21 @@ class System:
             the attribute is set to the name of the respective executed main
             python file.
         load_constants : str, optional
-            Name of a certain molecule, atom or more general system whose
+            File name of a certain molecule, atom or more general system whose
             respective level constants to be loaded or imported by the class
             :class:`~Levelsystem.Levelsystem` via the constants defined in the
-            module :py:class:`constants`. The default is 'BaF'.
+            .json file. The default is ''.
+    
+        Example
+        -------
+        After initiating a :class:`~System.System` object, the instances of 
+        :py:class:`~Lasersystem.Lasersystem`, :class:`~Levelsystem.Levelsystem`,
+        and :class:`~Bfield.Bfield` can be accessed via::
+            
+            system = System()
+            print(system.lasers)
+            print(system.levels)
+            print(system.Bfield)
         """
         self.lasers = Lasersystem()
         self.levels = Levelsystem(load_constants=load_constants,verbose=verbose)
