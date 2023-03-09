@@ -4,11 +4,11 @@ Created on Wed Jun  1 10:35:14 2022
 
 @author: fkogel
 
-tested with version v3.0.0
+tested with version v3.1.0
 """
 
 from System import *
-system = System(description='SimpleTest1_BaF',load_constants='BaFconstants')
+system = System(description='SimpleTest1_BaF',load_constants='138BaF')
 
 # set up the lasers each with four sidebands
 for lamb in np.array([859.830, 895.699, 897.961])*1e-9:

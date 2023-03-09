@@ -4,11 +4,11 @@ Created on Wed Jun  1 10:35:14 2022
 
 @author: fkogel
 
-tested with version v3.0.0
+tested with version v3.1.0
 """
 
 from System import *
-system = System(description='SimpleTest2Traj_BaF',load_constants='BaFconstants')
+system = System(description='SimpleTest2Traj_BaF',load_constants='138BaF')
 
 # specify initial velocity and position of the molecule
 system.v0 = np.array([200,0,0])   #in m/s

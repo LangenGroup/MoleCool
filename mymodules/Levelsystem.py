@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.0.8
+v3.1.0
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -80,7 +80,7 @@ printed to display all attributes via::
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g
 from scipy.constants import u as u_mass
-import constants
+from tools import dict2DF, get_constants_dict
 from collections.abc import Iterable
 import matplotlib.pyplot as plt
 import warnings
@@ -89,7 +89,6 @@ import numbers
 from copy import deepcopy
 import pandas as pd
 from sympy.physics.wigner import wigner_3j,wigner_6j
-import json
 #%%
 class Levelsystem:
     def __init__(self,load_constants=None,verbose=True):
@@ -180,7 +179,7 @@ class Levelsystem:
             the subclasses :class:`Groundstates` and :class:`Excitedstates`.
         """
         for key in list(self.const_dict['level-specific'].keys()):
-            gs_exs,label = constants.split_key(key)
+            gs_exs,label = dict2DF.split_key(key)
             self.add_electronicstate(label, gs_exs)
             
             if gs_exs == 'gs':
@@ -258,14 +257,16 @@ class Levelsystem:
                 if len(self._dMat[gs][exs]) != 0:
                     return self._dMat[gs][exs]
         #gs_exs_label = '-'.join([gs,exs]) #df1.index.to_frame()['gs'].iloc[0]#ß? #df1.index.names.index('gs') #df1.columns.to_frame()['exs'].iloc[0]
-        DF_dMat         = constants.get_DataFrame(self.const_dict,'dMat',gs=gs,exs=exs)
-        DF_dMat_red     = constants.get_DataFrame(self.const_dict,'dMat_red',gs=gs,exs=exs)
-        DF_branratios  = constants.get_DataFrame(self.const_dict,'branratios',gs=gs,exs=exs)
+        DF_dMat         = dict2DF.get_DataFrame(self.const_dict,'dMat',gs=gs,exs=exs)
+        DF_dMat_red     = dict2DF.get_DataFrame(self.const_dict,'dMat_red',gs=gs,exs=exs)
+        DF_branratios  = dict2DF.get_DataFrame(self.const_dict,'branratios',gs=gs,exs=exs)
         if len(DF_dMat) != 0:
             dMat = DF_dMat
         elif (len(DF_dMat_red) == 0) and (len(DF_branratios) !=0):
             self._branratios = DF_branratios
-            if self.verbose: warnings.warn('No dipole matrix or reduced dipole matrix found in constants.py, so the dipole matrix is constructed from the given branching ratios only with positive values!')
+            if self.verbose: warnings.warn('No dipole matrix or reduced dipole matrix found, '
+                                           + 'so the dipole matrix is constructed from the given '
+                                           + 'branching ratios only with positive values!')
             dMat = self._branratios**0.5
         else:
             dMat_red = self.get_dMat_red(gs=gs,exs=exs)
@@ -316,11 +317,11 @@ class Levelsystem:
                 if len(self._dMat_red[gs][exs]) != 0:
                     return self._dMat_red[gs][exs]
                 
-        DF_dMat_red = constants.get_DataFrame(self.const_dict,'dMat_red',gs=gs,exs=exs)
+        DF_dMat_red = dict2DF.get_DataFrame(self.const_dict,'dMat_red',gs=gs,exs=exs)
         if len(DF_dMat_red) != 0:
             dMat_red = DF_dMat_red
             # must be updated below!
-        elif len(constants.get_DataFrame(self.const_dict,'dMat',gs=gs,exs=exs)) != 0:
+        elif len(dict2DF.get_DataFrame(self.const_dict,'dMat',gs=gs,exs=exs)) != 0:
             dMat = self.get_dMat(gs=gs,exs=exs).sort_index(axis='index')
             dMat_red = dMat.copy() #,level=[0,1])
             for J,F,mF in dMat_red.index:
@@ -369,7 +370,7 @@ class Levelsystem:
                 if len(self._vibrbranch[gs][exs]) != 0:
                     return self._vibrbranch[gs][exs]
         
-        DF_vibrbranch = constants.get_DataFrame(self.const_dict,'vibrbranch',gs=gs,exs=exs)
+        DF_vibrbranch = dict2DF.get_DataFrame(self.const_dict,'vibrbranch',gs=gs,exs=exs)
         if len(DF_vibrbranch) != 0:
             vibrbranch = DF_vibrbranch
         else: #old and simpler version:
@@ -411,7 +412,7 @@ class Levelsystem:
                 if len(self._wavelengths[gs][exs]) != 0:
                     return self._wavelengths[gs][exs]
                 
-        DF_wavelengths = constants.get_DataFrame(self.const_dict,'vibrfreq',gs=gs,exs=exs)
+        DF_wavelengths = dict2DF.get_DataFrame(self.const_dict,'vibrfreq',gs=gs,exs=exs)
         if len(DF_wavelengths) != 0:
             wavelengths = DF_wavelengths
         else:
@@ -933,7 +934,7 @@ class ElectronicState():
                 QuNrs['v'] = v_i
                 self.load_states(**QuNrs) #recursively calling this method with no 'v' Iterable
         else:
-            list_of_dicts = constants.get_levels(dic=self.const_dict,gs_exs=self.label,**QuNrs)
+            list_of_dicts = dict2DF.get_levels(dic=self.const_dict,gs_exs=self.label,**QuNrs)
             if not list_of_dicts:
                 text = 'No pre-defined states found for electronic state {} with: {}'.format(
                     self.label, ', '.join(['{}={}'.format(key,QuNrs[key]) for key in QuNrs]))
@@ -941,7 +942,7 @@ class ElectronicState():
                     # set vibrational quantum number to 0 and try to import constants
                     v_notfound = QuNrs['v']
                     QuNrs['v'] = 0
-                    list2_of_dicts = constants.get_levels(dic=self.const_dict,gs_exs=self.label,**QuNrs)
+                    list2_of_dicts = dict2DF.get_levels(dic=self.const_dict,gs_exs=self.label,**QuNrs)
                     if list2_of_dicts:
                         for dict_QuNrs in list2_of_dicts:
                             dict_QuNrs_v = {**dict_QuNrs}
@@ -1086,7 +1087,7 @@ class ElectronicState():
         """
         if len(self._freq) != 0:
             return self._freq
-        out = constants.get_DataFrame(self.const_dict,'HFfreq',gs_exs=self.label)
+        out = dict2DF.get_DataFrame(self.const_dict,'HFfreq',gs_exs=self.label)
         if len(out) != 0:
             self._freq = out
         else:
@@ -1107,7 +1108,7 @@ class ElectronicState():
         """
         if len(self._gfac) != 0:
             return self._gfac
-        out = constants.get_DataFrame(self.const_dict,'gfac',gs_exs=self.label)
+        out = dict2DF.get_DataFrame(self.const_dict,'gfac',gs_exs=self.label)
         if len(out) != 0:
             self._gfac = out
         else:
@@ -1251,12 +1252,11 @@ class ElectronicExState(ElectronicState):
         # Gamma is additional kwarg here!
         super().__init__(*args,**kwargs)
         self.gs_exs = 'exs'
-        #: decay rate :math:`\Gamma` which is received from the function
-        #: :func:`constants.Gamma`
+        #: decay rate :math:`\Gamma`
         if Gamma:
             self.Gamma = Gamma
         else:
-            Gamma = constants.get_DataFrame(self.const_dict,'Gamma',self.label)
+            Gamma = dict2DF.get_DataFrame(self.const_dict,'Gamma',self.label)
             if len(Gamma) == 0:
                 if self.verbose:
                     warnings.warn('Gamma has to be defined for the {} ElectronicState! For now it is set to 1 MHz by default!'.format(self.label))
@@ -1358,19 +1358,3 @@ class State:
     def QuNrs_without_mF(self):
         '''Returns all the quantum numbers without mF'''
         return [QuNr for QuNr in self.QuNrs if QuNr != 'mF']
-#%%
-def get_constants_dict(name=''):
-    def openjson(root_dir):
-        with open(root_dir + name + ".json", "r") as read_file:
-            data = json.load(read_file)
-        return data
-    if name:
-        try:
-            return openjson("./")
-        except FileNotFoundError:
-            script_dir = os.path.dirname(os.path.abspath(__file__)) #directory where this script is stored.
-            # Using this directory path, the module System (and the others) can be imported
-            # from an arbitrary directory provided that the respective path is in the PYTHONPATH variable.
-            return openjson(script_dir + "\\")
-    else:
-        return {}

@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.0.8
+v3.1.0
 
 This module contains the main class :class:`System` which provides all information
 about the Lasers, Levels and can carry out simulation calculations, e.g.
@@ -40,7 +40,7 @@ Example for setting up a level and laser system for BaF with the cooling and 3 r
 lasers and calculating the dynamics::
     
     from System import *
-    system = System(description='SimpleTest1_BaF',load_constants='BaFconstants')
+    system = System(description='SimpleTest1_BaF',load_constants='138BaF')
     
     # set up the lasers each with four sidebands
     for lamb in np.array([859.830, 895.699, 897.961])*1e-9:
@@ -75,7 +75,7 @@ and :math:`r_x=-2mm` which is transversely passing two cooling lasers with
 a repumper each in the distance :math:`4mm`::
     
     from System import *
-    system = System(description='SimpleTest2Traj_BaF',load_constants='BaFconstants')
+    system = System(description='SimpleTest2Traj_BaF',load_constants='138BaF')
     
     # specify initial velocity and position of the molecule
     system.v0 = np.array([200,0,0])   #in m/s
@@ -109,14 +109,13 @@ from scipy.constants import u as u_mass
 from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
 from Lasersystem import *
 from Levelsystem import *
-import constants
-from math import floor
-import _pickle as pickle
+import tools
+from tools import save_object, open_object, ODEs
+from Bfield import Bfield
 import time
-from numba import jit, prange
 import sys, os
-import multiprocessing
 from copy import deepcopy
+import multiprocessing
 from tqdm import tqdm
 import warnings
 
@@ -329,12 +328,12 @@ class System:
         if verbose: print('Solving ode with rate equations...', end=' ')
         start_time = time.perf_counter()
         if not trajectory:
-            sol = solve_ivp(ode0_rateeqs_jit, (t_start,t_start+t_int), self.y0,
+            sol = solve_ivp(ODEs.ode0_rateeqs_jit, (t_start,t_start+t_int), self.y0,
                     t_eval=self.t_eval, **self.args['kwargs'],
                     args=(lNum,uNum,pNum,self.Gamma,self.levels.calc_branratios(),
                           self.R1sum,self.R2sum,tswitch,self.M))
         else:
-            sol = solve_ivp(ode1_rateeqs_jit, (t_start,t_start+t_int), self.y0,
+            sol = solve_ivp(ODEs.ode1_rateeqs_jit, (t_start,t_start+t_int), self.y0,
                     t_eval=self.t_eval, **self.args['kwargs'],
                     args=(lNum,uNum,pNum,np.reshape(self.Gamma,(1,-1,1)),self.levels.calc_branratios(),
                           self.rx1,self.rx2,self.delta,self.sp,
@@ -585,7 +584,9 @@ class System:
                 F[:,t1:t2]  += np.real(np.transpose(self.ymat[self.levels.lNum:,:self.levels.lNum,t1:t2],axes=(1,0,2))[:,:,None,None,:] \
                                      *self.Gfd[:,:,:,None,None]*np.exp(1j*T[None,None,None,None,t1:t2]*self.om_gek[:,:,:,None,None]) \
                                      *self.k[None,None,:,:,None] ).sum(axis=(0,1,2))
-        return 2*hbar*self.freq_unit*F
+            F *= 2*hbar*self.freq_unit
+        
+        return F
     
     #%%
     def calc_trajectory(self,t_int=20e-6,t_start=0.,dt=None,t_eval=None,
@@ -883,7 +884,7 @@ class System:
                 print("Scattered Photons ({}): {:.6f}".format(Ex_label,self.photons[i]))
     
     def _start_mp(self):
-        self.results = multiproc(obj=deepcopy(self),kwargs=self.args)
+        self.results = tools.multiproc(obj=deepcopy(self),kwargs=self.args)
         if self.multiprocessing['savetofile']:# multiprocessing.cpu_count() > 16:
             save_object(self)
             try:
@@ -991,7 +992,7 @@ class System:
         #                 self.y0, t_eval=T_eval, **kwargs,
         #                 args=(lNum,uNum,pNum, self.M_indices,
         #                       self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices))
-        sol = solve_ivp(ode1_OBEs_opt3, (t_start*freq_unit,(t_start+t_int)*freq_unit),  #<- can also handle two electr. states with diff. Gamma
+        sol = solve_ivp(ODEs.ode1_OBEs_opt3, (t_start*freq_unit,(t_start+t_int)*freq_unit),  #<- can also handle two electr. states with diff. Gamma
                         self.y0, t_eval=T_eval, **kwargs,
                         args=(lNum,uNum,pNum, self.levels.calc_M_indices(),
                               self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices,self.Gamma/freq_unit))
@@ -1126,7 +1127,7 @@ class System:
         subfigs_leg  = subfigs[1].subfigures(2, 1, wspace=0.0, height_ratios=height_ratios_main )
         axs_legend = subfigs_leg[1].subplots(1, 1)
         ax_cbar   = subfigs_leg[0].subplots(1, 1)
-        make_axes_invisible(axs_legend)
+        tools.make_axes_invisible(axs_legend)
         #needed for drawing arrows on top over multiple figures
         subfig_last = subfigs_GrSts[-1]
         
@@ -1186,7 +1187,7 @@ class System:
                          format='{:.2%}'.format,
                          cax=ax_cbar, orientation='vertical', label='bran. ratio')
         else:
-            make_axes_invisible(ax_cbar)
+            tools.make_axes_invisible(ax_cbar)
             
         # draw lasers onto their addressing transitions as arrows:
         if lasers:
@@ -1218,858 +1219,6 @@ class System:
                                        bbox_to_anchor=(0, 1),fontsize='x-small',
                                        title='i: $\lambda$ [nm], $P$ [mW]')
             plt.setp(legend.get_title(),fontsize='x-small')
-
-#%%
-class Bfield:
-    def __init__(self,**kwargs):
-        """Class defines a magnetic field configuration and methods to turn on
-        a certain field strength and direction conveniently. When initializing
-        a new system via `system=System()` a magnetic field instance with zero
-        field strength is directly included in this System via `system.Bfield`.
-        
-        Example
-        -------
-        >>> B1 = Bfield()   # initialize Bfield instance
-        >>> B1.turnon(strength=5e-4,direction=[0,0,1],angle=60)
-        >>> print(B1)       # print properties
-        >>> B1.reset()      # reset magnetic field to zero.
-
-        Parameters
-        ----------
-        **kwargs
-            Optional keyword arguments for directly turn on a certain magnetic
-            field by using these keyword arguments within the the method
-            :func:`turnon` (further information).
-        """
-        if kwargs:  self.turnon(**kwargs)
-        else:       self.reset()
-        self.mu_B = physical_constants['Bohr magneton'][0]
-        
-    def turnon(self,strength=5e-4,direction=[0,0,1],angle=None,remix_strength=None):
-        """Turn on a magnetic field with a certain strength and direction.
-
-        Parameters
-        ----------
-        strength : float or np.ndarray, optional
-            Strength in Tesla. The default is 5e-4.
-        direction : list or np.ndarray with shape (3,), optional
-            Direction of the magnetic field vector. Doesn't have to be given
-            as normalized array. The default is [0,0,1].
-        angle : float or np.ndarray, optional
-            Angle in degrees at which the magnetic field vector is pointing with
-            respect to the `direction` argument. The default is None.
-        remix_strength : float, optional
-            measure of the magnetic field strength (i.e. the magnetic remixing
-            matrix is multiplied by 10^remix_strength). Reasonable values are
-            between 6 and 9. The default is None.
-        """
-        if np.any(strength >= 10e-4):
-            print('WARNING: linear Zeeman shifts are only a good approx for B<10G.')
-        self.strength = strength
-        self.direction = np.array(direction)
-        if np.all(angle != None):
-            self.angle = angle
-            self.axisforangle = self.direction
-            angle = angle/360*2*pi
-            if not np.all(np.sin(angle) == 0.):
-                v1      = self.direction
-                v_perp  = np.cross(v1,np.array([0,1,0]))
-                if np.all(v_perp) == 0.0: v_perp = np.cross(v1,np.array([1,0,0]))
-                v1n, v_perpn = (v1*v1).sum(), (v_perp*v_perp).sum()
-                alpha = np.sqrt( (v1n/(np.sin(angle)**2) - v1n)/(v_perpn**2) )
-                self.direction  = v_perp + np.tensordot(alpha,v1,axes=0)
-        # self.remix_strength = remix_strength
-        
-    def turnon_earth(self,vertical='z',towardsNorthPole='x'):
-        """Turn on the magnetic field of the earth at Germany with a strength
-        of approximately 48 uT. The vertical component is 44 uT and the horizontal
-        component directing towards the North Pole is 20 uT.
-
-        Parameters
-        ----------
-        vertical : str, optional
-            vertical axis. Supported values are 'x', 'y' or 'z'.
-            The default is 'z'.
-        towardsNorthPole : str, optional
-            horizontal axis directing towards the North Pole. Supported values
-            are 'x', 'y' or 'z'.The default is 'x'.
-        """
-        axes = {'x' : 0, 'y' : 1, 'z' : 2}
-        vec = np.zeros(3)
-        vec[axes[vertical]]         = 44e-6
-        vec[axes[towardsNorthPole]] = 20e-6
-        self.turnon(strength=np.linalg.norm(vec),direction=vec)
-        
-    def reset(self):
-        """Reset the magnetic field to default which is a magnetic field
-        strength 0.0 and the direction [0.,0.,1.]"""
-        self.strength, self.direction = 0.0, np.array([0.,0.,1.])
-        if 'angle' in self.__dict__: del self.angle, self.axisforangle
-        self._remix_matrix = np.array([[],[]])
-        
-    def get_remix_matrix(self,grs,remix_strength=None):
-        """return a matrix to remix all adjacent ground hyperfine levels
-        by a magnetic field with certain field strength. The default is False.
-    
-        Parameters
-        ----------
-        grs : :class:`~Levelsystem.Groundstates`
-            groundstates for which the matrix is to be build.
-        remix_strength : float
-            measure of the magnetic field strength (i.e. the magnetic remixing
-            matrix is multiplied by 10^remix_strength). Reasonable values are
-            between 6 and 9.
-        
-        Returns
-        -------
-        array
-            magnetic remixing matrix.
-        """
-        #must be updated!? not only grstates can mix!
-        # maybe use OBEs muMat for Bfield strength
-        matr = np.zeros((grs.N,grs.N))
-        for i in range(grs.N):
-            for j in range(grs.N):
-                if grs[i].is_lossstate or grs[j].is_lossstate:
-                    if grs[i].is_lossstate == grs[j].is_lossstate:
-                        matr[i,j] = 1
-                elif grs[i].is_equal_without_mF(grs[j]) and abs(grs[i].mF-grs[j].mF) <= 1:
-                    matr[i,j] = 1
-        self._remix_matrix = 10**(remix_strength)*matr
-        return self._remix_matrix #if remix_strength ==None: estimate it with strength & if strength=0 return empty matrix?
-    
-    def __str__(self):
-        return str(self.__dict__)
-    
-    @property
-    def Bvec_sphbasis(self):
-        """returns the magnetic field vector in the spherical basis."""
-        strength, direction = self.strength, np.array(self.direction)
-        ex,ey,ez = direction.T / np.linalg.norm(direction,axis=-1)
-        eps = np.array([+(ex - 1j*ey)/np.sqrt(2), ez, -(ex + 1j*ey)/np.sqrt(2)])
-        eps = np.array([ -eps[2], +eps[1], -eps[0] ])
-        if type(strength)   == np.ndarray: strength = strength[:,None,None]
-        if type(ex)         == np.ndarray: eps = (eps.T)[None,:]
-        self._Bvec_sphbasis = eps*strength
-        return self._Bvec_sphbasis
-        
-#%%
-def multiproc(obj,kwargs):
-    #___problem solving with keyword arguments
-    kwargs['mp'] = False
-    for kwargs2 in kwargs['kwargs']:
-        kwargs[kwargs2] = kwargs['kwargs'][kwargs2]
-    del kwargs['self']
-    del kwargs['kwargs']
-    
-    #no looping through magnetic field strength or direction for rateeqs so far
-    if obj.calcmethod == 'rateeqs': obj.Bfield.reset()
-    
-    #___expand dimensions of strength, direction, v0, r0 in order to be able to loop through them    
-    if np.array(obj.Bfield.strength).ndim == 0:   strengths = [obj.Bfield.strength]
-    else:                               strengths = obj.Bfield.strength
-    if np.array(obj.Bfield.direction).ndim == 1:  directions = [obj.Bfield.direction]
-    else:                               directions = obj.Bfield.direction    
-    if obj.r0.ndim == 1:    r0_arr = obj.r0[None,:]
-    else:                   r0_arr = obj.r0
-    if obj.v0.ndim == 1:    v0_arr = obj.v0[None,:]
-    else:                   v0_arr = obj.v0
-    
-    #___loop through laser objects to get to know which variables have to get
-    #___iterated and how many iterations
-    #--> for the dictionaries used here it'S important that the order is ensured
-    #    (this is the case since python 3.6 - now (3.8))
-    laser_list = []
-    laser_iters_N = {}
-    for l1,la in enumerate(obj.lasers):
-        laser_dict = {}
-        for key in ['omega','freq_Rabi','I','phi','beta','k','r_k','f_q']:
-            value = la.__dict__[key]
-            if (np.array(value).ndim == 1 and key not in ['k','r_k','f_q']) \
-                or (np.array(value).ndim == 2 and key in ['k','r_k','f_q']): #or also with dict comprehension
-                laser_dict[key] = value
-                laser_iters_N[key] = len(value)
-        laser_list.append(laser_dict)
-    laser_iters = list(laser_iters_N.keys())
-    # if kwargs['verbose']: print(laser_list,laser_iters,laser_iters_N)
-    
-    #___recursive function to loop through all iterable laser variables
-    def recursive(_laser_iters,index):
-        if not _laser_iters:
-            for i,dic in enumerate(laser_list):
-                for key,value in dic.items():
-                    # if kwargs['verbose']: print('Laser {}: key {} is set to {}'.format(i,key,value[index[key]]))
-                    obj.lasers[i].__dict__[key] = value[index[key]]
-                    #or more general here: __setattr__(self, attr_name, value)
-            # if kwargs['verbose']: print('b1={},b2={},b3={},b4={}'.format(b1,b2,b3,b4))
-            # result_objects.append(pool.apply_async(np.sum,args=(np.arange(3),)))
-            if obj.calcmethod == 'OBEs':
-                result_objects.append(pool.apply_async(deepcopy(obj).calc_OBEs,kwds=(kwargs)))
-            elif obj.calcmethod == 'rateeqs':
-                result_objects.append(pool.apply_async(deepcopy(obj).calc_rateeqs,kwds=(kwargs)))
-            # print('next evaluation..')
-        else:
-            for l1 in range(laser_iters_N[ _laser_iters[0] ]):
-                index[_laser_iters[0]] = l1
-                recursive(_laser_iters[1:],index)
-    
-    #___Parallelizing using Pool.apply()
-    pool = multiprocessing.Pool(obj.multiprocessing['processes'],
-                                maxtasksperchild=obj.multiprocessing['maxtasksperchild']) #Init multiprocessing.Pool()
-    result_objects = []
-    iters_dict = {'strength': len(strengths),
-                  'direction': len(directions),
-                  'r0':len(r0_arr),
-                  'v0':len(v0_arr),
-                  **laser_iters_N}
-    #if v0_arr and r0_arr have the same length they should be varied at the same time and not all combinations should be calculated.
-    if len(r0_arr) == len(v0_arr) and len(r0_arr) > 1: del iters_dict['v0']
-    #___looping through all iterable parameters of system and laser
-    for b1,strength in enumerate(strengths):
-        for b2,direction in enumerate(directions):
-            obj.Bfield.turnon(strength,direction)
-            for b3,r0 in enumerate(r0_arr):
-                obj.r0 = r0
-                for b4,v0 in enumerate(v0_arr):
-                    if (len(r0_arr) == len(v0_arr)) and (b3 != b4): continue
-                    obj.v0 = v0
-                    recursive(laser_iters,{})
-                    
-    if kwargs['verbose']: print('starting calculations for iterations: {}'.format(iters_dict))
-    time.sleep(.5)
-    # print( [r.get() for r in result_objects])
-    # results = [list(r.get().values()) for r in result_objects]
-    # keys = result_objects[0].get().keys() #switch this task with the one above?
-    results, keys = [], []
-    if obj.multiprocessing['show_progressbar']:
-        iterator = tqdm(result_objects,smoothing=0.0)
-    else:
-        iterator = result_objects
-    for r in iterator:
-        results.append(list(r.get().values()))
-    keys = result_objects[0].get().keys() #switch this task with the one above?
-    pool.close()    # Prevents any more tasks from being submitted to the pool.
-    pool.join()     # Wait for the worker processes to exit.
-    
-    out = {}
-    iters_dict = {key:value for key,value in list(iters_dict.items()) if value != 1}
-    for i,key in enumerate(keys):
-        first_el = np.array(results[0][i])
-        if first_el.size == 1:
-            out[key] = np.squeeze(np.reshape(np.concatenate(
-                np.array(results,dtype=object)[:,i], axis=None), tuple(iters_dict.values())))
-        else:
-            out[key] = np.squeeze(np.reshape(np.concatenate(
-                np.array(results,dtype=object)[:,i], axis=None), tuple([*iters_dict.values(),*(first_el.shape)])))
-    
-    return out, iters_dict# also here iters_dict with actual values???
-
-                    # index = {}
-                    # for l1 in range(laser_iters_N['omega']):
-                    #     index['omega'] = l1  
-                    #     for l2 in range(laser_iters_N['k']):
-                    #         index['k'] = l2
-                    #         for i,dic in enumerate(laser_list):
-                    #             for key,value in dic.items():
-                    #                 print('Laser {}: key {} is set to {}'.format(i,key,value[index[key]]))
-                    #                 # obj.lasers[i].__dict__[key] = value[index[key]]
-                    # if calling_fun == 'calc_OBEs':
-                        # result_objects.append(pool.apply_async(np.sum,args=(np.arange(3),)))
-                        # result_objects.append(mp_calc(obj,betaB[c1,c2,:],**kwargs)) # --> without Pool parallelization
-                    # result_objects.append(pool.apply_async(deepcopy(obj).calc_OBEs,kwds=(kwargs)))
-#%%
-def vtoT(v,mass=157):
-    """function to convert a velocity v in m/s to a temperatur in K."""
-    return v**2 * 0.5*(mass*u_mass)/k_B
-def Ttov(T,mass=157):
-    """function to convert a temperatur in K to a velocity v in m/s."""
-    return np.sqrt(k_B*T*2/(mass*u_mass))
-
-#%%
-@jit(nopython=True,parallel=False,fastmath=True) #original (slow) ODE form from the Fokker-Planck paper
-def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices,h_gek,h_gege,phi):
-    N       = lNum+uNum
-    dymat   = np.zeros((N,N),dtype=np.complex64)
-    
-    ymat    = np.zeros((N,N),dtype=np.complex64)
-    count   = 0
-    for i in range(N):
-        for j in range(i,N):
-            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
-            count += 2     
-    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
-    for index in range(N):
-        ymat[index,index] *=0.5
-    
-    for a in range(lNum):
-        for b in range(uNum):
-            for q in [-1,0,1]:
-                for k in range(pNum):
-                    for c in range(lNum):
-                        dymat[a,lNum+b] += 1j*G[k]*f[k,q+1]/2/(2**0.5) *h_gek[c,b,k]*np.exp(1j*phi[k]+1j*T*(om_eg[c,b]-om_k[k]))* dMat[c,b,q+1]* ymat[a,c]
-                    for c_ in range(uNum):
-                        dymat[a,lNum+b] -= 1j*G[k]*f[k,q+1]/2/(2**0.5) *h_gek[a,c_,k]*np.exp(1j*phi[k]+1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,lNum+b]
-                for n in M_indices[1][b]:
-                    dymat[a,lNum+b] += 1j*(-1.)**q* betaB[q+1]* muMat[1][b,n,-q+1]* ymat[a,lNum+n]
-                for m in M_indices[0][a]:
-                    dymat[a,lNum+b] -= 1j*(-1.)**q* betaB[q+1]* muMat[0][m,a,-q+1]* ymat[m,lNum+b]
-            dymat[a,lNum+b] -= 0.5*ymat[a,lNum+b]
-    for a in range(uNum):
-        for b in range(a,uNum):
-            for q in [-1,0,1]:
-                for k in range(pNum):
-                    for c in range(lNum):
-                        dymat[lNum+a,lNum+b] += 1j*G[k]/2/(2**0.5)*(
-                            f[k,q+1] *h_gek[c,b,k]*np.exp(1j*phi[k]+1j*T*(om_eg[c,b]-om_k[k]))* dMat[c,b,q+1]* ymat[lNum+a,c]
-                            - np.conj(f[k,q+1]) *h_gek[c,a,k]*np.exp(-1j*phi[k]-1j*T*(om_eg[c,a]-om_k[k]))* dMat[c,a,q+1]* ymat[c,lNum+b])
-                for n in M_indices[1][b]:
-                    dymat[lNum+a,lNum+b] += 1j*(-1.)**q* betaB[q+1]* muMat[1][b,n,-q+1]* ymat[lNum+a,lNum+n]
-                for m in M_indices[1][a]:
-                    dymat[lNum+a,lNum+b] -= 1j*(-1.)**q* betaB[q+1]* muMat[1][m,a,-q+1]* ymat[lNum+m,lNum+b]
-            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]
-    for a in range(lNum):
-        for b in range(a,lNum):
-            for q in [-1,0,1]:
-                for k in range(pNum):
-                    for c_ in range(uNum):
-                        dymat[a,b] -= 1j*G[k]/2/(2**0.5)*(
-                            f[k,q+1] *h_gek[a,c_,k]*np.exp(1j*phi[k]+1j*T*(om_eg[a,c_]-om_k[k]))* dMat[a,c_,q+1]* ymat[lNum+c_,b]
-                            - np.conj(f[k,q+1]) *h_gek[b,c_,k]*np.exp(-1j*phi[k]-1j*T*(om_eg[b,c_]-om_k[k]))* dMat[b,c_,q+1]* ymat[a,lNum+c_])
-                for n in M_indices[0][b]:
-                    dymat[a,b] += 1j*(-1.)**q* betaB[q+1]* muMat[0][b,n,-q+1]* ymat[a,n]
-                for m in M_indices[0][a]:
-                    dymat[a,b] -= 1j*(-1.)**q* betaB[q+1]* muMat[0][m,a,-q+1]* ymat[m,b]
-                for c_ in range(uNum):
-                    for c__ in range(uNum):
-                        dymat[a,b] += dMat[a,c_,q+1]* dMat[b,c__,q+1] *h_gege[a,c_,b,c__]*np.exp(1j*T*(om_eg[a,c_]-om_eg[b,c__]))* ymat[lNum+c_,lNum+c__]
-    
-    dy_vec = np.zeros( N*(N+1) )
-    count = 0
-    for i in range(N):
-        for j in range(i,N):
-            dy_vec[count]   = dymat[i,j].real
-            dy_vec[count+1] = dymat[i,j].imag
-            count += 2
-
-    return dy_vec
-#%%
-@jit(nopython=True,parallel=False,fastmath=True) #same as ode1_OBEs_opt2 but compatible with two different electr. ex. states
-def ode1_OBEs_opt3(T,y_vec,lNum,uNum,pNum,M_indices,Gfd,om_gek,betamu,dd,ck_indices,Gam_fac):
-    N       = lNum+uNum
-    dymat   = np.zeros((N,N),dtype=np.complex128)
-    
-    ymat    = np.zeros((N,N),dtype=np.complex128)
-    count   = 0
-    for i in range(N):
-        for j in range(i,N):
-            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
-            count += 2     
-    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
-    for index in range(N):
-        ymat[index,index] *=0.5
-    
-    for a in range(uNum):
-        for c,k in zip(ck_indices[1][a][0],ck_indices[1][a][1]):
-            for b in range(lNum):
-                dymat[b,lNum+a] += Gfd[c,a,k]* np.exp(1j*om_gek[c,a,k]*T)* ymat[b,c]
-            for b in range(a,uNum):            
-                dymat[lNum+a,lNum+b] += np.conj(Gfd[c,a,k])* np.exp(-1j*om_gek[c,a,k]*T)* ymat[c,lNum+b]
-        for n in M_indices[1][a]:
-            for b in range(lNum):
-                dymat[b,lNum+a] += betamu[1][a,n] * ymat[b,lNum+n]
-        for m in M_indices[1][a]:
-            for b in range(a,uNum):
-                dymat[lNum+a,lNum+b] -= betamu[1][m,a] * ymat[lNum+m,lNum+b]
-        for b in range(a,uNum):
-            for n in M_indices[1][b]:
-                dymat[lNum+a,lNum+b] += betamu[1][b,n] * ymat[lNum+a,lNum+n]
-            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]*(Gam_fac[a]+Gam_fac[b])/2  #!!!!!!!!!!!!
-    for b in range(uNum-1,-1,-1):       
-        for c,k in zip(ck_indices[1][b][0],ck_indices[1][b][1]):
-            for a in range(0,b+1):
-                dymat[lNum+a,lNum+b] += Gfd[c,b,k]* np.exp(1j*om_gek[c,b,k]*T)* ymat[lNum+a,c]
-
-    for a in range(lNum):
-        for c_,k in zip(ck_indices[0][a][0],ck_indices[0][a][1]):
-            for b in range(uNum):
-                dymat[a,lNum+b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,lNum+b]
-            for b in range(a,lNum):    
-                dymat[a,b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,b]
-        for m in M_indices[0][a]:
-            for b in range(uNum):
-                dymat[a,lNum+b] -= betamu[0][m,a] * ymat[m,lNum+b]
-            for b in range(a,lNum):    
-                dymat[a,b] -= betamu[0][m,a] * ymat[m,b]
-        for b in range(uNum):
-            dymat[a,lNum+b] -= 0.5*Gam_fac[b]*ymat[a,lNum+b]                     #!!!!!!!!!!!!   
-        for b in range(a,lNum):
-            for n in M_indices[0][b]:
-                dymat[a,b] += betamu[0][b,n] * ymat[a,n]
-            for c_ in range(uNum):
-                for c__ in range(uNum):
-                    dymat[a,b] += dd[a,c_,b,c__] * np.exp(1j*T*(om_gek[a,c_,0]-om_gek[b,c__,0])) * ymat[lNum+c_,lNum+c__] *(Gam_fac[c_]+Gam_fac[c__])/2#!!!!!!!!!!!!????
-    for b in range(lNum-1,-1,-1):
-        for c_,k in zip(ck_indices[0][b][0],ck_indices[0][b][1]):
-            for a in range(0,b+1):
-                dymat[a,b] -= np.conj(Gfd[b,c_,k])* np.exp(-1j*om_gek[b,c_,k]*T)* ymat[a,lNum+c_]
-                
-    dy_vec = np.zeros( N*(N+1) )
-    count = 0
-    for i in range(N):
-        for j in range(i,N):
-            dy_vec[count]   = dymat[i,j].real
-            dy_vec[count+1] = dymat[i,j].imag
-            count += 2
-
-    return dy_vec
-
-#%%
-@jit(nopython=True,parallel=False,fastmath=True) #same as ode1_OBEs_opt1 but further optimized by rearranging the loops
-def ode1_OBEs_opt2(T,y_vec,lNum,uNum,pNum,M_indices,Gfd,om_gek,betamu,dd,ck_indices):
-    N       = lNum+uNum
-    dymat   = np.zeros((N,N),dtype=np.complex128)
-    
-    ymat    = np.zeros((N,N),dtype=np.complex128)
-    count   = 0
-    for i in range(N):
-        for j in range(i,N):
-            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
-            count += 2     
-    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
-    for index in range(N):
-        ymat[index,index] *=0.5
-    
-    for a in range(uNum):
-        for c,k in zip(ck_indices[1][a][0],ck_indices[1][a][1]):
-            for b in range(lNum):
-                dymat[b,lNum+a] += Gfd[c,a,k]* np.exp(1j*om_gek[c,a,k]*T)* ymat[b,c]
-            for b in range(a,uNum):            
-                dymat[lNum+a,lNum+b] += np.conj(Gfd[c,a,k])* np.exp(-1j*om_gek[c,a,k]*T)* ymat[c,lNum+b]
-        for n in M_indices[1][a]:
-            for b in range(lNum):
-                dymat[b,lNum+a] += betamu[1][a,n] * ymat[b,lNum+n]
-        for m in M_indices[1][a]:
-            for b in range(a,uNum):
-                dymat[lNum+a,lNum+b] -= betamu[1][m,a] * ymat[lNum+m,lNum+b]
-        for b in range(a,uNum):
-            for n in M_indices[1][b]:
-                dymat[lNum+a,lNum+b] += betamu[1][b,n] * ymat[lNum+a,lNum+n]
-            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]                     #!!!!!!!!!!!!
-    for b in range(uNum-1,-1,-1):       
-        for c,k in zip(ck_indices[1][b][0],ck_indices[1][b][1]):
-            for a in range(0,b+1):
-                dymat[lNum+a,lNum+b] += Gfd[c,b,k]* np.exp(1j*om_gek[c,b,k]*T)* ymat[lNum+a,c]
-
-    for a in range(lNum):
-        for c_,k in zip(ck_indices[0][a][0],ck_indices[0][a][1]):
-            for b in range(uNum):
-                dymat[a,lNum+b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,lNum+b]
-            for b in range(a,lNum):    
-                dymat[a,b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,b]
-        for m in M_indices[0][a]:
-            for b in range(uNum):
-                dymat[a,lNum+b] -= betamu[0][m,a] * ymat[m,lNum+b]
-            for b in range(a,lNum):    
-                dymat[a,b] -= betamu[0][m,a] * ymat[m,b]
-        for b in range(uNum):
-            dymat[a,lNum+b] -= 0.5*ymat[a,lNum+b]                        #!!!!!!!!!!!!   
-        for b in range(a,lNum):
-            for n in M_indices[0][b]:
-                dymat[a,b] += betamu[0][b,n] * ymat[a,n]
-            for c_ in range(uNum):
-                for c__ in range(uNum):
-                    dymat[a,b] += dd[a,c_,b,c__] * np.exp(1j*T*(om_gek[a,c_,0]-om_gek[b,c__,0])) * ymat[lNum+c_,lNum+c__] #!!!!!!!!!!!!
-    for b in range(lNum-1,-1,-1):
-        for c_,k in zip(ck_indices[0][b][0],ck_indices[0][b][1]):
-            for a in range(0,b+1):
-                dymat[a,b] -= np.conj(Gfd[b,c_,k])* np.exp(-1j*om_gek[b,c_,k]*T)* ymat[a,lNum+c_]
-                
-    dy_vec = np.zeros( N*(N+1) )
-    count = 0
-    for i in range(N):
-        for j in range(i,N):
-            dy_vec[count]   = dymat[i,j].real
-            dy_vec[count+1] = dymat[i,j].imag
-            count += 2
-
-    return dy_vec
-
-#%%
-@jit(nopython=True,parallel=False,fastmath=True) #same as ode1_OBEs but in optimized form with ck_indices variable
-def ode1_OBEs_opt1(T,y_vec,lNum,uNum,pNum,M_indices,Gfd,om_gek,betamu,dd,ck_indices):
-    N       = lNum+uNum
-    dymat   = np.zeros((N,N),dtype=np.complex128)
-    
-    ymat    = np.zeros((N,N),dtype=np.complex128)
-    count   = 0
-    for i in range(N):
-        for j in range(i,N):
-            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
-            count += 2     
-    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
-    for index in range(N):
-        ymat[index,index] *=0.5
-    
-    for a in range(lNum):
-        for b in range(uNum):
-            for c,k in zip(*ck_indices[1][b]):
-                dymat[a,lNum+b] += Gfd[c,b,k]* np.exp(1j*om_gek[c,b,k]*T)* ymat[a,c]
-            for c_,k in zip(*ck_indices[0][a]):
-                dymat[a,lNum+b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,lNum+b]
-            for n in M_indices[1][b]:
-                dymat[a,lNum+b] += betamu[1][b,n] * ymat[a,lNum+n]
-            for m in M_indices[0][a]:
-                dymat[a,lNum+b] -= betamu[0][m,a] * ymat[m,lNum+b]
-            dymat[a,lNum+b] -= 0.5*ymat[a,lNum+b]
-    for a in range(uNum):
-        for b in range(a,uNum):
-            for c,k in zip(*ck_indices[1][b]):
-                dymat[lNum+a,lNum+b] += Gfd[c,b,k]* np.exp(1j*om_gek[c,b,k]*T)* ymat[lNum+a,c]
-            for c,k in zip(*ck_indices[1][a]):
-                dymat[lNum+a,lNum+b] += np.conj(Gfd[c,a,k])* np.exp(-1j*om_gek[c,a,k]*T)* ymat[c,lNum+b]
-            for n in M_indices[1][b]:
-                dymat[lNum+a,lNum+b] += betamu[1][b,n] * ymat[lNum+a,lNum+n]
-            for m in M_indices[1][a]:
-                dymat[lNum+a,lNum+b] -= betamu[1][m,a] * ymat[lNum+m,lNum+b]
-            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]
-    for a in range(lNum):
-        for b in range(a,lNum):
-            for c_,k in zip(*ck_indices[0][a]):
-                dymat[a,b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,b]
-            for c_,k in zip(*ck_indices[0][b]):
-                dymat[a,b] -= np.conj(Gfd[b,c_,k])* np.exp(-1j*om_gek[b,c_,k]*T)* ymat[a,lNum+c_]
-            for n in M_indices[0][b]:
-                dymat[a,b] += betamu[0][b,n] * ymat[a,n]
-            for m in M_indices[0][a]:
-                dymat[a,b] -= betamu[0][m,a] * ymat[m,b]
-            for c_ in range(uNum):
-                for c__ in range(uNum):
-                    dymat[a,b] += dd[a,c_,b,c__] * np.exp(1j*T*(om_gek[a,c_,0]-om_gek[b,c__,0])) * ymat[lNum+c_,lNum+c__]
-    
-    dy_vec = np.zeros( N*(N+1) )
-    count = 0
-    for i in range(N):
-        for j in range(i,N):
-            dy_vec[count]   = dymat[i,j].real
-            dy_vec[count+1] = dymat[i,j].imag
-            count += 2
-
-    return dy_vec
-
-#%%
-@jit(nopython=True,parallel=False,fastmath=True) #same as ode0_OBEs but in optimized form with less input variables
-def ode1_OBEs(T,y_vec,lNum,uNum,pNum,M_indices,Gfd,om_gek,betamu,dd):
-    N       = lNum+uNum
-    dymat   = np.zeros((N,N),dtype=np.complex128)
-    
-    ymat    = np.zeros((N,N),dtype=np.complex128)
-    count   = 0
-    for i in range(N):
-        for j in range(i,N):
-            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
-            count += 2     
-    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
-    for index in range(N):
-        ymat[index,index] *=0.5
-    
-    for a in range(lNum):
-        for b in range(uNum):
-            for c in range(lNum):
-                tmp = 0
-                for k in range(pNum):
-                    tmp += Gfd[c,b,k]* np.exp(1j*om_gek[c,b,k]*T)
-                dymat[a,lNum+b] += tmp* ymat[a,c]
-            for c_ in range(uNum):
-                tmp = 0
-                for k in range(pNum):
-                    tmp += Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)
-                dymat[a,lNum+b] -= tmp* ymat[lNum+c_,lNum+b]
-            for n in M_indices[1][b]:
-                dymat[a,lNum+b] += betamu[1][b,n] * ymat[a,lNum+n]
-            for m in M_indices[0][a]:
-                dymat[a,lNum+b] -= betamu[0][m,a] * ymat[m,lNum+b]
-            dymat[a,lNum+b] -= 0.5*ymat[a,lNum+b]
-    for a in range(uNum):
-        for b in range(a,uNum):
-            for c in range(lNum):
-                tmp = 0
-                for k in range(pNum):
-                    tmp += Gfd[c,b,k]* np.exp(1j*om_gek[c,b,k]*T)
-                dymat[lNum+a,lNum+b] += tmp* ymat[lNum+a,c]
-            for c in range(lNum):
-                tmp = 0
-                for k in range(pNum):
-                    tmp += np.conj(Gfd[c,a,k])* np.exp(-1j*om_gek[c,a,k]*T)
-                dymat[lNum+a,lNum+b] += tmp* ymat[c,lNum+b]
-            for n in M_indices[1][b]:
-                dymat[lNum+a,lNum+b] += betamu[1][b,n] * ymat[lNum+a,lNum+n]
-            for m in M_indices[1][a]:
-                dymat[lNum+a,lNum+b] -= betamu[1][m,a] * ymat[lNum+m,lNum+b]
-            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]
-    for a in range(lNum):
-        for b in range(a,lNum):
-            for c_ in range(uNum):
-                tmp = 0
-                for k in range(pNum):
-                    tmp += Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)
-                dymat[a,b] -= tmp* ymat[lNum+c_,b]
-            for c_ in range(uNum):
-                tmp = 0
-                for k in range(pNum):
-                    tmp += np.conj(Gfd[b,c_,k])* np.exp(-1j*om_gek[b,c_,k]*T)
-                dymat[a,b] -= tmp* ymat[a,lNum+c_]
-            for n in M_indices[0][b]:
-                dymat[a,b] += betamu[0][b,n] * ymat[a,n]
-            for m in M_indices[0][a]:
-                dymat[a,b] -= betamu[0][m,a] * ymat[m,b]
-            for c_ in range(uNum):
-                for c__ in range(uNum):
-                    dymat[a,b] += dd[a,c_,b,c__] * np.exp(1j*T*(om_gek[a,c_,0]-om_gek[b,c__,0])) * ymat[lNum+c_,lNum+c__]
-    
-    dy_vec = np.zeros( N*(N+1) )
-    count = 0
-    for i in range(N):
-        for j in range(i,N):
-            dy_vec[count]   = dymat[i,j].real
-            dy_vec[count+1] = dymat[i,j].imag
-            count += 2
-
-    return dy_vec
-#%%
-@jit(nopython=True,parallel=False,fastmath=False)
-def ode0_rateeqs_jit(t,N,lNum,uNum,pNum,Gamma,r,R1sum,R2sum,tswitch,M):
-    dNdt = np.zeros(lNum+uNum)
-    if floor(t/tswitch)%2 == 1: R_sum=R1sum
-    else: R_sum=R2sum
-    
-    for l in prange(lNum):
-        for u in prange(uNum):
-            dNdt[l] += Gamma[u]* r[l,u] * N[lNum+u] + R_sum[l,u] * (N[lNum+u] - N[l])
-        if not M.size == 0:
-            for k in prange(lNum):
-                dNdt[l] -= M[l,k] * (N[l]-N[k])
-    for u in prange(uNum):
-        dNdt[lNum+u]  = -Gamma[u]*N[lNum+u]
-        for l in prange(lNum):
-            dNdt[lNum+u] += R_sum[l,u] * (N[l] - N[lNum+u])
-                          
-    return dNdt
-
-#%%
-def ode0_rateeqs(t,N,lNum,uNum,pNum,Gamma,r,R1sum,R2sum,tswitch,M):
-    dNdt = np.zeros(lNum+uNum)
-    if floor(t/tswitch)%2 == 1: R_sum=R1sum
-    else: R_sum=R2sum
-    
-    Nlu_matr = np.subtract.outer(N[:lNum], N[lNum:lNum+uNum])  
-    
-    dNdt[:lNum] = - np.sum(R_sum*Nlu_matr, axis=1) + Gamma*np.dot(r,N[lNum:lNum+uNum])
-    if not M.size == 0:
-        dNdt[:lNum] -= np.sum(M * np.subtract.outer(N[:lNum], N[:lNum]), axis=1)
-    
-    dNdt[lNum:lNum+uNum] = -Gamma*N[lNum:lNum+uNum] + np.sum(R_sum*Nlu_matr, axis=0)
-              
-    return dNdt
-
-#%%
-def ode1_rateeqs(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,k,r_k,m,tswitch,M,pos_dep):    
-    dydt = np.zeros(lNum+uNum+3+3)
-    if floor(t/tswitch)%2 == 1: rx=rx1
-    else: rx=rx2
-    sp = sp_.copy()
-    # position dependent Force on particle due to Gaussian shape of Laserbeam:
-    if pos_dep:
-        for p in range(pNum):
-            #if abs(y[-3]) > 1e-3: sp[p] = 1e-1
-            d = np.linalg.norm(np.cross( y[-3:]-r_k[p] , k[p]/np.linalg.norm(k[p]) ))
-            # r2 = np.dot(y[-3:], y[-3:]) - (np.dot(k[p], y[-3:])/np.linalg.norm(k[p]))**2
-            sp[p] = sp[p] * np.exp(-2 * d**2 / ((0.2*w[p])**2) )
-    
-    # shape of k: (pNum,3)
-    # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
-    # R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
-    R = Gamma/2 * (rx*sp) / ( 1+4*( delta - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/Gamma**2 )    
-    # sum R over pNum
-    R_sum = np.sum(R,axis=2)
-    # shape(Nlu_matr) = (lNum,uNum)
-    Nlu_matr = y[:lNum,None] - y[None,lNum:lNum+uNum]#np.subtract.outer(y[:lNum], y[lNum:lNum+uNum])
-
-    # __________ODE:__________
-    # N_l' = ...
-    dydt[:lNum] = - np.sum(R_sum*Nlu_matr, axis=1) + Gamma*np.dot(r,y[lNum:lNum+uNum])
-    if not M.size == 0: # magnetic remixing of the ground states
-        dydt[:lNum] -= np.sum(M * np.subtract.outer(y[:lNum], y[:lNum]), axis=1)
-    # N_u' = ... 
-    dydt[lNum:lNum+uNum] = -Gamma*y[lNum:lNum+uNum] + np.sum(R_sum*Nlu_matr, axis=0)
-    # v' = ...
-    dydt[lNum+uNum:lNum+uNum+3] = hbar/m * np.sum(np.dot(R,k) * Nlu_matr[:,:,None], axis=(0,1)) #+ g 
-    # r' = ...    
-    dydt[lNum+uNum+3:lNum+uNum+3+3] = y[lNum+uNum:lNum+uNum+3]
-              
-    return dydt
-
-#%%
-@jit(nopython=True,parallel=False,fastmath=False)
-def ode1_rateeqs_jit(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,w,w_cyl,k,kabs,r_k,r_cyl_trunc,dir_cyl,m,tswitch,M,pos_dep,beta):    
-    dydt = np.zeros(lNum+uNum+3+3)
-    if floor(t/tswitch)%2 == 1: rx=rx1
-    else: rx=rx2
-    sp = sp_.copy()
-    # position dependent Force on particle due to Gaussian shape of Laserbeam:
-    if pos_dep:
-        for p in range(pNum):
-            r_ = y[-3:] - r_k[p]
-            if w_cyl[p] != 0.0: # calculation for a beam which is widened by a cylindrical lens
-                d2_w = np.dot(dir_cyl[p],r_)**2
-                if d2_w > r_cyl_trunc[p]**2: #test if position is larger than the truncation radius along the dir_cyl direction
-                    sp[:,:,p] = 0.0  
-                else:
-                    d2 = np.dot(np.cross(dir_cyl[p],k[p]/kabs[p]),r_)**2
-                    sp[:,:,p] *= np.exp(-2*(d2_w/w_cyl[p]**2 + d2/w[p]**2))
-            else: 
-                r_perp = np.cross( r_ , k[p]/kabs[p] )
-                sp[:,:,p] *= np.exp(-2 * np.dot(r_perp,r_perp) / w[p]**2 )  
-
-    delta_ = delta + 2*pi*beta*t #frequency chirping
-    # shape of k: (pNum,3)
-    # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
-    # R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
-    R = Gamma/2 * (rx*sp) / ( 1+4*( delta_ - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/(Gamma**2) ) 
-    # sum R over pNum
-    R_sum = np.sum(R,axis=2)
-    
-    # __________ODE:__________
-    # N_l' = ...
-    for l in range(lNum):
-        for u in range(uNum):
-            dydt[l] += Gamma[0,u,0]* r[l,u] * y[lNum+u] + R_sum[l,u] * (y[lNum+u] - y[l])
-    if not M.size == 0:
-        for l1 in range(lNum):
-            for l2 in range(lNum):
-                dydt[l1] -= M[l1,l2] * (y[l1]-y[l2])
-    # N_u' = ... 
-    for u in range(uNum):
-        dydt[lNum+u]  = -Gamma[0,u,0]*y[lNum+u]
-        for l in range(lNum):
-            dydt[lNum+u] += R_sum[l,u] * (y[l] - y[lNum+u])
-    # v' = ...
-    for i in range(3):
-        for l in range(lNum):
-            for u in range(uNum):
-                for p in range(pNum):
-                    dydt[lNum+uNum+i] +=  hbar/m * k[p,i] * R[l,u,p] * ( y[l] - y[lNum+u] )
-    # r' = ...    
-    dydt[lNum+uNum+3:lNum+uNum+3+3] = y[lNum+uNum:lNum+uNum+3]
-              
-    return dydt
-
-#%%
-@jit(nopython=True,parallel=False,fastmath=False)
-def ode1_rateeqs_jit_testI(t,y,lNum,uNum,pNum,Gamma,r,rx1,rx2,delta,sp_,k,m,tswitch,M,pos_dep,beta,I_tot):    
-    dydt = np.zeros(lNum+uNum+3+3)
-    if floor(t/tswitch)%2 == 1: rx=rx1
-    else: rx=rx2
-    sp = sp_.copy()
-    # position dependent Force on particle due to Gaussian shape of Laserbeam:
-    if pos_dep:
-        sp *= I_tot(y[-3:]) #shape of sp: (uNum,pNum), shape of I_tot: (pNum)
-
-    delta_ = delta + 2*pi*beta*t #frequency chirping
-    # shape of k: (pNum,3)
-    # shape of rx = (lNum,uNum,pNum), sp.shape = (pNum) ==> (rx*sp).shape = (lNum,uNum,pNum)
-    # R = Gamma/2 * (rx*sp) / ( 1+4*(delta)**2/Gamma**2 )
-    R = np.reshape(Gamma,(1,-1,1))/2 * (rx*sp) / ( 1+4*( delta_ - np.dot(k,y[lNum+uNum:lNum+uNum+3]) )**2/np.reshape(Gamma,(1,-1,1))**2 )    
-    # sum R over pNum
-    R_sum = np.sum(R,axis=2)
-    
-    # __________ODE:__________
-    # N_l' = ...
-    for l in range(lNum):
-        for u in range(uNum):
-            dydt[l] += Gamma[u]* r[l,u] * y[lNum+u] + R_sum[l,u] * (y[lNum+u] - y[l])
-    if not M.size == 0:
-        for l1 in range(lNum):
-            for l2 in range(lNum):
-                dydt[l1] -= M[l1,l2] * (y[l1]-y[l2])
-    # N_u' = ... 
-    for u in range(uNum):
-        dydt[lNum+u]  = -Gamma[u]*y[lNum+u]
-        for l in range(lNum):
-            dydt[lNum+u] += R_sum[l,u] * (y[l] - y[lNum+u])
-    # v' = ...
-    for i in range(3):
-        for l in range(lNum):
-            for u in range(uNum):
-                for p in range(pNum):
-                    dydt[lNum+uNum+i] +=  hbar/m * k[p,i] * R[l,u,p] * ( y[l] - y[lNum+u] )
-    # r' = ...    
-    dydt[lNum+uNum+3:lNum+uNum+3+3] = y[lNum+uNum:lNum+uNum+3]
-              
-    return dydt
-#%%
-def save_object(obj,filename=None):
-    """Save an entire class with all its attributes (or any other python object).
-    
-    Parameters
-    ----------
-    obj : object
-        The object you want to save.
-    filename : str, optional
-        the filename to save the data. The extension '.pkl' will be added for
-        saving the file. If no filename is provided, it is set to the attribute
-        `description` of the object and if the object does not have this
-        attribute, the filename is set to the name of the class belonging to
-        the object.
-    """
-    if filename == None:
-        if hasattr(obj,'description'): filename = obj.description
-        else: filename = type(obj).__name__ # instance is set to name of its class
-    if type(obj).__name__ == 'System':
-        if 'args' in obj.__dict__:
-            if 'return_fun' in obj.args:
-                del obj.args['return_fun'] #problem when an external function is tried to be saved
-    with open(filename+'.pkl','wb') as output:
-        pickle.dump(obj,output,-1)
-        
-def open_object(filename):
-    """Opens a saved object from a saved .pkl-file with all its attributes.    
-
-    Parameters
-    ----------
-    filename : str
-        filename without the '.pkl' extension.
-
-    Returns
-    -------
-    output : Object
-    """
-    with open(filename+'.pkl','rb') as input:
-        output = pickle.load(input)
-    return output
-
-def make_axes_invisible(axes,xaxis=False,yaxis=False,
-                        invisible_spines=['top','bottom','left','right']):
-    """For advanced plotting: This function makes certain properties of an
-    matplotlib axes object invisible. By default everything of a new created
-    axes object is invisible.
-
-    Parameters
-    ----------
-    axes : matplotlib.axes.Axes object or iterable of objects
-        axes for which properties should be made inivisible.
-    xaxis : bool, optional
-        If xaxis is made invisible. The default is False.
-    yaxis : bool, optional
-        If yaxis is made invisible. The default is False.
-    invisible_spines : list of strings, optional
-        spines to be made invisible. The default is ['top','bottom','left','right'].
-    """
-    if not isinstance(axes,Iterable): axes = [axes]
-    for ax in axes:
-        ax.axes.get_xaxis().set_visible(xaxis)
-        ax.axes.get_yaxis().set_visible(yaxis)
-        for pos in invisible_spines:
-            ax.spines[pos].set_visible(False)
 
 #%%
 if __name__ == '__main__':

@@ -30,9 +30,6 @@ from collections.abc import Iterable
 import _pickle as pickle
 import os
 from copy import deepcopy
-script_dir = os.path.dirname(os.path.abspath(__file__)) #directory where this script is stored.
-# Using this directory path, the module System (and the others) can be imported
-# from an arbitrary directory provided that the respective path is in the PYTHONPATH variable.
 #%%
 
 def get_keylist(name,dic):
