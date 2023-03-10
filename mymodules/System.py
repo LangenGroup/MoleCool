@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.1.0
+v3.1.1
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -510,14 +510,27 @@ class System:
         plt.xlabel('Frequency $f$ in MHz')
         plt.ylabel('Power spectrum of the FFT')
     
-    def calc_Rabi_freqs(self,position_dep=False): # pos_dep?!? using self.args?
-        """calculates detuning-weighted, averaged angular Rabi frequencies
-        for every laser (with 2*pi included)."""
-        
+    def calc_Rabi_freqs(self,position_dep=False):
+        """Calculate the (angular) pure Rabi frequencies for each transition
+        and each laser component (with 2*pi included).
+
+        Parameters
+        ----------
+        position_dep : bool, optional
+            Whether the intensity for the calculation is evaluated at a certain
+            position within the Gaussian laser beam profiles (True) or at the
+            maximum (False). The default is False.
+
+        Returns
+        -------
+        np.ndarray((lNum,uNum,pNum))
+            Angular Rabi frequencies for each combination of laser, excited states,
+            and ground state.
+        """
         # saturation parameter of intensity (lNum,uNum,pNum)
         self.sp = self.lasers.getarr('I')[None,None,:]/(self.levels.Isat[:,:,None])
-        self.Rabi_freqs = self.Gamma[None,:,None]*np.sqrt(self.sp/2)*np.dot(
-                            self.levels.calc_dMat(), self.lasers.getarr('f_q').T )
+        self.Rabi_freqs = self.levels.calc_Gamma()[None,:,None]*np.sqrt(self.sp/2) \
+                        * np.dot(self.levels.calc_dMat(), self.lasers.getarr('f_q').T)
         
         # position dependent intensity due to Gaussian shape of Laserbeam:
         if position_dep:
