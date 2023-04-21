@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v3.0.8
+v3.2.0
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -98,7 +98,11 @@ class Lasersystem:
         self.check_config()
         if not var in dir(self[0]):
             raise ValueError('The attribute {} is not included in the Laser objects'.format(var))
-        return np.array([getattr(la,var) for la in self], dtype=float)
+        if var == 'f_q': 
+            dtype = complex
+        else:
+            dtype = float
+        return np.array([getattr(la,var) for la in self],dtype=dtype)
         
     def add_sidebands(self,lamb=860e-9,offset_freq=0.0,mod_freq=1e6,
                       ratios=None,sidebands=[-1,1],**kwargs):
@@ -612,7 +616,7 @@ class Laser:
     @property
     def P(self):
         """calculates the Power of the single beam"""
-        if np.all(self._P): return self._P
+        if np.any(self._P != None): return self._P
         else:
             if np.any(np.array(self._w_cylind) != 0.0):
                 return self.I*(pi*self.w*self._w_cylind)/2

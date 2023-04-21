@@ -84,6 +84,142 @@ def ode0_OBEs(T,y_vec,lNum,uNum,pNum,G,f,om_eg,om_k,betaB,dMat,muMat,M_indices,h
 
     return dy_vec
 #%%
+def ode_3level(T,y_vec,Om_gi , Om_ie, Gamma_e, Gamma_i):
+    N       = 4
+    dymat   = np.zeros((N,N),dtype=np.complex128)
+    
+    ymat    = np.zeros((N,N),dtype=np.complex128)
+    count   = 0
+    for i in range(N):
+        for j in range(i,N):
+            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
+            count += 2
+    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
+    for index in range(N):
+        ymat[index,index] *=0.5
+        
+    print(ymat)
+    # gg
+    dymat[0,0] = 0.5j*Om_gi*(ymat[0,1]-ymat[1,0]) + Gamma_i*ymat[1,1]
+    # ii
+    dymat[1,1] = -0.5j*Om_gi*(ymat[0,1]-ymat[1,0]) +0.5j*Om_ie*(ymat[1,2]-ymat[2,1]) \
+        - Gamma_i*ymat[1,1] + Gamma_e*ymat[2,2]
+    # ee
+    dymat[2,2] = -0.5j*Om_ie*(ymat[1,2]-ymat[2,1]) -  Gamma_e*ymat[2,2]
+    # gi
+    dymat[0,1] = -0.5j*Om_gi*(ymat[1,1]-ymat[0,0]) + 0.5j*Om_ie*ymat[0,2] - Gamma_i/2*ymat[0,1]
+    # ge
+    dymat[0,2] = -0.5j*Om_gi*ymat[1,2] + 0.5j*Om_ie*ymat[0,1] - Gamma_e/2*ymat[0,2]
+    # ie
+    dymat[1,2] = -0.5j*Om_ie*(ymat[2,2]-ymat[1,1]) - 0.5j*Om_gi*ymat[0,2] \
+        -(Gamma_i+Gamma_e)/2*ymat[1,2]
+    
+    dy_vec = np.zeros( N*(N+1) )
+    count = 0
+    for i in range(N):
+        for j in range(i,N):
+            dy_vec[count]   = dymat[i,j].real
+            dy_vec[count+1] = dymat[i,j].imag
+            count += 2
+            if i==j:
+                if dymat[i,j].imag != 0.0: print(i)
+
+    return dy_vec
+    
+#%%
+@jit(nopython=True,parallel=False,fastmath=True) #same as ode1_OBEs_opt3 but compatible with immediate states
+def ode1_OBEs_opt4(T,y_vec,lNum,uNum,iNum,pNum,M_indices,Gfd,om_gek,betamu,dd,ck_indices,Gam_fac):
+    N       = lNum+uNum
+    dymat   = np.zeros((N,N),dtype=np.complex128)
+    
+    ymat    = np.zeros((N,N),dtype=np.complex128)
+    count   = 0
+    for i in range(N):
+        for j in range(i,N):
+            ymat[i,j] = y_vec[count] + 1j* y_vec[count+1]
+            count += 2
+    ymat    += np.conj(ymat.T) #is diagonal remaining purely real or complex?
+    for index in range(N):
+        ymat[index,index] *=0.5
+    
+    # print(ymat)
+    
+    for a in range(uNum):
+        for c,k in zip(ck_indices[1][a][0],ck_indices[1][a][1]):
+            for b in range(lNum):
+                dymat[b,lNum+a] += Gfd[c,a,k]* np.exp(1j*om_gek[c,a,k]*T)* ymat[b,c]
+            for b in range(a,uNum):       
+                if not ( (b >= uNum-iNum) and (a < uNum-iNum)):
+                    dymat[lNum+a,lNum+b] += np.conj(Gfd[c,a,k])* np.exp(-1j*om_gek[c,a,k]*T)* ymat[c,lNum+b]
+        # for n in M_indices[1][a]:
+        #     for b in range(lNum):
+        #         dymat[b,lNum+a] += betamu[1][a,n] * ymat[b,lNum+n]
+        # for m in M_indices[1][a]:
+        #     for b in range(a,uNum):
+        #         if not (a >= iNum and b >= iNum):
+        #             dymat[lNum+a,lNum+b] -= betamu[1][m,a] * ymat[lNum+m,lNum+b]
+        for b in range(a,uNum):
+            # for n in M_indices[1][b]:
+            #     if not (a >= iNum and b >= iNum):
+            #         dymat[lNum+a,lNum+b] += betamu[1][b,n] * ymat[lNum+a,lNum+n]
+            dymat[lNum+a,lNum+b] -= ymat[lNum+a,lNum+b]*(Gam_fac[a]+Gam_fac[b])/2  #!!!!!!!!!!!!
+    for b in range(uNum):       
+        for c,k in zip(ck_indices[1][b][0],ck_indices[1][b][1]):
+            for a in range(0,b+1):
+                dymat[lNum+a,lNum+b] += Gfd[c,b,k]* np.exp(1j*om_gek[c,b,k]*T)* ymat[lNum+a,c]
+
+    for a in range(lNum):
+        for c_,k in zip(ck_indices[0][a][0],ck_indices[0][a][1]):
+            for b in range(uNum):
+                dymat[a,lNum+b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,lNum+b]
+            for b in range(a,lNum):
+                if not ( (a < lNum-iNum) and (b >= lNum-iNum) ):
+                    dymat[a,b] -= Gfd[a,c_,k]* np.exp(1j*om_gek[a,c_,k]*T)* ymat[lNum+c_,b]
+        # for m in M_indices[0][a]:
+        #     for b in range(uNum):
+        #         dymat[a,lNum+b] -= betamu[0][m,a] * ymat[m,lNum+b]
+        #     for b in range(a,lNum):    
+        #         dymat[a,b] -= betamu[0][m,a] * ymat[m,b]
+        for b in range(uNum):
+            if not ( (a >= lNum-iNum) and (b < uNum-iNum)):
+                dymat[a,lNum+b] -= 0.5*Gam_fac[b]*ymat[a,lNum+b]                     #!!!!!!!!!!!!   
+        for b in range(a,lNum):
+            # for n in M_indices[0][b]:
+            #     dymat[a,b] += betamu[0][b,n] * ymat[a,n]
+            if not ( (a < lNum-iNum) and (b >= lNum-iNum) ):
+                for c_ in range(uNum):
+                    for c__ in range(uNum):
+                        dymat[a,b] += dd[a,c_,b,c__] * np.exp(1j*T*(om_gek[a,c_,0]-om_gek[b,c__,0])) * ymat[lNum+c_,lNum+c__] *(Gam_fac[c_]+Gam_fac[c__])/2#!!!!!!!!!!!!????
+    for b in range(lNum-1,-1,-1):
+        for c_,k in zip(ck_indices[0][b][0],ck_indices[0][b][1]):
+            for a in range(0,b+1):
+                dymat[a,b] -= np.conj(Gfd[b,c_,k])* np.exp(-1j*om_gek[b,c_,k]*T)* ymat[a,lNum+c_]
+    
+                
+    dymat[0:lNum-iNum,lNum-iNum:lNum]       += dymat[0:lNum-iNum,N-iNum:N]
+    dymat[lNum-iNum:lNum,lNum:N-iNum]       += np.conj(dymat[lNum:N-iNum,N-iNum:N].T)
+    dymat[lNum-iNum:lNum,lNum-iNum:lNum]    += dymat[N-iNum:N,N-iNum:N]
+    dymat[0:lNum-iNum,N-iNum:N]             = dymat[0:lNum-iNum,lNum-iNum:lNum]
+    dymat[lNum:N-iNum,N-iNum:N]             = np.conj(dymat[lNum-iNum:lNum,lNum:N-iNum].T)
+    dymat[N-iNum:N,N-iNum:N]                = dymat[lNum-iNum:lNum,lNum-iNum:lNum]
+    
+    dymat[lNum-iNum:lNum,N-iNum:N] = 0.0
+
+    dy_vec = np.zeros( N*(N+1) )
+    count = 0
+    for i in range(N):
+        for j in range(i,N):
+            dy_vec[count]   = dymat[i,j].real
+            dy_vec[count+1] = dymat[i,j].imag
+            count += 2
+            if i==j:
+                tol = 1e-12
+                if np.abs(dymat[i,j].imag) > tol:
+                    print('Populations got imaginary (>1e-12)')
+                dy_vec[count+1] = 0.0
+                    
+    return dy_vec
+#%%
 @jit(nopython=True,parallel=False,fastmath=True) #same as ode1_OBEs_opt2 but compatible with two different electr. ex. states
 def ode1_OBEs_opt3(T,y_vec,lNum,uNum,pNum,M_indices,Gfd,om_gek,betamu,dd,ck_indices,Gam_fac):
     N       = lNum+uNum

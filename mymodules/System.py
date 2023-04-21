@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.1.1
+v3.2.0
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -263,8 +263,6 @@ class System:
         
         #___parameters belonging to the levels
         self.levels.calc_all()
-        # Gamma for each electronic state (uNum)
-        self.Gamma  = self.levels.calc_Gamma()
         
         #___start multiprocessing if desired only after calculating the levels
         #   properties so that they don't have to be re-calculated every time.
@@ -309,10 +307,10 @@ class System:
             # position dependent intensity due to Gaussian shape of Laserbeam:
             if position_dep:
                 self.sp *= self.lasers.I_tot(self.r0,sum_lasers=False,use_jit=False)[None,None,:]
-            self.R1 = self.Gamma[None,:,None]/2*self.rx1*self.sp / (
-                1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/self.Gamma[None,:,None]**2)
-            self.R2 = self.Gamma[None,:,None]/2*self.rx2*self.sp / (
-                1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/self.Gamma[None,:,None]**2)
+            self.R1 = self.levels.calc_Gamma()[None,:,None]/2*self.rx1*self.sp / (
+                1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/self.levels.calc_Gamma()[None,:,None]**2)
+            self.R2 = self.levels.calc_Gamma()[None,:,None]/2*self.rx2*self.sp / (
+                1+4*(self.delta-np.dot(self.k,self.v0)[None,None,:])**2/self.levels.calc_Gamma()[None,:,None]**2)
             #sum R1 & R2 over pNum:
             self.R1sum, self.R2sum = np.sum(self.R1,axis=2), np.sum(self.R2,axis=2)
             
@@ -328,12 +326,12 @@ class System:
         if not trajectory:
             sol = solve_ivp(ODEs.ode0_rateeqs_jit, (t_start,t_start+t_int), self.y0,
                     t_eval=self.t_eval, **self.args['kwargs'],
-                    args=(lNum,uNum,pNum,self.Gamma,self.levels.calc_branratios(),
+                    args=(lNum,uNum,pNum,self.levels.calc_Gamma(),self.levels.calc_branratios(),
                           self.R1sum,self.R2sum,tswitch,self.M))
         else:
             sol = solve_ivp(ODEs.ode1_rateeqs_jit, (t_start,t_start+t_int), self.y0,
                     t_eval=self.t_eval, **self.args['kwargs'],
-                    args=(lNum,uNum,pNum,np.reshape(self.Gamma,(1,-1,1)),self.levels.calc_branratios(),
+                    args=(lNum,uNum,pNum,np.reshape(self.levels.calc_Gamma(),(1,-1,1)),self.levels.calc_branratios(),
                           self.rx1,self.rx2,self.delta,self.sp,
                           self.lasers.getarr('w'),self.lasers.getarr('_w_cylind'),
                           self.k,self.lasers.getarr('kabs'),self.lasers.getarr('r_k'),
@@ -396,11 +394,8 @@ class System:
                         alpha = 1.0
                     else:
                         alpha = alphas[state.v]
-                        
-                if 'gs' in state.QuNrs:
-                    label = str(state).split('gs=')[-1]
-                else:
-                    label = str(state).split('exs=')[-1]
+                
+                label = str(state).split(f'{ElSt.gs_exs}=')[-1]
                     
                 plt.plot(self.t*1e6,(self.N[j+N_sum,:]+smallspacing*i)*1e2,
                          label=label,ls=ls,color=color,alpha=alpha)
@@ -408,8 +403,11 @@ class System:
             
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Populations $N$ in %')
-        plt.legend(title='States:',loc='center left',
-                   bbox_to_anchor=(1, 0.5),fontsize='x-small',labelspacing=-0.0)
+        leg = plt.legend(title='States:',loc='center left',labelspacing=-0.0,
+                         bbox_to_anchor=(1, 0.5),fontsize='x-small')
+        # set the linewidth of each legend object
+        for legobj in leg.legendHandles:
+            legobj.set_linewidth(1.4)
         
     def plot_Nscatt(self,sum_over_ElSts=False):
         """plot the scattered photon number over time (integral of `Nscattrate`)."""
@@ -556,7 +554,7 @@ class System:
                 self.lasers.description))
         else: plt.figure(figname,figsize=figsize)
         lamb = c/(self.levels.calc_freq()[0,0]/2/pi)
-        F = self.F/ (hbar*2*pi/860e-9*self.Gamma[0]/2)
+        F = self.F/ (hbar*2*pi/860e-9*self.levels.calc_Gamma()[0]/2)
         ls_arr = ['-','--','-.']
         for axis in axes:
             i = {'x':0,'y':1,'z':2}[axis]
@@ -725,7 +723,7 @@ class System:
             The default is False.
         rounded : float, optional
             if specified, all frequencies and velocities are rounded to the frequency
-            `rounded` in units of Gamma[0].
+            `rounded` in units of max(Gamma).
             The default is False.
         verbose : bool, optional
             whether to print additional information like execution time or the
@@ -759,10 +757,8 @@ class System:
         
         #___parameters belonging to the levels
         self.levels.calc_all()
-        # Gamma for each electronic state (uNum)
-        self.Gamma      = self.levels.calc_Gamma()
         # for dimensionless time units
-        freq_unit       = self.Gamma[0] # choose the linewidth of the first electronic state as unit
+        freq_unit       = self.levels.calc_Gamma().max() # choose the linewidth of the first electronic state as unit
         self.freq_unit  = freq_unit
         #frequency differences between the ground and excited states (delta)
         self.om_eg      = self.levels.calc_freq()/freq_unit
@@ -793,7 +789,7 @@ class System:
         #coefficients h to neglect highly-oscillating terms of the OBEs (with frequency threshold freq_clip_TH)
         self.om_gek = self.om_eg[:,:,None] - self.om_k[None,None,:]
         if freq_clip_TH == 'auto':
-            FWHM = np.sqrt(self.Gamma[None,:,None]**2 + 2*self.Rabi_freqs**2)/freq_unit #in dimensionless units
+            FWHM = np.sqrt(self.levels.calc_Gamma()[None,:,None]**2 + 2*np.abs(self.Rabi_freqs)**2)/freq_unit #in dimensionless units
             self.h_gek  = np.where(np.abs(self.om_gek) < 8*FWHM/2, 1.0, 0.0)
             self.h_gege = np.where(np.abs(self.om_eg[:,:,None,None]-self.om_eg[None,None,:,:])\
                                    < 8*np.max(FWHM)/2, 1.0, 0.0)
@@ -839,11 +835,11 @@ class System:
             elif self.args['rounded']:
                 t_int = 2*pi/(freq_unit*self.args['rounded'])
             elif self.steadystate['period'] == 'standingwave':
-                if self.v0[2] != 0: #if v0==0, then t_int is not changed and thus used for int time.
+                if np.linalg.norm(self.v0) != 0: #if v0==0, then t_int is not changed and thus used for int time.
                     lambda_mean = (c/(self.om_eg*freq_unit/2/pi)).mean()
                     if np.any(np.abs(c/(self.om_eg*freq_unit/2/pi) /lambda_mean -1)>0.1e-2 ):#percental deviation from mean
                         print('WARNING: averaging over standing wave periods might not be accurate since the wavelengths differ.')
-                    period = lambda_mean/abs(self.v0[2])#/2
+                    period = lambda_mean/np.linalg.norm(self.v0)#/2
                     t_int = period*(t_int//period+1) # int(t_int - t_int % period)
             self._evaluate(t_start, t_int, dt, N0mat)
             t_start = self.t[-1]
@@ -907,9 +903,11 @@ class System:
                 pass
         return None
     
-    def initialize_N0(self,return_densitymatrix=False):
+    def initialize_N0(self,return_densitymatrix=False,random=False):
         #___specify the initial (normalized) occupations of the levels
-        N = self.levels.lNum + self.levels.uNum
+        N,iNum = self.levels.N, self.levels.iNum
+        if random:
+            self.N0 = np.random.rand(N)
         self.N0 = np.array(self.N0, dtype=float)
         if len(self.N0) == 0:
             if 'v' in self.levels.grstates[0][0].QuNrs:
@@ -922,16 +920,30 @@ class System:
                         self.N0[i] = 1.0
             else:
                 self.N0     = np.ones(N)
+        else:
+            if len(self.N0) != N:
+                if len(self.N0) == N+iNum:
+                    self.N0 = self.N0[:N]
+                else:
+                    raise ValueError('Wrong size of N0')
         self.N0 /= self.N0.sum() #initial populations are always normalized
         
+        if iNum > 0:
+            self.N0 = np.array([*self.N0,*self.N0[self.levels.lNum-iNum:self.levels.lNum]])
+        
         if return_densitymatrix:
+            N = N +iNum
             N0mat = np.zeros((N,N),dtype=np.complex64)
+            if random:
+                print('MUST be modified that the density matrix elements that are twice apparent are equal')
+                N0mat = (np.random.rand(N,N) + 1j*np.random.rand(N,N))/2
+                N0mat +=  np.conj(N0mat).T 
             #transform these initial values into the density matrix elements N0mat
             N0mat[(np.arange(N),np.arange(N))] = self.N0
             return N0mat
 
     def get_Nscattrate(self,sum_over_ElSts=False):
-        Nscattrate_arr = self.Gamma[:,None]*self.N[self.levels.lNum:,:]
+        Nscattrate_arr = self.levels.calc_Gamma()[:,None]*self.N[self.levels.lNum:,:]
         if not sum_over_ElSts:# and (len(self.levels.exstates_labels) > 1)
             Nscattrate_summed = np.zeros((len(self.levels.exstates_labels),self.N.shape[1]))
             N_states = 0
@@ -973,22 +985,12 @@ class System:
         if np.all(self.t_eval) != None:
             T_eval = self.t_eval * freq_unit
         
-        #___transform the initial density matrix N0mat in a vector
-        N = self.levels.N
-        N0_vec = np.zeros( N*(N+1) )
-        count = 0
-        for i in range(N):
-            for j in range(i,N):
-                N0_vec[count]   = N0mat[i,j].real
-                N0_vec[count+1] = N0mat[i,j].imag
-                count += 2
-        
-        #___initial population
-        self.y0      = N0_vec
+        #___transform the initial density matrix N0mat in a vector for the ode
+        self.y0 = self.density_mat2vec(N0mat)
         
         # ---------------Ordinary Differential Equation solver----------------
         # solve initial value problem of the ordinary first order differential equation with scipy
-        lNum,uNum,pNum = self.levels.lNum,self.levels.uNum,self.lasers.pNum
+        lNum,uNum,iNum,pNum = self.levels.lNum,self.levels.uNum,self.levels.iNum,self.lasers.pNum
         kwargs = self.args['kwargs']
         # sol = solve_ivp(ode0_OBEs, (t_start*freq_unit,(t_start+t_int)*freq_unit),
         #                 self.y0, t_eval=T_eval, **kwargs,
@@ -1003,27 +1005,60 @@ class System:
         #                 self.y0, t_eval=T_eval, **kwargs,
         #                 args=(lNum,uNum,pNum, self.M_indices,
         #                       self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices))
-        sol = solve_ivp(ODEs.ode1_OBEs_opt3, (t_start*freq_unit,(t_start+t_int)*freq_unit),  #<- can also handle two electr. states with diff. Gamma
-                        self.y0, t_eval=T_eval, **kwargs,
-                        args=(lNum,uNum,pNum, self.levels.calc_M_indices(),
-                              self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices,self.Gamma/freq_unit))
+        if iNum == 0:
+            sol = solve_ivp(ODEs.ode1_OBEs_opt3, (t_start*freq_unit,(t_start+t_int)*freq_unit),  #<- can also handle two electr. states with diff. Gamma
+                            self.y0, t_eval=T_eval, **kwargs,
+                            args=(lNum,uNum,pNum, self.levels.calc_M_indices(),
+                                  self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices,
+                                  self.levels.calc_Gamma()/freq_unit))
+        else:
+            sol = solve_ivp(ODEs.ode1_OBEs_opt4, (t_start*freq_unit,(t_start+t_int)*freq_unit),  #<- can also handle two electr. states with diff. Gamma
+                            self.y0, t_eval=T_eval, **kwargs,
+                            args=(lNum,uNum,iNum,pNum, self.levels.calc_M_indices(),
+                                  self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices,
+                                  self.levels.calc_Gamma()/freq_unit))
         self.sol = sol
-        #___transform the solution vectors back to the density matrix ymat
-        y_vec = sol.y
-        #: solution of the time dependent density matrix elements
-        self.ymat    = np.zeros((N,N,y_vec.shape[-1]),dtype=np.complex64)
+        self.ymat = self.density_vec2mat(sol.y)
+        #: solution of the time dependent populations N
+        self.N = np.real(self.ymat[(np.arange(self.levels.N),np.arange(self.levels.N))])
+        #: array of the times at which the solutions are calculated
+        self.t = sol.t/freq_unit
+    
+    def density_mat2vec(self,mat):
+        # matrix -> vector
+        if mat.ndim != 2:
+            raise Exception('Matrix must be 2-dimensional')
+        if mat.shape[0] != mat.shape[1]:
+            raise Exception('Matrix must be square matrix')
+        N       = mat.shape[0]
+        vec  = np.zeros( N*(N+1) )
         count   = 0
         for i in range(N):
             for j in range(i,N):
-                self.ymat[i,j,:] = y_vec[count] + 1j* y_vec[count+1]
-                count += 2     
-        self.ymat    += np.conj(np.transpose(self.ymat,axes=(1,0,2))) #is diagonal remaining purely real or complex?
-        self.ymat[(np.arange(N),np.arange(N))] *=0.5
-        #: solution of the time dependent populations N
-        self.N = np.real(self.ymat[(np.arange(N),np.arange(N))])
-        #: array of the times at which the solutions are calculated
-        self.t = sol.t/freq_unit
-        
+                vec[count]   = mat[i,j].real
+                vec[count+1] = mat[i,j].imag
+                count += 2
+        return vec
+    
+    def density_vec2mat(self,vec):
+        # to transform the solution vector of the time dependent density matrix
+        # into matrix form
+        N,iNum  = self.levels.N, self.levels.iNum
+        if vec.shape[0] != (N+iNum)*(N+iNum+1):
+            raise Exception('Shape[0] of vector must have the length N+iNum')
+        mat    = np.zeros((N+iNum,N+iNum,vec.shape[-1]),dtype=np.complex64)
+        count   = 0
+        for i in range(N+iNum):
+            for j in range(i,N+iNum):
+                mat[i,j,:] = vec[count] + 1j* vec[count+1]
+                count += 2
+        mat    = mat[:N,:N]
+        if np.any(np.abs(mat[(np.arange(N),np.arange(N))].imag) > 1e-13):
+            warnings.warn('Populations got an imaginary part > 1e-13')
+        mat    += np.conj(np.transpose(mat,axes=(1,0,2))) #is diagonal remaining purely real or complex?
+        mat[(np.arange(N),np.arange(N))] *=0.5
+        return mat
+    
     def check_config(self,raise_Error=False):
         if self.calcmethod == 'rateeqs':
             #pre-defined kwargs for solve_ivp function
@@ -1064,7 +1099,7 @@ class System:
             #self.N = np.array(self.N,dtype='float16')
             
     def draw_levels(self,GrSts=None,ExSts=None,branratios=True,lasers=True,
-                    QuNrs_sep=['v'], br_fun='identity', br_TH=0.01, # 1e-16 default
+                    QuNrs_sep=[], br_fun='identity', br_TH=0.01, # 1e-16 default
                     freq_clip_TH='auto', cmap='viridis',yaxis_unit='MHz'):
         """This method draws all levels of certain Electronic states sorted
         by certain Qunatum numbers. Additionally, the branching ratios and the
@@ -1082,10 +1117,10 @@ class System:
             Whether to show the branching ratios. The default is True.
         lasers : bool, optional
             Whether to show the transitions addressed by the lasers.
-            The default is True.
+            By default it is set to True when lasers are defined.
         QuNrs_sep : list of str or tuple of two lists of str, optional
             Quantum numbers for separating all levels into subplots.
-            By default the levels are grouped into subplots by the vibrational
+            For example the levels can be grouped into subplots by the vibrational
             Quantum number, i.e. ['v'] or (['v'],['v']) for ex. and gr. states.
         br_fun : str or callable, optional
             Function to be applied onto the branching ratios. Can be either
@@ -1154,16 +1189,7 @@ class System:
                                      yaxis_unit=yaxis_unit)
                                      for i, ElSt in enumerate(GrSts)]
         
-        coords_l = coords_l[0] # condition that only one ground state is defined
-        
         cmap        = mpl.cm.get_cmap(cmap)
-        
-        # offset for multiple Excited electronic states
-        def Exs_ind_offset(label):
-            if not isinstance(label,str):
-                label = label.label #if label is ElectronicState object instead of label
-            ind = self.levels.exstates_labels.index(label)
-            return sum([self.levels.exstates[i].N for i in range(ind)])
         
         # map branching ratios onto a color using a certain function:
         if branratios:
@@ -1179,15 +1205,18 @@ class System:
             map_br      = interp1d([br_flat.min(),br_flat.max()],[1,0])
             
             # iterate over states and draw branratios
-            for ElSt,coords_u_ in zip(ExSts,coords_u):
-                N = Exs_ind_offset(ElSt)
-                for l,u in np.argwhere(branratios[:,N:N+ElSt.N] > br_TH): #does not work when ExSts are switched, e.g. ['B','A']??!
-                    draw_line(subfig_last,
-                              axes=(coords_l['axes'][l], coords_u_['axes'][u]),
-                              xys=(coords_l['xy'][l], coords_u_['xy'][u]),
-                              arrowstyle='-',dxyB=[-0.2,0],alpha=0.5,
-                              linewidth=0.6,linestyle='--',
-                              color= cmap(map_br(br_fun(branratios[l,N+u]))))
+            for GrSt,coords_l_ in zip(GrSts,coords_l):
+                for ExSt,coords_u_ in zip(ExSts,coords_u):
+                    if GrSt == ExSt: continue
+                    Ng = self.levels.index_ElSt(GrSt,gs_exs='gs')
+                    Ne = self.levels.index_ElSt(ExSt,gs_exs='exs')
+                    for l,u in np.argwhere(branratios[Ng:Ng+GrSt.N,Ne:Ne+ExSt.N] > br_TH): #does not work when ExSts are switched, e.g. ['B','A']??!
+                        draw_line(subfig_last,
+                                  axes=(coords_l_['axes'][l], coords_u_['axes'][u]),
+                                  xys=(coords_l_['xy'][l], coords_u_['xy'][u]),
+                                  arrowstyle='-',dxyB=[-0.2,0],alpha=0.5,
+                                  linewidth=0.6,linestyle='--',
+                                  color= cmap(map_br(br_fun(branratios[Ng+l,Ne+u]))))
             # draw colorbar
             norm        = mpl.colors.Normalize(vmax=br_flat.max(),vmin=br_flat.min())
             bounds      = np.array(ax_cbar.get_position().bounds)
@@ -1201,6 +1230,7 @@ class System:
             tools.make_axes_invisible(ax_cbar)
             
         # draw lasers onto their addressing transitions as arrows:
+        if self.lasers.pNum == 0: lasers = False
         if lasers:
             ls_fun = lambda x: ['-','-.',':'][x//10]
             self.calc_OBEs(t_int=1e-11, t_start=0., dt=None, t_eval = [],
@@ -1208,15 +1238,18 @@ class System:
                           position_dep=False, rounded=False,
                           verbose=False, mp=False, return_fun=None, method='RK45')
             
-            for ElSt,coords_u_ in zip(ExSts,coords_u):
-                N = Exs_ind_offset(ElSt)
-                for l,u,k in np.argwhere(np.abs(self.Gfd[:,N:N+ElSt.N,:])>0):
-                    det = self.om_gek[l,N+u,k]*self.freq_unit/2/pi*1e-6/coords_u_['yaxis_unit']
-                    draw_line(subfig_last,
-                              axes=(coords_l['axes'][l], coords_u_['axes'][u]),
-                              xys =(coords_l['xy'][l],   coords_u_['xy'][u]),
-                              arrowstyle='->',linestyle=ls_fun(k),dxyB=[+0.2,det],
-                              alpha=0.8,color='C'+str(k))
+            for GrSt,coords_l_ in zip(GrSts,coords_l):
+                for ExSt,coords_u_ in zip(ExSts,coords_u):
+                    if GrSt == ExSt: continue
+                    Ng = self.levels.index_ElSt(GrSt,gs_exs='gs')
+                    Ne = self.levels.index_ElSt(ExSt,gs_exs='exs')
+                    for l,u,k in np.argwhere(np.abs(self.Gfd[Ng:Ng+GrSt.N,Ne:Ne+ExSt.N,:])>0):
+                        det = self.om_gek[Ng+l,Ne+u,k]*self.freq_unit/2/pi*1e-6/coords_u_['yaxis_unit']
+                        draw_line(subfig_last,
+                                  axes=(coords_l_['axes'][l], coords_u_['axes'][u]),
+                                  xys =(coords_l_['xy'][l],   coords_u_['xy'][u]),
+                                  arrowstyle='->',linestyle=ls_fun(k),dxyB=[+0.2,det],
+                                  alpha=0.8,color='C'+str(k))
             
             # legend for lasers
             import matplotlib.lines as mlines

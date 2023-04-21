@@ -4,7 +4,7 @@ Created on Thu Mar  9 13:58:35 2023
 
 @author: fkogel
 
-v3.1.0
+v3.2.0
 
 This module contains the class :class:`Bfield` which provides methods to represent
 and imitate a realistic DC magnetic field.
@@ -71,7 +71,7 @@ class Bfield:
             if not np.all(np.sin(angle) == 0.):
                 v1      = self.direction
                 v_perp  = np.cross(v1,np.array([0,1,0]))
-                if np.all(v_perp) == 0.0: v_perp = np.cross(v1,np.array([1,0,0]))
+                if np.all(v_perp == 0.0): v_perp = np.cross(v1,np.array([1,0,0]))
                 v1n, v_perpn = (v1*v1).sum(), (v_perp*v_perp).sum()
                 alpha = np.sqrt( (v1n/(np.sin(angle)**2) - v1n)/(v_perpn**2) )
                 self.direction  = v_perp + np.tensordot(alpha,v1,axes=0)
@@ -137,6 +137,16 @@ class Bfield:
     
     def __str__(self):
         return str(self.__dict__)
+    
+    def Bfield_vec(self):
+        """Returns the magnetic field vector with its three components in T.
+
+        Returns
+        -------
+        np.ndarray(3)
+            magnetic field vector.
+        """
+        return self.strength*self.direction / np.linalg.norm(self.direction,axis=-1)
     
     @property
     def Bvec_sphbasis(self):

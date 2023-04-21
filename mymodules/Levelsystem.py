@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.1.0
+v3.2.0
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -136,10 +136,8 @@ class Levelsystem:
             * vibrbranch    # vibrational branching ratios
             * wavelengths   # wavelengths (in nm) between the transitions
         """
-        #: list containing the labels of the ground electronic states
-        self.grstates_labels   = [] #empty lists to hold labels of electronic states
-        #: list containing the labels of the excited electronic states
-        self.exstates_labels   = [] #to be appended later
+        # unsorted list containing the labels of all added ElectronicStates:
+        self.__ElSts_labels             = []
         self.verbose                    = verbose
         # loading the dictionary with the constants from json file
         self.load_constants             = load_constants
@@ -148,24 +146,29 @@ class Levelsystem:
         self.reset_properties()
         
     def __getitem__(self,index):
-        if self.N == 0: raise Exception('No states are defined/ included within this Electronic State!')
-        #if indeces are integers or slices (e.g. obj[3] or obj[2:4])
-        if isinstance(index, (int, slice)): 
-            return self.states[index]
-        #if indices are tuples instead (e.g. obj[1,3,2])
-        return [self.states[i] for i in index]
+        if isinstance(index, str):
+            if index not in self.__ElSts_labels:
+                raise ValueError(f"No ElectronicState '{index}' defined.")
+            return self.__dict__[index]
+        else:
+            if self.N == 0:
+                raise Exception('No states defined within the Levelsystem!')
+            #if indeces are integers or slices (e.g. obj[3] or obj[2:4])
+            if isinstance(index, (int, slice)): 
+                return self.states[index]
+            #if indices are tuples instead (e.g. obj[1,3,2])
+            return [self.states[i] for i in index]
     
     def __delitem__(self,label):
         """delete electronic states del system.levels[<electronic state label>], or delete all del system.levels[:]"""
         if type(label) != str:
             raise ValueError('index for an electronic state to be deleted must be provided as string of the label')
-        if label in self.grstates_labels:
-            self.grstates_labels.remove(label)
-        else:
-            self.exstates_labels.remove(label)
+        if label not in self.__ElSts_labels:
+            raise ValueError(f"No ElectronicState '{label}' defined.")
+        self.__ElSts_labels.remove(label)
         del self.__dict__[label]
         self.reset_properties()
-        print('ElectronicState {} deleted and all properties resetted!'.format(label))
+        print(f'ElectronicState {label} deleted and all properties resetted!')
         
     def add_all_levels(self,v_max):
         """Function to add all ground and excited states of a molecule with a
@@ -183,12 +186,12 @@ class Levelsystem:
             self.add_electronicstate(label, gs_exs)
             
             if gs_exs == 'gs':
-                self.__dict__[label].load_states(v=np.arange(0,v_max+.5,dtype=int))
-                self.__dict__[label].add_lossstate(v=v_max+1)
+                self[label].load_states(v=np.arange(0,v_max+.5,dtype=int))
+                self[label].add_lossstate(v=v_max+1)
             elif gs_exs == 'exs':
-                if v_max == 0: self.__dict__[label].load_states(v=0)
+                if v_max == 0: self[label].load_states(v=0)
                 else:
-                    self.__dict__[label].load_states(v=np.arange(0,v_max-.5,dtype=int))
+                    self[label].load_states(v=np.arange(0,v_max-.5,dtype=int))
         
     def add_electronicstate(self,label,gs_exs,load_constants=None,**kwargs):
         """adds an electronic state (ground or excited state) as instance of
@@ -216,20 +219,34 @@ class Levelsystem:
             load_constants = self.load_constants
         if not ('verbose' in kwargs):
             kwargs['verbose'] = self.verbose
-        if label in [*self.grstates_labels,*self.exstates_labels]:
-            raise Exception('There is already an electronic state {} defined!'.format(label))
+        if label in self.__ElSts_labels:
+            raise Exception('There is already an ElectronicState {label} defined!')
+        
         if gs_exs == 'gs':
-            if len(self.grstates_labels) == 1:
-                raise Exception('There is already one electronic ground state defined!')
             self.__dict__[label] = ElectronicGrState(load_constants=load_constants,label=label,**kwargs)
-            self.grstates_labels.append(label)
         elif gs_exs == 'exs':
             self.__dict__[label] = ElectronicExState(load_constants=load_constants,label=label,**kwargs)
-            self.exstates_labels.append(label)
+        elif gs_exs == 'ims':
+            self.__dict__[label] = ElectronicImState(load_constants=load_constants,label=label,**kwargs)
         else:
-            raise ValueError("Please provide 'gs' or 'exs' as `gs_exs` for the electronic ground or excited states")
-        
+            raise ValueError(("Please provide 'gs', 'exs', or 'ims' as `gs_exs` for "
+                              "an electronic ground, excited or intermediate state"))
+        self.__ElSts_labels.append(label)
     #%% get functions
+    # def load_save_DF(func):
+    #     def wrapper(*args,**kwargs):
+    #         print('warpper')
+    #         inst = args[0]
+    #         DFsaved, gs, exs = inst._load_qty(name='_dMat',*args,**kwargs)
+    #         if len(DFsaved) != 0: return DFsaved
+            
+    #         DF = func(inst,gs,exs)
+            
+    #         inst._save_qty(DF,'_dMat',gs,exs)
+    #         return DF
+    #     return wrapper
+    
+    # @load_save_DF
     def get_dMat(self,gs=None,exs=None):
         """Function which returns the electric dipole matrix. This matrix is
         either simply loaded from the .json file or constructed
@@ -249,13 +266,9 @@ class Levelsystem:
             Electric dipole matrix.
         """
         #this function has to be resetted after a change of dMat_from which the new dMat should be calculated
-        if gs == None:  gs =    self.grstates_labels[0]
-        if exs == None: exs =   self.exstates_labels[0]
+        DFsaved, gs, exs = self._load_qty(name='_dMat',gs=gs,exs=exs)
+        if len(DFsaved) != 0: return DFsaved
         
-        if gs in self._dMat:
-            if exs in self._dMat[gs]:
-                if len(self._dMat[gs][exs]) != 0:
-                    return self._dMat[gs][exs]
         #gs_exs_label = '-'.join([gs,exs]) #df1.index.to_frame()['gs'].iloc[0]#ß? #df1.index.names.index('gs') #df1.columns.to_frame()['exs'].iloc[0]
         DF_dMat         = dict2DF.get_DataFrame(self.const_dict,'dMat',gs=gs,exs=exs)
         DF_dMat_red     = dict2DF.get_DataFrame(self.const_dict,'dMat_red',gs=gs,exs=exs)
@@ -289,11 +302,9 @@ class Levelsystem:
                                 columns=pd.MultiIndex.from_arrays(np.array(columns,dtype=object).T, names=(*dMat_red.columns.names,'mF'))
                                      )
             dMat /= np.sqrt((dMat**2).sum(axis=0))
+            dMat = dMat.fillna(0.0)
         
-        if gs in self._dMat:
-            self._dMat[gs][exs] = dMat    
-        else:
-            self._dMat[gs] = {exs: dMat}
+        self._save_qty(dMat,name='_dMat',gs=gs,exs=exs)
         return dMat
     
     def get_dMat_red(self,gs=None,exs=None):
@@ -309,13 +320,8 @@ class Levelsystem:
         pandas.DataFrame
             Reduced electric dipole matrix.
         """
-        if gs == None:  gs =    self.grstates_labels[0]
-        if exs == None: exs =   self.exstates_labels[0]
-        
-        if gs in self._dMat_red:
-            if exs in self._dMat_red[gs]:
-                if len(self._dMat_red[gs][exs]) != 0:
-                    return self._dMat_red[gs][exs]
+        DFsaved, gs, exs = self._load_qty(name='_dMat_red',gs=gs,exs=exs)
+        if len(DFsaved) != 0: return DFsaved
                 
         DF_dMat_red = dict2DF.get_DataFrame(self.const_dict,'dMat_red',gs=gs,exs=exs)
         if len(DF_dMat_red) != 0:
@@ -337,17 +343,14 @@ class Levelsystem:
             return dMat_red
         else:
             # self._dMat[gs][exs] = None #remove this?
-            dMat_red = pd.DataFrame(1.0,index=self.__dict__[gs].DFzeros_without_mF().index,
-                                    columns=self.__dict__[exs].DFzeros_without_mF().index)
+            dMat_red = pd.DataFrame(1.0,index=self[gs].DFzeros_without_mF().index,
+                                    columns=self[exs].DFzeros_without_mF().index)
             if self.verbose:
                 warn_txt = 'There is no dipole matrix or reduced dipole matrix available!' + \
                     'So a reduced matrix has been created only with ones:\n{}'.format(dMat_red)
                 warnings.warn(warn_txt)
-                
-        if gs in self._dMat_red:
-            self._dMat_red[gs][exs] = dMat_red    
-        else:
-            self._dMat_red[gs] = {exs: dMat_red}
+        
+        self._save_qty(dMat_red,name='_dMat_red',gs=gs,exs=exs) 
         return dMat_red
 
     def get_vibrbranch(self,gs=None,exs=None):
@@ -362,33 +365,39 @@ class Levelsystem:
         pandas.DataFrame
             vibrational branching ratios matrix.
         """
-        if gs == None:  gs =    self.grstates_labels[0]
-        if exs == None: exs =   self.exstates_labels[0]
+        DFsaved, gs, exs = self._load_qty(name='_vibrbranch',gs=gs,exs=exs)
+        if len(DFsaved) != 0: return DFsaved
         
-        if gs in self._vibrbranch:
-            if exs in self._vibrbranch[gs]:
-                if len(self._vibrbranch[gs][exs]) != 0:
-                    return self._vibrbranch[gs][exs]
+        DF = dict2DF.get_DataFrame(self.const_dict,'vibrbranch',gs=gs,exs=exs)
+        if len(DF) == 0:
+            DF_gs = self[gs].DFzeros_without_mF()
+            DF_exs = self[exs].DFzeros_without_mF()
+            DF = pd.DataFrame(1.0,
+                              index=DF_gs.index.droplevel([QuNr for QuNr in DF_gs.index.names
+                                                           if QuNr not in ['gs','exs','ims','v']]).drop_duplicates(),
+                              columns=DF_exs.index.droplevel([QuNr for QuNr in DF_exs.index.names
+                                                              if QuNr not in ['gs','exs','ims','v']]).drop_duplicates())
+            DF /= DF.sum(axis=0)
+            
+        self._save_qty(DF,name='_vibrbranch',gs=gs,exs=exs) 
+        return DF
+    
+    def get_transdipmoms(self):
+        if len(self._transdipmoms) == 0:
+            DF = dict2DF.get_DataFrame(self.const_dict,'transdipmoments')
+            if len(DF) == 0:
+                DF = pd.DataFrame(1.0,index=self.grstates_labels,
+                                  columns=self.exstates_labels)
         
-        DF_vibrbranch = dict2DF.get_DataFrame(self.const_dict,'vibrbranch',gs=gs,exs=exs)
-        if len(DF_vibrbranch) != 0:
-            vibrbranch = DF_vibrbranch
-        else: #old and simpler version:
-            # vibrbranch = pd.DataFrame(np.ones((self.__dict__[gs].v_max+1,self.__dict__[exs].v_max+1))/(self.__dict__[gs].v_max+1))
-            # vibrbranch.rename_axis("v",axis=0,inplace=True)
-            # vibrbranch.rename_axis("v'",axis=1,inplace=True)    
-            DF_gs = self.__dict__[gs].DFzeros_without_mF()
-            DF_exs = self.__dict__[exs].DFzeros_without_mF()
-            vibrbranch = pd.DataFrame(1.0,index=DF_gs.index.droplevel([QuNr for QuNr in DF_gs.index.names if QuNr not in ['gs','exs','v']]).drop_duplicates(),
-                                    columns=DF_exs.index.droplevel([QuNr for QuNr in DF_exs.index.names if QuNr not in ['gs','exs','v']]).drop_duplicates())
-            vibrbranch /= vibrbranch.sum(axis=0)
-        if gs in self._vibrbranch:
-            self._vibrbranch[gs][exs] = vibrbranch
-        else:
-            self._vibrbranch[gs] = {exs: vibrbranch}
+            self._transdipmoms = DF
+            
+        ImSt_inds = [(i,j) for j,col in enumerate(self._transdipmoms.columns)
+                     for i,ind in enumerate(self._transdipmoms.index) if col==ind]
+        for ImSt_ind in ImSt_inds:
+            self._transdipmoms.iloc[ImSt_ind] = 0.0
         
-        return vibrbranch
-        
+        return self._transdipmoms
+    
     def get_wavelengths(self,gs=None,exs=None):
         """Function returns a list of matrices for nicely displaying
         the wavelengths between the vibrational transitions and the 
@@ -404,26 +413,34 @@ class Levelsystem:
             list of matrices specifying the frequencies of the participating
             transitions.
         """
+        DFsaved, gs, exs = self._load_qty(name='_wavelengths',gs=gs,exs=exs)
+        if len(DFsaved) != 0: return DFsaved
+                
+        DF = dict2DF.get_DataFrame(self.const_dict,'vibrfreq',gs=gs,exs=exs)
+        if len(DF) == 0:
+            DF = pd.DataFrame(860.0,index=self[gs].DFzeros_without_mF().index,
+                              columns=self[exs].DFzeros_without_mF().index)
+        
+        self._save_qty(DF,name='_wavelengths',gs=gs,exs=exs) 
+        return DF
+    
+    def _load_qty(self,name,gs=None,exs=None):
         if gs == None:  gs =    self.grstates_labels[0]
         if exs == None: exs =   self.exstates_labels[0]
         
-        if gs in self._wavelengths:
-            if exs in self._wavelengths[gs]:
-                if len(self._wavelengths[gs][exs]) != 0:
-                    return self._wavelengths[gs][exs]
-                
-        DF_wavelengths = dict2DF.get_DataFrame(self.const_dict,'vibrfreq',gs=gs,exs=exs)
-        if len(DF_wavelengths) != 0:
-            wavelengths = DF_wavelengths
+        dic = self.__dict__[name]
+        if gs in dic:
+            if exs in dic[gs]:
+                if len(dic[gs][exs]) != 0:
+                    return dic[gs][exs], gs, exs
+        return {}, gs, exs
+    
+    def _save_qty(self,value,name,gs,exs):
+        dic = self.__dict__[name]
+        if gs in dic:
+            dic[gs][exs] = value
         else:
-            wavelengths = pd.DataFrame(860.0,index=self.__dict__[gs].DFzeros_without_mF().index,
-                                    columns=self.__dict__[exs].DFzeros_without_mF().index)
-            
-        if gs in self._wavelengths:
-            self._wavelengths[gs][exs] = wavelengths
-        else:
-            self._wavelengths[gs] = {exs: wavelengths}     
-        return wavelengths
+            dic[gs] = {exs: value}    
     
     #: electric dipole matrix
     dMat        = property(get_dMat)
@@ -432,7 +449,9 @@ class Levelsystem:
     #: vibrational branching ratios
     vibrbranch  = property(get_vibrbranch)
     #: transition wavelengths and frequencies
-    wavelengths    = property(get_wavelengths)
+    wavelengths = property(get_wavelengths)
+    #: transition dipole moments
+    transdipmoms= property(get_transdipmoms)
     #%% calc functions for the rate and optical Bloch equations
     def calc_dMat(self):
         """In contrast to the other functions :func:`get_dMat` or :func:`get_dMat_red`
@@ -451,30 +470,35 @@ class Levelsystem:
         if np.all(self.__dMat_arr) != None: return self.__dMat_arr
         self.__dMat_arr = np.zeros((self.lNum,self.uNum,3))
         
+        DF_tdm = self.get_transdipmoms()
+        DF_tdm /= np.sqrt((DF_tdm**2).sum(axis=0))
         #levels._dMat.xs((1.5,2,-1),level=('J','F','mF'),axis=0,drop_level=True).xs((0.5,1,-1),level=("J'","F'","mF'"),axis=1,drop_level=True)
         N_grstates = 0
         for Grs_lab, Grs in zip(self.grstates_labels, self.grstates):
             N_exstates = 0
             for Exs_lab,Exs in zip(self.exstates_labels, self.exstates):
+                if Grs == Exs: continue
                 DF_vb   = self.get_vibrbranch(gs=Grs_lab, exs=Exs_lab)
+                val_tdm = DF_tdm.loc[Grs_lab,Exs_lab]
                 if 'v' in Grs[0].QuNrs:
                     DF_vb   = DF_vb.iloc[np.argwhere(DF_vb.index.get_level_values('v') < Grs.v_max+0.1)[:,0]]
                 DF_vb  /= DF_vb.sum(axis=0) # normalized DF_vb must be multiplied afterwards with a factor due to transition dipole moment
                 
                 DF_dMat = self.get_dMat(gs=Grs_lab, exs=Exs_lab)
                 DF_dMat /= np.sqrt((DF_dMat**2).sum(axis=0))
+                DF_dMat = DF_dMat.fillna(0.0)
                 for l,gr in enumerate(Grs.states):
                     for u,ex in enumerate(Exs.states):
-                        val_vb = self.states_in_DF(gr,ex,DF_vb)
+                        val_vb = self.val_states_in_DF(gr,ex,DF_vb)
                         if gr.is_lossstate:
                             #the q=+-1,0 entries squared of the dMat are summed in the last line of the equations set in the Fokker-Planck paper.
                             # So for the loss state which should not interact with other levels, it doesn't matter which q component of the sum in the last line is contributing.
                             self.__dMat_arr[N_grstates+l, N_exstates + u, :] = np.array([1,0,0])*np.sqrt(val_vb)
                         else:
-                            val_dMat = self.states_in_DF(gr,ex,DF_dMat)
+                            val_dMat = self.val_states_in_DF(gr,ex,DF_dMat)
                             pol = ex.mF-gr.mF
                             if (abs(pol) <= 1) and (val_vb != None):
-                                self.__dMat_arr[N_grstates+l, N_exstates+u, int(pol)+1] = val_dMat*np.sqrt(val_vb)
+                                self.__dMat_arr[N_grstates+l, N_exstates+u, int(pol)+1] = val_tdm*val_dMat*np.sqrt(val_vb)
                 N_exstates += Exs.N
             N_grstates += Grs.N
         
@@ -518,7 +542,7 @@ class Levelsystem:
                 DF = self.get_wavelengths(gs=Grs_lab, exs=Exs_lab)
                 for l,gr in enumerate(Grs.states):
                     for u,ex in enumerate(Exs.states):
-                        val = self.states_in_DF(gr,ex,DF)
+                        val = self.val_states_in_DF(gr,ex,DF)
                         if (val != None) and (val != 0):
                             self.__freq_arr[N_grstates+l,N_exstates+u] = c/(val*1e-9)
                 N_exstates += Exs.N
@@ -531,7 +555,7 @@ class Levelsystem:
                 for i_st,st in enumerate(ElSt.states):
                     if st.is_lossstate: #leave this restriction here?!
                         continue
-                    val = self.state_in_DF(st,DF)
+                    val = self.val_state_in_DF(st,DF)
                     if val != None:
                         if i0 == 0:   self.__freq_arr[N_ElSts+i_st,:] -= val*1e6
                         elif i0 == 1: self.__freq_arr[:,N_ElSts+i_st] += val*1e6
@@ -540,7 +564,7 @@ class Levelsystem:
         self.__freq_arr *= 2*pi #make angular frequencies
         return self.__freq_arr
     
-    def states_in_DF(self,st1,st2,DF): #move this and the other function outside of the class with an kwarg verbose.
+    def val_states_in_DF(self,st1,st2,DF): #move this and the other function outside of the class with an kwarg verbose.
         ind_names = list(DF.index.names)
         col_names = list(DF.keys().names)
         for index1,row1 in DF.iterrows():
@@ -563,12 +587,12 @@ class Levelsystem:
         elif (('v' in st1.QuNrs) and (st1.v > 0)) or (('v' in st2.QuNrs) and (st2.v > 0)):
             st1_,   st2_    = st1.copy(), st2.copy()
             st1_.v, st2_.v  = 0, 0
-            return self.states_in_DF(st1_,st2_,DF)
+            return self.val_states_in_DF(st1_,st2_,DF)
         elif self.verbose:
             warnings.warn('No value in DF found for {}, {}'.format(st1,st2))
         return None
     
-    def state_in_DF(self,st,DF):
+    def val_state_in_DF(self,st,DF):
         ind_names = list(DF.index.names)
         for index1,row1 in DF.iteritems():    
             allTrue = [True]
@@ -581,7 +605,7 @@ class Levelsystem:
         if ('v' in st.QuNrs) and (st.v > 0) and (not st.is_lossstate):
             st_     = st.copy()
             st_.v   = 0
-            return self.state_in_DF(st_,DF)
+            return self.val_state_in_DF(st_,DF)
         elif self.verbose:
             warnings.warn('No value in DF found for {}'.format(st))
         return None
@@ -607,11 +631,12 @@ class Levelsystem:
         for i0, ElSts in enumerate([self.grstates,self.exstates]):
             N = 0
             for ElSt in ElSts:
+                if (i0 == 1) and (ElSt.gs_exs == 'ims'): continue
                 DF = ElSt.get_gfac()
                 for i1, st1 in enumerate(ElSt.states):
                     if st1.is_lossstate:
                         continue # all elements self._muMat[i0][i1,N:ElSt.N,:] remain zero
-                    val = self.state_in_DF(st1,DF)
+                    val = self.val_state_in_DF(st1,DF)
                     F,m = st1.F, st1.mF
                     for i2, st2 in enumerate(ElSt.states):
                         if st2.is_lossstate:
@@ -711,8 +736,10 @@ class Levelsystem:
             ElSt.print_properties()
         
         print('\n{s:{c}^{n}}'.format(s=' transition-specific ',n=n,c='+'))
+        print('\ntransition dipole moments:', self.transdipmoms, sep='\n')
         for Grs_lab, Grs in zip(self.grstates_labels, self.grstates):
             for Exs_lab,Exs in zip(self.exstates_labels, self.exstates):
+                if Grs == Exs: continue # skip for intermediate states
                 print('\n{s:{c}^{n}}'.format(s=Grs_lab + ' <- ' + Exs_lab,n=n,c='-'))
                 print('\ndipole matrix:',                 self.get_dMat(gs=Grs_lab,exs=Exs_lab),
                       '\nvibrational branching:',         self.get_vibrbranch(gs=Grs_lab,exs=Exs_lab),
@@ -730,12 +757,6 @@ class Levelsystem:
             If the configuration is not perfect, this method raises an error message
             or only prints a warning depending on `raise_Error`. The default is False.
         """
-        if len(self.grstates_labels) > 1:
-            Err_str = 'Only one electronic ground state can be defined' + \
-                '({} are given)'.format(len(self.grstates_labels))
-            if raise_Error: raise Exception(Err_str)
-            else: warnings.warn(Err_str)
-            
         Err_str = 'Electronic state {} contains no levels!'
         for ElSt in self.electronic_states:
             if ElSt.N == 0:
@@ -754,6 +775,7 @@ class Levelsystem:
         self._dMat_red                  = {}
         self._vibrbranch                = {}
         self._wavelengths               = {}
+        self._transdipmoms              = []
         # The following variables with two underscores are only for internal use inside the class
         self.__dMat_arr                 = None
         self.__branratios_arr           = None
@@ -787,28 +809,48 @@ class Levelsystem:
         return sum([ElSt.N for ElSt in self.exstates])
     
     @property
+    def iNum(self):
+        '''Returns the total number of states defined in all intermediate electronic
+        states as an integer.'''
+        return sum([ElSt.N for ElSt in self.grstates if ElSt.gs_exs == 'ims']) 
+    
+    @property
     def N(self):
-        '''Returns the total number of states defined in all electronic
-        states as an integer, i.e. N = :func:`lNum` + :func:`uNum`.'''
-        return self.lNum + self.uNum
+        '''Returns the total number of unique states defined in all electronic
+        states as an integer, i.e. N = :func:`lNum` + :func:`uNum` - :func:`iNum`.'''
+        return self.lNum + self.uNum -self.iNum
     
     @property
     def grstates(self):
         '''Returns a list containing all defined instances of ground electronic
         states (:class:`ElectronicGrState`).'''
-        return [self.__dict__[ElSt] for ElSt in self.grstates_labels]
+        ElSts = [self[label] for label in self.__ElSts_labels] # unsorted
+        return [*[ElSt for ElSt in ElSts if ElSt.gs_exs == 'gs'],
+                *[ElSt for ElSt in ElSts if ElSt.gs_exs == 'ims']]
     
     @property
     def exstates(self):
         '''Returns a list containing all defined instances of excited electronic
         states (:class:`ElectronicExState`).'''
-        return [self.__dict__[ElSt] for ElSt in self.exstates_labels]
+        ElSts = [self[label] for label in self.__ElSts_labels] # unsorted
+        return [*[ElSt for ElSt in ElSts if ElSt.gs_exs == 'exs'],
+                *[ElSt for ElSt in ElSts if ElSt.gs_exs == 'ims']]
     
     @property
     def electronic_states(self):
         '''Returns a list containing all defined instances of electronic
         states, i.e. stacking list of :func:`grstates` and :func:`exstates`.'''
-        return [*self.grstates,*self.exstates]
+        return [*self.grstates,*[ExSt for ExSt in self.exstates if ExSt not in self.grstates]] 
+    
+    @property
+    def grstates_labels(self):
+        '''Returns a list containing the labels of all ground electronic states'''
+        return [ElSt.label for ElSt in self.grstates]
+    
+    @property
+    def exstates_labels(self):
+        '''Returns a list containing the labels of all excited electronic states'''
+        return [ElSt.label for ElSt in self.exstates]
    
     @property
     def Isat(self):
@@ -822,13 +864,36 @@ class Levelsystem:
         approximate expression for the scattering rate. Here, the assumptions
         that all detunings are equal, all intensities are equal, and all excited
         states are equally populated are used."""
-        index = 0
-        for i in range(self.exstates_labels.index(ExSt)):
-            index += self.__dict__[self.exstates_labels[i]].N
-        lNum = self.__dict__[GrSt].N
-        uNum = self.__dict__[ExSt].N
-        return 2*lNum**2/(lNum+uNum)*self.Isat[:,index:index+uNum]
+        lNum = self[GrSt].N
+        uNum = self[ExSt].N
+        i0,i1 = self.index_ElSt(GrSt,'gs'), self.index_ElSt(ExSt,'exs')
+        return 2*lNum**2/(lNum+uNum)*self.Isat[i0:i0+lNum, i1:i1+uNum]
    
+    def index_ElSt(self,ElSt,gs_exs=None):
+        """Returns the total index of the first state belonging to a certain
+        electronic state. For example for two electronic excited states with each
+        3 single states defined, the method gives 0 and 3 for the first and second
+        electronic excited state, respectively.
+
+        Parameters
+        ----------
+        ElSt : str or :class:`ElectronicState`
+            Electronic state.
+        gs_exs : str, optional
+            specify whether ElSt is a ground or excited state. The default is None.
+
+        Returns
+        -------
+        int
+            total index of first level state defined in the ElectronicState `ElSt`
+        """
+        if isinstance(ElSt, str):
+            ElSt = self[ElSt]
+        if gs_exs == None:
+            gs_exs = {True: 'gs', False: 'exs'}[ElSt in self.grstates]
+        
+        ElSts = {'gs':self.grstates, 'exs':self.exstates}[gs_exs]    
+        return sum([ElSts[i].N for i in range(ElSts.index(ElSt))])
 #%% #########################################################################
 class ElectronicState():
     def __init__(self,label='',load_constants=None,verbose=True):
@@ -888,7 +953,7 @@ class ElectronicState():
         
         if 'mF' in QuNrs:
             mF = QuNrs['mF']
-            if mF > F:
+            if np.any(np.abs(mF) > F):
                 raise ValueError('The absolute value of mF must be equal or lower than F')
         else:
             mF = None
@@ -957,7 +1022,7 @@ class ElectronicState():
                 for dict_QuNrs in list_of_dicts:
                     self.add(**dict_QuNrs)
                     
-    def draw_levels(self, fig=None, QuNrs_sep=['v'], level_length=0.8,
+    def draw_levels(self, fig=None, QuNrs_sep=[], level_length=0.8,
                     xlabel_pos='bottom',ylabel=True,yaxis_unit='MHz'):
         """This method draws all levels of the Electronic state sorted
         by certain Qunatum numbers.
@@ -969,7 +1034,7 @@ class ElectronicState():
             corresponds to a default figure.
         QuNrs_sep : list of str, optional
             Quantum numbers for separating all levels into subplots.
-            By default the levels are grouped into subplots by the vibrational
+            For example the levels can be grouped into subplots by the vibrational
             Quantum number, i.e. ['v'].
         level_length : float, optional
             The length of each level line. 1.0 corresponds to no space between
@@ -1015,7 +1080,7 @@ class ElectronicState():
         for l,st in enumerate(self.states):
             if st.is_lossstate: #leave this restriction here?!
                 continue
-            val = Levelsystem.state_in_DF(Levelsystem(),st,DF)
+            val = Levelsystem.val_state_in_DF(Levelsystem(),st,DF)
             if val != None: self._freq_arr[l] = val*1e6
         self._freq_arr *= 2*pi #make angular frequencies
         freq_arr = self._freq_arr/2/pi*1e-6 # in MHz  
@@ -1140,7 +1205,7 @@ class ElectronicState():
         """__str__ method is called when an object of a class is printed with print(obj)"""
         for i,st in enumerate(self.states):
             print('{:2d} {}'.format(i,st))
-        Name = {'gs':'ground','exs':'excited','':''}[self.gs_exs]
+        Name = {'gs':'ground','exs':'excited','ims':'intermediate','':''}[self.gs_exs]
         return "==> Electronic {} state {} with {:d} states in total".format(Name,self.label,self.N)
     
     def print_properties(self): 
@@ -1259,7 +1324,9 @@ class ElectronicExState(ElectronicState):
             Gamma = dict2DF.get_DataFrame(self.const_dict,'Gamma',self.label)
             if len(Gamma) == 0:
                 if self.verbose:
-                    warnings.warn('Gamma has to be defined for the {} ElectronicState! For now it is set to 1 MHz by default!'.format(self.label))
+                    text = (f'Gamma must be defined for ElectronicState {self.label}!'
+                            ' By default, it is now set to 1 MHz!')
+                    warnings.warn(text)
                 self.Gamma = 1.0 #1MHz
             else:
                 self.Gamma = Gamma.iloc[0]
@@ -1271,6 +1338,11 @@ class ElectronicExState(ElectronicState):
         super().print_properties()
         n=40
         print('\nGamma (in MHz):\n{} {}'.format(self.gs_exs, self.label), self.Gamma)
+
+class ElectronicImState(ElectronicGrState,ElectronicExState):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.gs_exs = 'ims'
         
 #%% #########################################################################
 class State:
