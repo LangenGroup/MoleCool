@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.2.0
+v3.2.1
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -552,7 +552,7 @@ class System:
             plt.figure('F ({}): {}, {}, {}'.format(
                 self.calcmethod,self.description,self.levels.description,
                 self.lasers.description))
-        else: plt.figure(figname,figsize=figsize)
+        else: plt.figure(figname)
         lamb = c/(self.levels.calc_freq()[0,0]/2/pi)
         F = self.F/ (hbar*2*pi/860e-9*self.levels.calc_Gamma()[0]/2)
         ls_arr = ['-','--','-.']

@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.2.0
+v3.2.1
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -641,6 +641,8 @@ class Levelsystem:
                     for i2, st2 in enumerate(ElSt.states):
                         if st2.is_lossstate:
                             continue # all elements self._muMat[i0][i1,i2,:] remain zero
+                        if not st1.is_equal_without_mF(st2):
+                            continue
                         n = st2.mF
                         for q in [-1,0,1]:
                             if val != None:
