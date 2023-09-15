@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.6
+v0.3.7
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -81,7 +81,7 @@ try:
     def w6j(j_1, j_2, j_3, j_4, j_5, j_6):
         """returns Wigner 6j-symbol with arguments (j_1, j_2, j_3, j_4, j_5, j_6)"""
         return wig.wig6jj(int(2*j_1), int(2*j_2), int(2*j_3), int(2*j_4), int(2*j_5), int(2*j_6))
-    max_two_j = 2*80
+    max_two_j = 2*120
     # wig.wig_table_init(max_two_j,3)
     wig.wig_table_init(max_two_j,6)
     wig.wig_temp_init(max_two_j)
@@ -341,21 +341,10 @@ class Molecule:
         if ('dipmat' not in self.__dict__.keys()) or recalc_branratios:
             self.calc_branratios(**kwargs)
         GrSt, ExSt = [self.__dict__[lab] for lab in self.branratios_labels]
-        Eigenbasis = []
-        for j,ElSt in enumerate([GrSt,ExSt]):
-            DF = ElSt.get_eigenstates(Hcasebasis=Hcasebasis,onlygoodQuNrs=onlygoodQuNrs)
-            argmax_arr = []
-            for (i,Ew),Ev in DF.iteritems():
-                argmax = Ev.abs().argmax()
-                if argmax in argmax_arr:
-                    for argsort_ind in Ev.abs().argsort():
-                        if argsort_ind not in argmax_arr:
-                            argmax_arr.append( argsort_ind )
-                            break
-                else:
-                    argmax_arr.append( argmax )
-            
-            Eigenbasis.append(DF.index.to_frame().iloc[argmax_arr])
+        Eigenbasis = [ElSt.get_eigenstates(Hcasebasis=Hcasebasis,
+                                           onlygoodQuNrs=onlygoodQuNrs,
+                                           mixed_states=False)
+                      for ElSt in [GrSt,ExSt]]
         return pd.DataFrame(self.dipmat,
                             index=Eigenbasis[0].index, columns=Eigenbasis[1].index)
     
@@ -588,7 +577,7 @@ class ElectronicStateConstants:
         rho     = np.sqrt( m_mol(masses)/m_mol(masses_isotope) )
         rho_el  = m_el(masses) / m_el(masses_isotope)
         
-        # nuclear g-factor ratio
+        # nuclear magnetic moment ratio (nuclear g-factor ratio with spin numbers)
         if g_N != 0:
             g_N_ratio = g_N_isotope / g_N
         else:
@@ -1017,7 +1006,7 @@ class ElectronicState:
         self.eigenst_already_calc = True
         
     def get_eigenstates(self,rounded=None,onlygoodQuNrs=True,createHTML=False,
-                        Hcasebasis=True):
+                        Hcasebasis=True,mixed_states=False):
         """
         returns the sorted eigenenergies and respective eigenstates determined
         by the method :func:`calc_eigenstates` in a nice format via the datatype
@@ -1062,6 +1051,28 @@ class ElectronicState:
                                index=pd.MultiIndex.from_frame(
                                    self.get_states_as_DF(onlygoodQuNrs=onlygoodQuNrs)),
                                columns=pd.MultiIndex.from_arrays(col_arr,names=('eigenvector i','eigenvalue')))
+        
+        if Hcasebasis and (DF1**2).max(axis=0).min() < 0.75:
+            warnings.warn("Hcasebasis doesn't seem to be a good choice as the eigenstates are not diagonal (<75%).")
+        
+        if not mixed_states:
+            if not Hcasebasis:
+                DF1 = pd.DataFrame(self.Ew, columns=['eigenvalue'],
+                                   index=np.arange(len(DF1.index)))#DF1.index.to_frame().iloc[argmax_arr].index)
+            else:
+                argmax_arr = []
+                for (i,Ew),Ev in DF1.iteritems():
+                    argmax = Ev.abs().argmax()
+                    if argmax in argmax_arr:
+                        for argsort_ind in Ev.abs().argsort():
+                            if argsort_ind not in argmax_arr:
+                                argmax_arr.append( argsort_ind )
+                                break
+                    else:
+                        argmax_arr.append( argmax )
+                
+                DF1 = pd.DataFrame(self.Ew, columns=['eigenvalue'],
+                                   index=DF1.index.to_frame().iloc[argmax_arr].index)
         if rounded:
             DF1 = DF1.round(rounded)
         if createHTML:
@@ -1358,8 +1369,9 @@ class Hcasea(QuState):
                 states.append(self)
                 prefacs.append(+1)
             elif Hcase == 'a_p':
-                for P,prefac in zip([+1,-1], np.array([+1,self.L])*(-1)**(self.J-self.S)/np.sqrt(2)):
+                for P,prefac in zip([+1,-1], np.array([+1,np.sign(self.L)])/np.sqrt(2)):
                     if prefac == 0: continue
+                    if np.sign(self.L) < 0: prefac *= (-1)**(self.J-self.S) # maybe additional -1 factor for reflection symmetry +-
                     states.append(Hcasea_p(L=abs(self.L),P=P,Om=abs(self.Om),J=self.J,**QuNrs_def))
                     prefacs.append(prefac)
             elif Hcase == 'b' or Hcase == 'b_betaS':
@@ -1775,6 +1787,31 @@ def eigensort(x,y_arr):
         ind_arr = np.array(ind_arr)
         y_arr[i,:] = y_arr[i,ind_arr]
     return y_arr
+
+def multiindex_filter(DF,rows=dict(),cols=dict(), drop_level=True):
+    """Filter a DataFrame object only for few specific multiindex values.
+
+    Parameters
+    ----------
+    DF : pd.DataFrame
+        DataFrame which is going to be filtered.
+    rows : dict, optional
+        rows to be retained, i.e. dict(N=1). The default is dict().
+    cols : dict, optional
+        columns to be retained, i.e. dict(P=1,Om=0.5,J=0.5). The default is dict().
+    drop_level : bool, optional
+        If redundant index levels should be dropped. The default is True.
+
+    Returns
+    -------
+    DF : pd.DataFrame
+        filtered DataFrame.
+    """
+    if rows:
+        DF = DF.xs(tuple(rows.values()), level=tuple(rows.keys()), axis=0, drop_level=drop_level)
+    if cols:
+        DF = DF.xs(tuple(cols.values()), level=tuple(cols.keys()), axis=1, drop_level=drop_level)
+    return DF
 
 #%%
 if __name__ == '__main__':
