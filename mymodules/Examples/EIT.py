@@ -13,7 +13,7 @@ I_probe  = 0.2 # laser intensity of probe beam in W/m^2
 I_pump   = 5.0 # laser intensity of pump beam in W/m^2
 gr_split = 1000 # splitting between both ground states in MHz
 #%%
-Deltas  = np.array([*np.arange(-4,-0.5,0.1),*np.arange(-0.5,0.,0.01)])*1e6
+Deltas  = np.array([*np.arange(-3,-0.5,0.1),*np.arange(-0.5,0.,0.01)])*1e6
 Deltas  = np.array([*Deltas,*(-np.flip(Deltas[:-1]))]) + det_pump
 
 rho     = np.zeros((2,len(Deltas)),dtype=complex) # steady state density matrix elements
@@ -44,7 +44,7 @@ for i in range(2):
         if i == 1:
             system.lasers.add(I=I_pump, freq_shift=+gr_split*1e6+det_pump)
         
-        T_Om = 2*pi/system.calc_Rabi_freqs().max() # period time of Rabi frequency
+        T_Om = 2*pi/np.abs(system.calc_Rabi_freqs()).max() # period time of Rabi frequency
         # calculate dynamics until steady state is reached
         system.calc_OBEs(t_int=5*T_Om, steadystate=True, verbose=False)
         
@@ -54,10 +54,12 @@ for i in range(2):
     
 #%% plotting
 plt.figure('Susceptibility')
-for i,case in enumerate(['2-levels','$\Lambda$-EIT']):
-    plt.plot(Deltas*1e-6,rho[i].imag,'--',label='$Im(\\rho_{eg})$, '+case, c='C'+str(i))
-    plt.plot(Deltas*1e-6,rho[i].real,'-',label='$Re(\\rho_{eg})$, '+case, c='C'+str(i))
-plt.xlabel('Probe laser detuning [MHz]')
-plt.ylabel('Density matrix element $\\rho_{eg}$')
-plt.legend()
-
+for i,case in enumerate(['1+1','2+1']):
+    plt.plot(Deltas*1e-6,rho[i].imag,'--',label=f"Im, {case}", c='C'+str(i))
+    plt.plot(Deltas*1e-6,rho[i].real,'-',label=f"Re, {case}", c='C'+str(i))
+plt.xlabel('Probe laser detuning [$\Gamma$]')
+plt.ylabel('Susceptibility $\\rho_{eg}$')
+# plt.legend(loc='lower right',mode='expand', ncols=2,
+           # bbox_to_anchor=(0., 1.02, 1., .102))
+plt.legend(loc='upper right')
+plt.savefig("Fig3_EIT")
