@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.2.1
+v3.2.2
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -871,7 +871,7 @@ class Levelsystem:
         i0,i1 = self.index_ElSt(GrSt,'gs'), self.index_ElSt(ExSt,'exs')
         return 2*lNum**2/(lNum+uNum)*self.Isat[i0:i0+lNum, i1:i1+uNum]
    
-    def index_ElSt(self,ElSt,gs_exs=None):
+    def index_ElSt(self,ElSt,gs_exs=None,include_Ngrs_for_exs=False):
         """Returns the total index of the first state belonging to a certain
         electronic state. For example for two electronic excited states with each
         3 single states defined, the method gives 0 and 3 for the first and second
@@ -882,7 +882,11 @@ class Levelsystem:
         ElSt : str or :class:`ElectronicState`
             Electronic state.
         gs_exs : str, optional
-            specify whether ElSt is a ground or excited state. The default is None.
+            specify whether ElSt is a ground or excited state.
+            The default is None so that its type is automatically inferred.
+        include_Ngrs_for_exs : bool, optional
+            specifies whether the total number of ground state levels is added
+            for an excited state. Default is False.
 
         Returns
         -------
@@ -894,8 +898,11 @@ class Levelsystem:
         if gs_exs == None:
             gs_exs = {True: 'gs', False: 'exs'}[ElSt in self.grstates]
         
-        ElSts = {'gs':self.grstates, 'exs':self.exstates}[gs_exs]    
-        return sum([ElSts[i].N for i in range(ElSts.index(ElSt))])
+        ElSts = {'gs':self.grstates, 'exs':self.exstates}[gs_exs]  
+        index = sum([ElSts[i].N for i in range(ElSts.index(ElSt))])
+        if include_Ngrs_for_exs and gs_exs=='exs':#ElSt in self.exstates:
+            index += self.lNum
+        return index
 #%% #########################################################################
 class ElectronicState():
     def __init__(self,label='',load_constants=None,verbose=True):
@@ -914,6 +921,7 @@ class ElectronicState():
         self.properties_not_calculated = True
         self._freq = []
         self._gfac = []
+        self.N0    = [] # initial population
 
     def add(self,**QuNrs):
         """Method adds an instance of :class:`State` to this electronic state.
@@ -1135,6 +1143,37 @@ class ElectronicState():
             ax.set_xticklabels([str(ind) for ind in inds])
         
         return coords
+    
+    def set_init_pops(self, QuNrpops):
+        """set initial population of the levels as a starting point for the
+        simulations.
+
+        Parameters
+        ----------
+        QuNrpops : dict
+            Specifies the population of the levels with certain Quantum numbers.
+            E.g. `QuNrpos={'v=0':0.8, 'v=1,J=0.5':0.1}` implies that all levels
+            that have the Quantum number `v=0` share a total population of 0.80
+            and the levels with `v=1` and `J=0.5` share 0.10 whereas the
+            populations of the remaining levels are set to zero.
+            So, the sum of all populations specified can't be larger than 1.0.
+        """
+        N0 = np.zeros(self.N)
+        if sum(QuNrpops.values()) > 1:
+            raise ValueError('Sum of QuNrpops values can not be larger than 1.')
+        
+        inds_used = [] # level indices that are already used for population distribution
+        for QuNrvals, pop in QuNrpops.items():
+            QuNrvals_ = dict( ( pair.split('=')[0], float(pair.split('=')[1]) )
+                            for pair in QuNrvals.split(','))
+            inds = [i for i,st in enumerate(self)
+                    if st.check_QuNrvals(**QuNrvals_) and i not in inds_used]
+            if len(inds) != 0:
+                N0[inds] = pop/len(inds)
+                inds_used += inds
+            else:
+                warnings.warn(f'No states found for QuNrs {QuNrvals}')
+        self.N0 = N0
         
     #%%
     def get_freq(self):
@@ -1418,6 +1457,28 @@ class State:
                 if self.__dict__[QuNr] != other.__dict__[QuNr]:
                     return False
         return True
+    
+    def check_QuNrvals(self,**QuNrvals):
+        """Check if the State object possesses specific Quantum numbers with
+        certain values.
+
+        Parameters
+        ----------
+        **QuNrvals : kwargs
+            Keyword arguments, e.g. v=0, F=1.
+
+        Returns
+        -------
+        return_bool : bool
+            True or False dependent on whether all Quantum numbers are included
+            in the state.
+        """
+        return_bool = True
+        for QuNr,val in QuNrvals.items():
+            if self.__dict__[QuNr] != val:
+                return_bool = False
+                break
+        return return_bool
     
     def __str__(self):
         #__str__ method is called when an object of a class is printed with print(obj)

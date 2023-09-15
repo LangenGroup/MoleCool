@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.2.1
+v3.2.2
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -636,7 +636,7 @@ class System:
                 a_intp  = RegularGridInterpolator((v,I), self.F_profile['F']/self.levels.mass,
                                                   method=interpol_kind,
                                                   bounds_error=False,fill_value=None)
-                GNe_intp = RegularGridInterpolator((v,I), self.F_profile['Ne']*self.levels.exstates.Gamma,#must be sum over u: N_u*Gamma_u
+                GNe_intp = RegularGridInterpolator((v,I), self.F_profile['Ne'],#must be sum over u: N_u*Gamma_u
                                                    method=interpol_kind,
                                                    bounds_error=False,fill_value=None)
                 self.a_intp=a_intp
@@ -820,6 +820,7 @@ class System:
         #___have to be performed while the occupations between this steps are compared
         if not steadystate:
             self._evaluate(t_start, t_int, dt, N0mat)
+            step = 0
         else:
             #___initial propagation of the equations for reaching the equilibrium region
             if self.steadystate['t_ini']:
@@ -847,7 +848,6 @@ class System:
             m1      = self.N.mean(axis=1)
             # if self.steadystate['period'] == None: t_int *= 0.1
             con1, con2 = self.steadystate['condition']
-            step    = 0
             for step in range(1,self.steadystate['maxiters']):
                 self._evaluate(t_start, t_int, dt, N0mat)
                 m2 = self.N.mean(axis=1)
@@ -908,24 +908,32 @@ class System:
         N,iNum = self.levels.N, self.levels.iNum
         if random:
             self.N0 = np.random.rand(N)
-        self.N0 = np.array(self.N0, dtype=float)
-        if len(self.N0) == 0:
-            if 'v' in self.levels.grstates[0][0].QuNrs:
-                N0_indices = [i for i,st in enumerate(self.levels.grstates[0]) if st.v==0] 
-                if len(N0_indices) == 0:
-                    self.N0     = np.ones(N)
-                else:
-                    self.N0      = np.zeros(N)
-                    for i in N0_indices:
-                        self.N0[i] = 1.0
-            else:
-                self.N0     = np.ones(N)
         else:
-            if len(self.N0) != N:
-                if len(self.N0) == N+iNum:
-                    self.N0 = self.N0[:N]
+            if np.any([len(ElSt.N0) for ElSt in self.levels.electronic_states]):
+                self.N0 = np.zeros(N)
+                for ElSt in self.levels.electronic_states:
+                    if len(ElSt.N0) != 0:
+                        i_ElSt = self.levels.index_ElSt(ElSt,include_Ngrs_for_exs=True)
+                        self.N0[i_ElSt:(i_ElSt+ElSt.N)] = ElSt.N0
+            else:
+                self.N0 = np.array(self.N0, dtype=float)
+                if len(self.N0) == 0:
+                    if 'v' in self.levels.grstates[0][0].QuNrs:
+                        N0_indices = [i for i,st in enumerate(self.levels.grstates[0]) if st.v==0] 
+                        if len(N0_indices) == 0:
+                            self.N0     = np.ones(N)
+                        else:
+                            self.N0      = np.zeros(N)
+                            for i in N0_indices:
+                                self.N0[i] = 1.0
+                    else:
+                        self.N0     = np.ones(N)
                 else:
-                    raise ValueError('Wrong size of N0')
+                    if len(self.N0) != N:
+                        if len(self.N0) == N+iNum:
+                            self.N0 = self.N0[:N]
+                        else:
+                            raise ValueError('Wrong size of N0')
         self.N0 /= self.N0.sum() #initial populations are always normalized
         
         if iNum > 0:

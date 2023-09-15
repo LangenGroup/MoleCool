@@ -4,7 +4,7 @@ Created on Thu Mar  9 13:58:35 2023
 
 @author: fkogel
 
-v3.2.0
+v3.2.2
 
 This module contains the class :class:`Bfield` which provides methods to represent
 and imitate a realistic DC magnetic field.
@@ -63,19 +63,17 @@ class Bfield:
         if np.any(strength >= 10e-4):
             print('WARNING: linear Zeeman shifts are only a good approx for B<10G.')
         self.strength = strength
-        self.direction = np.array(direction)
+        self.direction = np.array(direction) / np.expand_dims(np.linalg.norm(direction,axis=-1),axis=-1)
         if np.all(angle != None):
             self.angle = angle
             self.axisforangle = self.direction
             angle = angle/360*2*pi
-            if not np.all(np.sin(angle) == 0.):
-                v1      = self.direction
-                v_perp  = np.cross(v1,np.array([0,1,0]))
-                if np.all(v_perp == 0.0): v_perp = np.cross(v1,np.array([1,0,0]))
-                v1n, v_perpn = (v1*v1).sum(), (v_perp*v_perp).sum()
-                alpha = np.sqrt( (v1n/(np.sin(angle)**2) - v1n)/(v_perpn**2) )
-                self.direction  = v_perp + np.tensordot(alpha,v1,axes=0)
-        # self.remix_strength = remix_strength
+            v1      = self.direction
+            v_perp  = np.cross(v1,np.array([0,1,0]))
+            if np.all(v_perp == 0.0):
+                v_perp = np.cross(v1, np.array([1,0,0]))
+            self.direction = np.tensordot(np.cos(angle), v1, axes=0) \
+                             + np.tensordot(np.sin(angle), v_perp, axes=0)
         
     def turnon_earth(self,vertical='z',towardsNorthPole='x'):
         """Turn on the magnetic field of the earth at Germany with a strength
@@ -146,7 +144,7 @@ class Bfield:
         np.ndarray(3)
             magnetic field vector.
         """
-        return self.strength*self.direction / np.linalg.norm(self.direction,axis=-1)
+        return np.tensordot(self.strength,self.direction,axes=0)
     
     @property
     def Bvec_sphbasis(self):
