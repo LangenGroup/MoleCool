@@ -317,8 +317,8 @@ class Molecule:
         # for st_l in np.unique(st_l_arr):
         #     print(self.X.Ev[:,st_l])
         
-    def get_dMat_red(self,recalc_branratios=True,
-                     Hcasebasis=True,onlygoodQuNrs=True,**kwargs):
+    def get_dMat_red(self,recalc_branratios=True, Hcasebasis=True,
+                     onlygoodQuNrs=True, index_filter=None, **kwargs):
         """Outputs the reduced electric dipole matrix in a nice readable format.
 
         Parameters
@@ -330,6 +330,9 @@ class Molecule:
             See :meth:`ElectronicState.get_eigenstates`. The default is True.
         onlygoodQuNrs : bool, optional
             See :meth:`ElectronicState.get_eigenstates`. The default is True.
+        index_filter : tuple of dict
+            Tuple or list including two dictionaries, i.e. see two arguments of
+            :func:`multiindex_filter`. Default is no filtering.
         **kwargs : kwargs
             Additional keyword arguments (see :meth:`calc_branratios`).
 
@@ -345,11 +348,38 @@ class Molecule:
                                            onlygoodQuNrs=onlygoodQuNrs,
                                            mixed_states=False)
                       for ElSt in [GrSt,ExSt]]
-        return pd.DataFrame(self.dipmat,
-                            index=Eigenbasis[0].index, columns=Eigenbasis[1].index)
+        DF = pd.DataFrame(self.dipmat,
+                          index=Eigenbasis[0].index, columns=Eigenbasis[1].index)
+        if index_filter:
+            return multiindex_filter(DF, rows=index_filter[0], cols=index_filter[1], drop_level=False)
+        else:
+            return DF
+    
+    def get_E(self, index_filter=None, **kwargs):
+        """Similar method as :meth:`get_dMat_red` but with the eigenenergies.
+
+        Parameters
+        ----------
+        index_filter : tuple of dict
+            Tuple or list including two dictionaries, i.e. see two arguments of
+            :func:`multiindex_filter`. Default is no filtering.
+        **kwargs : kwargs
+            keyword arguments from :meth:`get_dMat_red`.
+
+        Returns
+        -------
+        pandas.DataFrame
+            eigen energies.
+        """
+        DF = self.get_dMat_red(**kwargs)
+        DF.iloc[:,:] = self.E
+        if index_filter:
+            return multiindex_filter(DF, rows=index_filter[0], cols=index_filter[1], drop_level=False)
+        else:
+            return DF
     
     def get_branratios(self,normalize=True,include_Boltzmann=False,threshold=0.0,
-                       **kwargs):
+                       index_filter=None,**kwargs):
         """Similar method as :meth:`get_dMat_red` but with the branching ratios.
 
         Parameters
@@ -361,6 +391,9 @@ class Molecule:
             See :meth:`get_dMat_red`. The default is False.
         threshold : float, optional
             See :meth:`get_dMat_red`. The default is 0.0.
+        index_filter : tuple of dict
+            Tuple or list including two dictionaries, i.e. see two arguments of
+            :func:`multiindex_filter`. Default is no filtering.
         **kwargs : kwargs
             Additional keyword arguments (see :meth:`get_dMat_red`).
 
@@ -373,10 +406,12 @@ class Molecule:
                                threshold=threshold,**kwargs)
         DF.iloc[:,:] = self.branratios
         if normalize:    
-            return DF / DF.sum(axis=0)
+            DF /= DF.sum(axis=0)
+        if index_filter:
+            return multiindex_filter(DF, rows=index_filter[0], cols=index_filter[1], drop_level=False)
         else:
             return DF
-    
+        
     def __str__(self):
         """prints all general information of the Molecule with its electronic states"""
         
