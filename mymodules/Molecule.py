@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.7
+v0.3.8
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -95,7 +95,7 @@ except ModuleNotFoundError:
 #%% classes
 class Molecule:
     def __init__(self,I1=0,I2=0,Bfield=0.0,mass=0,load_constants=None,
-                 temp=5.0,naturalabund=1.0,label='BaF',verbose=True):        
+                 temp=5.0,naturalabund=1.0,label='BaF',verbose=True,mF_states=False):        
         """This class represents a molecule containing all electronic and
         hyperfine states in order to calculate branching ratios and thus
         to plot the spectrum.
@@ -134,6 +134,7 @@ class Molecule:
         self.naturalabund = naturalabund
         self.label      = label
         self.verbose    = verbose
+        self.mF_states  = bool(mF_states)
         self.grstates   = [] #empty lists to hold labels of electronic states
         self.exstates   = [] #to be appended later
         if load_constants: #or better in Electronic state???
@@ -163,6 +164,7 @@ class Molecule:
         self.__dict__[args[0]].I1 = self.I1
         self.__dict__[args[0]].I2 = self.I2
         self.__dict__[args[0]].Bfield = self.Bfield
+        self.__dict__[args[0]].mF_states = self.mF_states
         self.__dict__[args[0]].verbose = self.verbose
         if self.__dict__[args[0]].grex == 'ground state':
             self.grstates.append(args[0])
@@ -226,6 +228,7 @@ class Molecule:
         
         # eigenstate dipole matrix via matrix multiplication of eigenstates and pure basis dipole matrix 
         self.dipmat = np.matmul(np.matmul(X.Ev.T,H_dpure),A.Ev)
+        
         # transition frequency as energy offset
         E_offset = A.const.electrovibr_energy - X.const.electrovibr_energy
         self.E = A.Ew[None,:] - X.Ew[:,None] + E_offset
@@ -728,6 +731,10 @@ class ElectronicStateConstants:
         return self.show(formatting='non-zero').to_string()
     
     @property
+    def b(self):
+        return self['b_F'] - self['c']/3
+    
+    @property
     def A_v(self):
         """returns the vibrational-state-dependent spin-orbit constant `A_v`.
         
@@ -955,7 +962,7 @@ class ElectronicState:
                         Om = L + Si
                         for J in addJ(F, self.I1):
                             if J < (abs(Om)-1e-3): continue
-                            if self.Bfield != 0.0:
+                            if (self.Bfield != 0.0) or self.mF_states:
                                 for mF in np.arange(-F,F+1e-3,1):
                                     self.states.append(Hcasea(L=L,Si=Si,Om=Om,J=J,F=F,mF=mF,
                                                               S=self.S,I1=self.I1,I2=self.I2))
@@ -970,7 +977,7 @@ class ElectronicState:
                             Om = L + Si
                             for J in addJ(F1, self.I1):
                                 # if J < (abs(Om)-1e-3): continue # also here this selection rule???
-                                if self.Bfield != 0.0:
+                                if (self.Bfield != 0.0) or self.mF_states:
                                     for mF in np.arange(-F,F+1e-3,1):
                                         self.states.append(Hcasea(L=L,Si=Si,Om=Om,J=J,F1=F1,F=F,mF=mF,
                                                                   S=self.S,I1=self.I1,I2=self.I2))
@@ -1349,8 +1356,12 @@ class QuState:
             DataFrame showing the quantum numbers.
         """
         if onlygoodQuNrs:
-            if self.I2 != 0:    QuNrs = self.goodQuNrs + ['F1','F']
-            else:               QuNrs = self.goodQuNrs + ['F']
+            QuNrs = self.goodQuNrs[:]
+            if self.I2 != 0:
+                QuNrs += ['F1']
+            QuNrs += ['F']
+            if 'mF' in self.QuNrs: 
+                QuNrs += ['mF']
         else:
             QuNrs = self.QuNrs
         return pd.DataFrame([[self.__dict__[Nr] for Nr in QuNrs]],columns=QuNrs) 
@@ -1369,7 +1380,7 @@ class QuState:
     
     def QuNrs_default(self): 
         QuNrs_def = {}
-        for QuNr in ['F','F1','S','I1','I2']:
+        for QuNr in ['F','F1','mF','S','I1','I2']:
             if QuNr in self.QuNrs:
                 QuNrs_def[QuNr] = self.__dict__[QuNr]
         return QuNrs_def
@@ -1739,6 +1750,9 @@ def H_d(x,y):
         for q in [-1,0,+1]: #here also add 0?
             sum1 += w3j(J_,1,J,-Om_,q,Om)
         H = kd(Si,Si_)*phs(J_+I+F+1)*sb(F)*sb(F_)*w6j(J_,F_,I,F,J,1)*phs(J_-Om_)*sb(J)*sb(J_)*sum1
+    if 'mF' in x.QuNrs:
+        mF,mF_ = x.mF, y.mF
+        H *= phs(F_-mF_)*w3j(F_,1,F,-mF_,mF_-mF,mF)
     return H
 
 #%%% small functions
