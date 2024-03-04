@@ -4,7 +4,7 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.1.0
+v3.2.3
 
 This module contains all different kinds of tools to be used in the other main
 modules.
@@ -39,8 +39,12 @@ def save_object(obj,filename=None):
         if 'args' in obj.__dict__:
             if 'return_fun' in obj.args:
                 del obj.args['return_fun'] #problem when an external function is tried to be saved
+        if 'intensity_func_sum' in obj.lasers.__dict__:
+            obj.lasers.__dict__['intensity_func_sum'] = None
+        if 'intensity_func' in obj.lasers.__dict__:
+            obj.lasers.__dict__['intensity_func'] = None
     with open(filename+'.pkl','wb') as output:
-        pickle.dump(obj,output,-1)
+        pickle.dump(obj,output,protocol=4)
         
 def open_object(filename):
     """Opens a saved object from a saved .pkl-file with all its attributes.    

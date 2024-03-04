@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v3.2.0
+v3.2.3
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -162,10 +162,10 @@ class Lasersystem:
             kwargs['P'] = 20e-3
             
         mod_freqs = (np.array(sidebands)*np.expand_dims(mod_freq,axis=-1)).T
-        PorI_arr  = np.array(ratios)/np.sum(ratios) * np.expand_dims(kwargs[PorI],axis=-1)
+        PorI_arr  = (np.array(ratios)/np.sum(ratios) * np.expand_dims(kwargs[PorI],axis=-1)).T
         
-        for i in range(len(sidebands)):
-            kwargs[PorI] = (PorI_arr.T)[i]
+        for i in range(np.array(sidebands).shape[-1]):
+            kwargs[PorI] = PorI_arr[i]
             self.add(lamb=lamb, freq_shift=offset_freq+mod_freqs[i], **kwargs)
             #save input parameters offset_freq and mod_freq to be able to look it up later
             self.entries[-1].offset_freq = offset_freq

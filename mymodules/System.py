@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.2.2
+v3.2.3
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -165,7 +165,7 @@ class System:
             self.description = os.path.basename(sys.argv[0])[:-3]
         else:
             self.description = description
-        self.N0     = np.array([]) #: initial population of all levels
+        self.reset_N0()                    #  initial population of all levels
         self.v0     = np.array([0.,0.,0.]) #: initial velocity of the particle
         self.r0     = np.array([0.,0.,0.]) #: initial position of the particle
         """dictionary for parameters specifying the steady state conditions."""
@@ -902,6 +902,13 @@ class System:
             except:
                 pass
         return None
+    
+    def reset_N0(self):
+        """Reset (last created) initial population self.N0 and initial populations
+        for all electronic states"""
+        self.N0     = np.array([]) #: initial population of all levels
+        for ElSt in self.levels.electronic_states:
+            ElSt.N0 = []
     
     def initialize_N0(self,return_densitymatrix=False,random=False):
         #___specify the initial (normalized) occupations of the levels
