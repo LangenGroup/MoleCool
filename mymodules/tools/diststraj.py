@@ -4,7 +4,7 @@ Created on Mon Mar  4 17:45:03 2024
 
 @author: fkogel
 
-v3.3.0
+v3.3.1
 
 This Module contains different type of functions and classes, e.g. to calculate
 simple linear trajectories through multiple apertures and to evaluate trajectories
@@ -23,7 +23,7 @@ def transversal_width2Temp(w_sigma=1.2e-3, v_Fw=170, total_dist=58e-2, mass=157,
     is flying for a certain total distance and finally reaches a specific
     transversal position starting from zero position. The temperature corresponds
     to a transversal Gaussian distribution with standard deviation given by the
-    transversal position w_sigma.
+    transversal position `w_sigma`.
 
     Parameters
     ----------
@@ -108,9 +108,9 @@ class TrajectoryApertures():
         
         The whole simulation is based on the following default axes definitions:
             
-            x-axis: longitudinal direction (molecular beam axis)
-            y-axis: transversal horizontal direction along probe lasers
-            z-axis: transversal vertical direction
+            - x-axis: longitudinal direction (molecular beam axis)
+            - y-axis: transversal horizontal direction along probe lasers
+            - z-axis: transversal vertical direction
 
         Parameters
         ----------
@@ -154,7 +154,7 @@ class TrajectoryApertures():
             mean values of all 3 axes in m/s for initializing a 3D Gaussian velocity
             distribution at the start. The default is [200, 0, 0].
         sigma : list, optional
-            Same as mu but standard deviations. The default is [32., 12., 12.].
+            Same as `mu` but standard deviations. The default is [32., 12., 12.].
         v_tr_max : float, optional
             maximum initial transversal velocity at the edge of the buffer gas
             cell output. The transversal velocity distributions' mean is shifted
@@ -236,7 +236,7 @@ class TrajectoryApertures():
         
         return rdist0_new
 
-    def get_hist_data(self, i, w, r_v='r', bins=30):
+    def get_hist_data(self, i, w, r_v='r', bins=30):      
         """Calculate histogram data for the distribution at a certain aperture.
         All important evaluated arrays are saved in the dictionary hist_data.
         
@@ -252,6 +252,14 @@ class TrajectoryApertures():
             position of velocity histogram ('r' or 'v'). The default is 'r'.
         bins : int, optional
             Number of bins. The default is 30.
+            
+        Returns
+        -------
+        dict
+            Dictionary with x and y axes of histogram data (`x_data`, `y_data`),
+            fit data (`x_data_fit` and `y_data_fit`) and fit values (`popt`).
+            This dictionary is also stored and can afterwards be accessed in the
+            attribute ``hist_data`` in the following way: hist_data[r_v][i].
         """
         rdist = self.rdists[i] # position distribution at aperture i
         if r_v == 'r':      dist = rdist
@@ -273,24 +281,26 @@ class TrajectoryApertures():
         popt, pcov  = curve_fit(gaussian, x_data, y_data, p0=p0, bounds=bounds)
         
         # fitted data arrays
-        x_data_plt  = np.linspace(np.min(x_data), np.max(x_data), 500)
-        y_data_fit  = gaussian(x_data_plt, *popt)
+        x_data_fit  = np.linspace(np.min(x_data), np.max(x_data), 500)
+        y_data_fit  = gaussian(x_data_fit, *popt)
         
         self.hist_data[r_v][i] = dict(x_data=x_data, y_data=y_data, popt=popt, x_bins=x_bins,
-                                      x_data_plt=x_data_plt, y_data_fit=y_data_fit)
+                                      x_data_fit=x_data_fit, y_data_fit=y_data_fit)
         return self.hist_data[r_v][i]
 
-    def plot_pos_vel_distr(self, w=1e-3, show_which=None,
+    def plot_pos_vel_distr(self, w=1e-3, show_which=None, bins=(30,30),
                            save_fig=False, fname=''):
         """Plot 1D and 2D position and velocity distributions as histograms.
 
         Parameters
         ----------
         w : float, optional
-            width see get_hist_data. The default is 1e-3.
+            width see :meth:`get_hist_data`. The default is 1e-3.
         show_which : list of int, optional
             indices (of apertures below) for which the velocity distrs should
             be plotted. The default is None.
+        bins : tuple, optional
+            Numbers of bins for position and velocity histograms, respectively.
         save_hdf5 : bool, optional
             Whether to save the initial distribution as hdf5. The default is False.
         fname : str, optional
@@ -306,7 +316,7 @@ class TrajectoryApertures():
         # 2D histograms --------------------------------------------------------------
         for i,ax in zip(show_which,axs[1]):
             rdist = self.rdists[i]
-            ax.hist2d(rdist[:,1]*1e3,rdist[:,2]*1e3,bins=(30,30),cmap='Blues')
+            ax.hist2d(rdist[:,1]*1e3,rdist[:,2]*1e3,bins=(bins[0],bins[0]),cmap='Blues')
             ax.set_aspect('equal', 'box')
             ax.axhline(0,color='yellow')
             ax.axvline(0,color='yellow')
@@ -314,21 +324,21 @@ class TrajectoryApertures():
         # 1D histograms --------------------------------------------------------------
         # position distr:
         for i,ax in zip(show_which,axs[0]):
-            hist_data   = self.get_hist_data(i, w=w, r_v='r')
+            hist_data   = self.get_hist_data(i, w=w, r_v='r', bins=bins[0])
             density     = self.rdists[i].shape[0]/len(self.rdists[0])
             ax.stairs(hist_data['y_data'], hist_data['x_bins']*1e3,
                       ls='-')
-            ax.plot(hist_data['x_data_plt']*1e3, hist_data['y_data_fit'],
+            ax.plot(hist_data['x_data_fit']*1e3, hist_data['y_data_fit'],
                     '--', label='Gaussian Fit', color = 'k', lw = 1)
             ax.set_xlabel('Position $y$ in mm')
             ax.set_title(f"{self.labels[i]}:\n{self.x_aper[i]*1e3} mm\n{density*1e2:.4f}%")
             
         # velocity distr:
         for i,ax in zip(show_which,axs[2]):
-            hist_data   = self.get_hist_data(i, w=w, r_v='v')
+            hist_data   = self.get_hist_data(i, w=w, r_v='v', bins=bins[1])
             ax.stairs(hist_data['y_data'], hist_data['x_bins'],
                       ls='-', fill=True)
-            ax.plot(hist_data['x_data_plt'], hist_data['y_data_fit'],
+            ax.plot(hist_data['x_data_fit'], hist_data['y_data_fit'],
                     '--', label='Gaussian Fit', color = 'k', lw = 1)
             ax.set_xlabel('Velocity $v$ in m/s')
         
@@ -464,7 +474,7 @@ def get_hist_vals(system, yz='z', w=0, radial=False,
     xrange : tuple, optional
         xrange for evaluation the bins of the histogram. The default is None.
     **kwargs : kwargs
-        further keyword arguments for get_hist function.
+        further keyword arguments for :meth:`get_dist` function.
 
     Returns
     -------
@@ -505,11 +515,11 @@ def plot_hist(system, key='r', yz='z', y_off=0,
     Parameters
     ----------
     system : System
-        See get_hist_vals.
+        See :meth:`TrajectoryApertures.get_hist_data`.
     key : str, optional
-        See get_hist_vals. The default is 'r'.
+        See :meth:`TrajectoryApertures.get_hist_data`. The default is 'r'.
     yz : str, optional
-        See get_hist_vals. The default is 'z'.
+        See :meth:`TrajectoryApertures.get_hist_data`. The default is 'z'.
     y_off : float, optional
         Offset on y-plotting-axis. The default is 0.
     ax : plt.axis, optional
@@ -519,7 +529,7 @@ def plot_hist(system, key='r', yz='z', y_off=0,
     scale_x : float, optional
         Value to scale the x-axis for plotting. The default is 1.
     **kwargs : kwargs
-        keyword arguements for get_hist_vals.
+        keyword arguements for :meth:`get_hist_vals`.
     """
     if not ax: ax = plt.gca()
 

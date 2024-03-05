@@ -24,3 +24,11 @@ tools.dict2DF module
    :members:
    :undoc-members:
    :show-inheritance:
+
+tools.diststraj module
+----------------------
+
+.. automodule:: tools.diststraj
+   :members:
+   :undoc-members:
+   :show-inheritance:

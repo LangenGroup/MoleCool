@@ -4,7 +4,7 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.3.0
+v3.3.1
 
 This module contains all different kinds of tools to be used in the other main
 modules.
@@ -242,7 +242,7 @@ def Ttov(T,mass=157):
     return np.sqrt(k*T/(mass*u)) #np.sqrt(k*T*2/(mass*u))
 
 def gaussian(x, a=1.0, x0=0.0, std=1.0, y_off=0):
-    """Standard Gaussian function a*exp(-0.5*(x-x0)**2/std**2)+y_off."""
+    """Standard Gaussian function :math:`a \exp(-0.5(x-x_0)^2/std^2)+y_{off}`."""
     return a * np.exp(-0.5 * ((x - x0) / std)**2) + y_off
 
 def FWHM2sigma(FWHM):
@@ -264,7 +264,7 @@ def get_results(fname, Z_keys='F', XY_keys=[], XY_data_fmt={}, XYY_inds=[],
 
     Parameters
     ----------
-    fname : str or System.System
+    fname : str or ~System.System
         filename where the instance of System is saved or the instance itself.
     Z_keys : str, optional
         Observable calculated in the results. The default is 'F'.
@@ -423,7 +423,7 @@ def plot_results(fname, Z_keys=['F'], XY_data_fmt={}, scale_F='hbar*k*Gamma/2',
 
     Parameters
     ----------
-    fname : str
+    fname : str or ~System.System
         see function get_results.
     Z_keys : str or list of str, optional
         names of calculated observables to be plotted (see function get_results).
