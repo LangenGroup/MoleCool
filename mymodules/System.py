@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.2.3
+v3.3.0
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -598,75 +598,102 @@ class System:
         return F
     
     #%%
-    def calc_trajectory(self,t_int=20e-6,t_start=0.,dt=None,t_eval=None,
-                        position_dep=False,verbose=True,force_axis=None,
-                        interpol_kind='linear',**kwargs):
+    def calc_trajectory(self,F_profile,t_int=20e-6,t_start=0.,dt=None,t_eval=None,
+                        verbose=True,force_axis=None,
+                        interpol_kind='linear',save_scipy_sols=False,**kwargs):
         """for the calculation of Monte Carlo simulations of classical particles
         which are propagated through a provided pre-calculated force profile
         to be used as interpolated function"""
         
-        # self.F_profile = {'F': results[0]['F'],
-        #                   'Ne' : results[0]['F'],'v':None,'I':None}
-        #t handling?
+        if 'method' not in kwargs:
+            kwargs['method'] = 'LSODA' # setting default solver method for ODE
+        
+        # Checking F_profile argument for datatype, etc.:
+        if not isinstance(F_profile, dict):
+            if np.all([isinstance(dic,dict) for dic in F_profile]):
+                F_profile = {k:v for dic in F_profile for k,v in dic.items()}
+            else:
+                raise ValueError(f"F_profile must be dictionary or iterable of dictionaries!")
+                
+        if ('a' not in F_profile) and ('F' in F_profile):
+            F_profile['a'] = F_profile['F']/self.levels.mass
+            print(f'Converting force to acceleration with mass {self.levels.mass}')
+        else:
+            raise ValueError("Either 'F' or 'a' must be included in F_profile!")
+        
+        # attribute for storing the solutions of the trajectory simulations:
+        self.trajectory_results = dict(kwargs=locals(), sols=[])
+        
+        v0_arr = np.atleast_2d(self.v0)
+        r0_arr = np.atleast_2d(self.r0)
+        if isinstance(t_int, float):
+            t_int = np.ones(v0_arr.shape[0])*t_int   
+        
+        self.trajectory_results['final_values'] = dict(photons = np.zeros(len(v0_arr)),
+                                                       v = np.zeros((len(v0_arr),3)),
+                                                       r = np.zeros((len(v0_arr),3)))
+        
+        if 'v' in F_profile or 'v0' in F_profile:
+            v = F_profile['v'] if 'v' in F_profile else F_profile['v0']
+        else:
+            raise ValueError("Either 'v' or 'v0' must be included in F_profile!")
+            
+        if 'I' in F_profile:
+            position_dep    = True
+            I               = F_profile['I']
+            I_tot           = self.lasers.get_intensity_func()
+            
+            from scipy.interpolate import RegularGridInterpolator as interp
+            a_intp  = interp((v,I), F_profile['a'], method=interpol_kind,
+                             bounds_error=False,fill_value=None)
+            R_intp  = interp((v,I), F_profile['Nscattrate'], method=interpol_kind,
+                             bounds_error=False,fill_value=None)
+            def a(v,r): return a_intp(xi=(v,I_tot(r)))
+            def R(v,r): return R_intp(xi=(v,I_tot(r)))
+            
+            if force_axis == '-v':
+                v0_arr2         = v0_arr.copy()
+                v0_arr2[:,0]   *= 0
+                force_axis      = -v0_arr2/np.linalg.norm(v0_arr2,axis=-1)[:,None]
+            elif isinstance(force_axis,(list,np.ndarray)):
+                force_axis = np.atleast_2d(np.array(force_axis)/np.linalg.norm(force_axis)) +v0_arr*0
+            else:
+                raise Exception('input argument <force axis> has to be given!')
+                
+        else:
+            position_dep = False
+            from scipy.interpolate import interp1d
+            a   = interp1d(v, F_profile['a'], kind=interpol_kind)
+            R   = interp1d(v, F_profile['Nscattrate'], kind=interpol_kind)
+            force_axis = np.array(force_axis)/np.linalg.norm(force_axis)
+        
+        # Differential equation calculation:
         #__________________________________
         def ode_MC1D(t,y,force_axis,position_dep):
             dy      = np.zeros(6+1)
             v_proj = np.sum(y[:3]*force_axis)
             if position_dep:
                 dy[:3] = a(v_proj,y[3:6])*force_axis
-                dy[-1] = GNe(v_proj,y[3:6])
+                dy[-1] = R(v_proj,y[3:6])
             else:
                 dy[:3] = a(v_proj)*force_axis
-                dy[-1] = GNe(v_proj)
+                dy[-1] = R(v_proj)
             dy[3:6] = y[:3]
             return dy
         #__________________________________
-        v0_arr = np.atleast_2d(self.v0)
-        r0_arr = np.atleast_2d(self.r0)
-        if isinstance(t_int, float): t_int = np.ones(v0_arr.shape[0])*t_int   
-        self.sols = []
         
-        if 'v' in self.F_profile:
-            v = self.F_profile['v']
-            if 'I' in self.F_profile: #or position_dep?
-                I = self.F_profile['I']
-                I_tot = self.lasers.get_intensity_func()
-                
-                from scipy.interpolate import RegularGridInterpolator
-                a_intp  = RegularGridInterpolator((v,I), self.F_profile['F']/self.levels.mass,
-                                                  method=interpol_kind,
-                                                  bounds_error=False,fill_value=None)
-                GNe_intp = RegularGridInterpolator((v,I), self.F_profile['Ne'],#must be sum over u: N_u*Gamma_u
-                                                   method=interpol_kind,
-                                                   bounds_error=False,fill_value=None)
-                self.a_intp=a_intp
-                def a(v,r): return a_intp(xi=(v,I_tot(r)))
-                def GNe(v,r): return GNe_intp(xi=(v,I_tot(r)))
-                if force_axis == '-v':
-                    v0_arr2 = v0_arr.copy()
-                    v0_arr2[:,0] *= 0
-                    force_axis = -v0_arr2/np.linalg.norm(v0_arr2,axis=-1)[:,None]
-                elif isinstance(force_axis,(list,np.ndarray)):
-                    force_axis = np.atleast_2d(np.array(force_axis)/np.linalg.norm(force_axis)) +v0_arr*0
-                else:
-                    raise Exception('input argument <force axis> has to be given!')
-                i   = -1
-                for v0 in tqdm(v0_arr,smoothing=0.0):
-                    i += 1
-                    y0 = np.array([*v0, *r0_arr[i],0.0])
-                    self.sols.append(solve_ivp(ode_MC1D, (0.,t_int[i]), y0, t_eval=t_eval,
-                                               method='LSODA', args= (force_axis[i],True) ))
-            else:
-                from scipy.interpolate import interp1d
-                a   = interp1d(v, self.F_profile['F']/self.levels.mass, kind=interpol_kind)
-                GNe = interp1d(v, self.F_profile['Ne']*self.levels.exstates.Gamma, kind=interpol_kind) #Gamma with index!?!
-                force_axis = np.array(force_axis)/np.linalg.norm(force_axis)
-                for i,v0 in enumerate(v0_arr):
-                    y0 = np.array([*v0, *r0_arr[i],0.])
-                    self.sols.append(solve_ivp(ode_MC1D, (0.,t_int[i]), y0, t_eval=t_eval,
-                                               method='LSODA', args= (force_axis,False) ))
-        elif position_dep: #Einius: here only position dependent magnetic force
-            pass
+        iterator = tqdm(v0_arr,smoothing=0.0) if verbose else v0_arr
+        for i,v0 in enumerate(iterator):
+            if 'max_step' not in kwargs:
+                kwargs['max_step'] = t_int[i]/200 # default value 200
+            
+            sol = solve_ivp(ode_MC1D, (0.,t_int[i]), np.array([*v0, *r0_arr[i], 0.0]),
+                            t_eval=t_eval, args=(force_axis[i],position_dep),
+                            **kwargs)
+            if save_scipy_sols:
+                self.trajectory_results['sols'].append(sol)
+            for key, indices in dict(photons=-1, r=[3,4,5], v=[0,1,2]).items():
+                self.trajectory_results['final_values'][key][i] = sol.y[indices,-1]
         
     #%%
     def calc_OBEs(self, t_int=20e-6, t_start=0., dt=None, t_eval = [],

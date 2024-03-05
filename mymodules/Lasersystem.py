@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v3.2.3
+v3.3.0
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -170,6 +170,105 @@ class Lasersystem:
             #save input parameters offset_freq and mod_freq to be able to look it up later
             self.entries[-1].offset_freq = offset_freq
             self.entries[-1].mod_freq  = mod_freq
+    
+    def make_retrorefl_beams(self, beam_config='oneside',
+                             P_tot=100e-3, FWHM=1.6e-3, w_cylind=0.0,
+                             T_airglass=99.62e-2, R_mirror=98.34e-2,
+                             mirror_sep=463e-3, reflections=34,
+                             int_length=200e-3, x_offset=15e-3, cut_flanks=True,
+                             printing=True, plotting=False):
+        """Creating all Laser objects for a realistic retroreflecting beam
+        configuration for a long interaction region in the experiment.
+
+        Parameters
+        ----------
+        beam_config : str, optional
+            'oneside' when only one laser beam is retro-reflected from one side.
+            'twosides' for two laser beams entering the interaction region from both
+            sides, e.g. for Sisyphus cooling. The default is 'oneside'.
+        P_tot : float, optional
+            Total inital power (W) of the incoming laser beam or beams. The default is 100e-3.
+        FWHM : float, optional
+            FWHM of the beams. The default is 1.6e-3.
+        w_cylind : float, optional
+            width (m) of a cylindrical widened beam. The default is 0.0.
+        T_airglass : float, optional
+            Single transmission air - glass. The default is 99.62e-2.
+        R_mirror : float, optional
+            Reflectivity of the mirror. The default is 98.34e-2.
+        mirror_sep : float, optional
+            Separation (m) between both retro-reflecting mirrors. The default is 463e-3.
+        reflections : int, optional
+            number of reflections (counting all reflections of a single incoming beam
+            on all mirrors). The default is 34.
+        int_length : float, optional
+            Total length (m) of the interaction region, i.e. from first to last intensity
+            peak along the centered axis. The default is 200e-3.
+        x_offset : float, optional
+            Additional offset of the reflections, i.e. position of the first reflection
+            on the centered axis. The default is 15e-3.
+        cut_flanks : bool, optional
+            Whether the flanks of the beam profiles should be cutted which is usually
+            the case on the mirror for two beams from both sides. The default is True.
+        printing : bool, optional
+            Whether printing additional information. The default is True.
+        plotting : bool, optional
+            Whether plotting the 1D and 2D intensity distributions. The default is False.
+        """
+        # longitudinal difference between two reflecting events
+        dx          = int_length/(reflections-1)
+        beam_angle  = np.arctan(dx/mirror_sep) /(2*np.pi) *360 # angle of beam in degrees
+        
+        self.retrorefl_beams_kwargs = locals()
+        
+        if cut_flanks:
+            if w_cylind == 0:
+                w_cylind = FWHM*0.8493218002880192
+            r_cylind_trunc = dx/2#/1.01
+        else:
+            r_cylind_trunc = 10.
+            
+        P           = P_tot
+        for i in np.arange(reflections):
+            # Calculate current laser power due to losses from transmission and reflection
+            pm1     = i%2*2 - 1
+            if i == 0:
+                # first beam pass only one time transmission through glass
+                P   *= T_airglass**2 
+            else:
+                P   *= T_airglass**2 * R_mirror * T_airglass**2  
+            # print('P= {:.2f}mW'.format(P*1e3))
+            
+            # Only one laser without sidebands required since only the total
+            # intensities of all lasers would be simply added:
+            if beam_config == 'oneside':
+                P_beam = P
+            elif beam_config == 'twosides':
+                P_beam = P/2
+            self.add(P=P_beam, k=[dx/mirror_sep,0,+pm1], r_k=[i*dx+x_offset,0,0],
+                     FWHM=FWHM, w_cylind=w_cylind, r_cylind_trunc=r_cylind_trunc,
+                     dir_cylind=[1,0,-pm1*dx/mirror_sep])
+            if beam_config == 'twosides':
+                self.add(P=P_beam, k=[dx/mirror_sep,0,-pm1], r_k=[i*dx+x_offset,0,0],
+                         FWHM=FWHM, w_cylind=w_cylind, r_cylind_trunc=r_cylind_trunc,
+                         dir_cylind=[1,0,+pm1*dx/mirror_sep])
+        if printing:
+            print('k=',[dx/mirror_sep,0,+pm1],', dir_cyl=',[1,0,-pm1*dx/mirror_sep])
+            print('Power ratio between last and first beam ={:6.2f} %'.format(
+                P / (P_tot*T_airglass**2) *1e2 ))
+            print(f"Beam angle ={beam_angle:6.3f}° and {self.pNum:3} laser beam objects in total")
+            d_travel = np.sqrt(dx**2 + mirror_sep**2)*reflections
+            print(f"Travelling distance of a single laser beam ={d_travel:6.2f}m")
+            
+        if plotting:
+            plt.figure('1D intensity distribution')
+            z_shift = 0e-3
+            self.plot_I_1D(ax='x',axshifts=[0e-3,z_shift],limits=[0e-2,23e-2],
+                                  label=f"{reflections} refl.", Npoints=10001)
+            # 2D
+            plt.figure('2D intensity distribution')
+            self.plot_I_2D(ax='y',axshift=0,Npoints=501,
+                                  limits=([0e-2,23e-2],[-mirror_sep/2,+mirror_sep/2]))
     
     def get_intensity_func(self,sum_lasers=True,use_jit=True):
         '''generates a function which uses all the current parameters of all

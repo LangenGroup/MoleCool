@@ -4,12 +4,14 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.2.3
+v3.3.0
 
 This module contains all different kinds of tools to be used in the other main
 modules.
 """
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 from tqdm import tqdm
 import multiprocessing
 from copy import deepcopy
@@ -227,12 +229,308 @@ def multiproc(obj,kwargs):
                         # result_objects.append(pool.apply_async(np.sum,args=(np.arange(3),)))
                         # result_objects.append(mp_calc(obj,betaB[c1,c2,:],**kwargs)) # --> without Pool parallelization
                     # result_objects.append(pool.apply_async(deepcopy(obj).calc_OBEs,kwds=(kwargs)))
+
 #%%
 def vtoT(v,mass=157):
     """function to convert a velocity v in m/s to a temperatur in K."""
     from scipy.constants import k, u
-    return v**2 * 0.5*(mass*u)/k
+    return v**2 * (mass*u)/k #v**2 * 0.5*(mass*u)/k
+
 def Ttov(T,mass=157):
     """function to convert a temperatur in K to a velocity v in m/s."""
     from scipy.constants import k, u
-    return np.sqrt(k*T*2/(mass*u))
+    return np.sqrt(k*T/(mass*u)) #np.sqrt(k*T*2/(mass*u))
+
+def gaussian(x, a=1.0, x0=0.0, std=1.0, y_off=0):
+    """Standard Gaussian function a*exp(-0.5*(x-x0)**2/std**2)+y_off."""
+    return a * np.exp(-0.5 * ((x - x0) / std)**2) + y_off
+
+def FWHM2sigma(FWHM):
+    """Convert full width at half maximum (FWHM) to standard deviation
+    of a Gaussian (sigma)."""
+    return FWHM/2.3548200450309493
+
+def sigma2FWHM(sigma):
+    """Convert standard deviation of a Gaussian (sigma) to full width
+    at half maximum (FWHM)."""
+    return sigma*2.3548200450309493
+
+#%%
+def get_results(fname, Z_keys='F', XY_keys=[], XY_data_fmt={}, XYY_inds=[],
+                add_v0=False, add_flip_v=False, add_I0=False, scale_F='N'):
+    """Extract results from an .pkl file as observables of a high-dimensional
+    parameter space in a certain order of parameters and their values as numpy
+    arrays. Optionally, one can add e.g. zero force values, manually.
+
+    Parameters
+    ----------
+    fname : str or System.System
+        filename where the instance of System is saved or the instance itself.
+    Z_keys : str, optional
+        Observable calculated in the results. The default is 'F'.
+    XY_keys : list of str, optional
+        Parameters that the results are dependent on, e.g. ['v0','I']. The default is [].
+    XY_data_fmt : dict of func, optional
+        Dictionary with parameters as keys and functions as dict values which
+        determine how the parameter values are converted or formatted, e.g. 
+        {'strength': lambda system: system.Bfield.strength}. The default is {}.
+    XYY_inds : list of inds, optional
+        list of indices to choose values of further parameters included in the
+        results dataset for more than 3 dimensions. The default is [].
+    add_v0 : bool, optional
+        Manually adding velocity v=0 and zero force. The default is True.
+    add_flip_v : bool, optional
+        add a flip velocity axis to get the full range. The default is True.
+    add_I0 : bool, optional
+        adding intensity I=0 where the force is zero. The default is True.
+    scale_F : str, optional
+        scale F to either 'N' or 'hbar*k*Gamma/2'. Do nothing if scale_F=='.',
+        The default is 'N'.
+
+    Returns
+    -------
+    Z : np.ndarray
+        observables or results as shape of both axes of XY_keys.
+    XY : dict
+        names and data of X axis and Y axis as str and np.ndarray
+        (length of both axis together equal the shape of Z).
+    XYY : dict
+        key and single values of the parameters of further parameters included
+        in the results dataset for more than 3 dimensions.
+    """
+    # Format values for iterating parameters
+    XY_data_fmt_default = {'I': lambda x: x.lasers.I_sum,
+                           'v0': lambda x: x.v0[:,2],
+                           'strength': lambda x: x.Bfield.strength}
+    XY_data_fmt_default.update(XY_data_fmt)
+    XY_data_fmt     = XY_data_fmt_default
+    
+    # loading system instance
+    if isinstance(fname, str):
+        s4  = open_object(fname)
+        fname_bn= os.path.basename(fname)
+        print(f"File <{fname_bn}> with iteration variables: {s4.results[1]}")
+    else:
+        s4  = fname
+        print(f"Instance <{fname_bn}> loaded with iteration variables: {s4.results[1]}")
+    
+    # iterating over multiple Z_keys:
+    if isinstance(Z_keys, str): Z_keys = [Z_keys]
+    Z_dict = dict()
+    
+    for Z_key in Z_keys:
+        
+        # initiating the parameters that are shown on the X and Y axes
+        iterinds    = dict(zip(s4.results[1].keys(),range(len(s4.results[1].keys()))))
+        iterinds_keys = list(iterinds.keys())
+        if not XY_keys:
+            if 'v0' in iterinds_keys:
+                iterinds_keys.remove('v0')
+                XY_keys = ['v0',iterinds_keys[0]]
+            else:
+                XY_keys = iterinds_keys[:2]
+        else:
+            for XY_key in XY_keys:
+                if XY_key not in iterinds:
+                    raise ValueError(f'Value <{XY_key}> not included in results from file {fname_bn}!')
+            if len(XY_keys) != 2:
+                iterinds_keys.remove(XY_keys[0])
+                XY_keys.append(iterinds_keys[0])
+        
+        # actual X,Y axes data arrays
+        XY_data = []
+        for XY_key in XY_keys:
+            if XY_key not in XY_data_fmt:
+                raise Exception(f'XY_data_fmt must be given for XY_key {XY_key}')
+            XY_data.append(np.array(XY_data_fmt[XY_key](s4)))
+    
+        # loading the Z data (can be 2D or high-dimensional)
+        if Z_key not in s4.results[0].keys():
+            raise ValueError("Z_key '{}' not included in results, try one of {}".format(
+                Z_key, list(s4.results[0].keys())))
+            
+        Z = s4.results[0][Z_key].transpose((iterinds.pop(XY_keys[0]),
+                                            iterinds.pop(XY_keys[1]),
+                                            *iterinds.values()))
+        
+        # values of further parameters in dataset if Z has more than 2 dimensions
+        XYY = dict()
+        if len(iterinds) != 0: # pick single value of the parameter of higher dimensions
+            if not XYY_inds:
+                XYY_inds = [0]*len(iterinds)     
+            elif len(XYY_inds) != len(iterinds):
+                raise ValueError(f'len of XYY_inds not equal to number of further dims ({len(iterinds)})')    
+        
+            for XYY_key, XYY_ind in zip(iterinds.keys(), XYY_inds):
+                XYY[XYY_key] = XY_data_fmt[XYY_key](s4)[XYY_ind]
+            
+            for XYY_ind in XYY_inds[::-1]:
+                Z = Z[...,XYY_ind]
+    
+        # add manually zero forces e.g. for zero intensity or zero velocity    
+        if (add_flip_v or add_v0) and ('v0' in XY_keys) and Z_key in ['F','Ne']:
+            axis    = XY_keys.index('v0')
+            Z       = np.moveaxis(Z, axis, 0) # move old axis to zero axis
+            v_arr   = XY_data[axis]
+            if add_flip_v:
+                v_arr   = np.array([*v_arr,*(-np.flip(v_arr))])
+                if Z_key == 'F':
+                    Z       = np.array([*Z,*(-np.flip(Z,axis=0))])
+                elif Z_key == 'Ne':
+                    Z       = np.array([*Z,*(+np.flip(Z,axis=0))])
+            if add_v0:
+                v_arr   = np.array([*v_arr,0])
+                Z       = np.array([*Z, 0*Z[0]])
+            v_inds  = np.argsort(v_arr)
+            Z       = Z[v_inds]
+            Z       = np.moveaxis(Z, 0, axis) # move zero axis back to old axis
+            XY_data[axis] = v_arr[v_inds]
+        
+        if add_I0 and ('I' in XY_keys):
+            axis    = XY_keys.index('I')
+            Z       = np.moveaxis(Z, axis, 0) # move old axis to zero axis
+            I_arr   = XY_data[axis]
+            Z       = np.array([0*Z[0], *Z])
+            Z       = np.moveaxis(Z, 0, axis) # move zero axis back to old axis
+            XY_data[axis] = np.array([0.,*I_arr])
+            
+        if scale_F and (Z_key == 'F'):
+            # Further scaling of the Z data, i.e. the force to more intuitive unit
+            from System import hbar, pi
+            Gamma   = s4.levels.calc_Gamma().mean()
+            lamb    = s4.lasers.getarr('lamb').mean()
+            unit    = hbar*2*pi/lamb*Gamma/2
+            if (scale_F == 'hbar*k*Gamma/2') and (abs(Z.max()) < 100*unit):
+                Z /= unit
+            elif (scale_F == 'N') and (abs(Z.max()) > 100*unit):
+                Z *= unit
+            else:
+                print('No Scaling of the force applied.')
+    
+        Z_dict[Z_key] = Z
+    
+    if not np.all(np.array([arr.shape for arr in Z_dict.values()])==Z_dict[Z_keys[0]].shape):
+        raise Exception('Shapes of generated Z data is not the same for every Z_key!')
+        
+    return Z_dict, dict(zip(XY_keys,XY_data)), XYY
+    
+def plot_results(fname, Z_keys=['F'], XY_data_fmt={}, scale_F='hbar*k*Gamma/2',
+                 XY_labels={}, Z_labels={}, cmap='RdBu', levels = 12,
+                 Xlim=[], Ylim=[], Zlim={}, Z_percent=['F','Ne'],
+                 figname='', savefig=True, **kwargs):
+    """plot results for calculating one or multiple observables in a high-dimensional
+    parameter space.
+
+    Parameters
+    ----------
+    fname : str
+        see function get_results.
+    Z_keys : str or list of str, optional
+        names of calculated observables to be plotted (see function get_results).
+        The default is ['F'].
+    XY_data_fmt : dict, optional
+        see function get_results. The default is {}.
+    XY_labels : dict, optional
+        dictionary to convert the names of certain parameters to other more suitable
+        axis labels. The default is {}.
+    Z_labels : dict, optional
+        dictionary to convert the names of the observables to other more suitable
+        axis labels. The default is {}.
+    cmap : str, optional
+        color map from matplotlib. The default is 'RdBu'.
+    levels : int, optional
+        number of color levels. The default is 12.
+    Xlim : tuple, optional
+        lower and upper limit. The default is [].
+    Ylim : tuple, optional
+        lower and upper limit. The default is [].
+    Zlim : tuple, optional
+        lower and upper limit. The default is {}.
+    Z_percent : list, optional
+        list with the names of observables to be plotted in percent.
+        The default is ['F','Ne'].
+    figname : str, optional
+        name of the figure. The default is ''.
+    savefig : bool or str, optional
+        if True the figure is saved. If str, the figure is saved using the
+        provided string. The default is True.
+    **kwargs : keyword arguments
+        keyword arguments for the function get_results.
+    """
+    # defining some default dictionaries for axes labels, and formatters for the axes data
+    Z_labels_default = dict(F='Cooling force $F$ ($\hbar k \Gamma/2$)',
+                            Ne='Ex. state population $n_e$',
+                            exectime='Execution time (s)',
+                            steps='Iter. steps till steady state')
+    
+    XY_data_fmt_default = {'I': lambda x: x.lasers.I_sum/1000,
+                           'strength': lambda x: x.Bfield.strength*1e4}
+    XY_labels_default = {'I':'Intensity $I_{tot}$ (kW/m$^2$)',
+                         'v0':'Velocity $v$ (m/s)',
+                         'strength':'Bfield strength (G)'}
+    Z_labels_default.update(Z_labels)
+    XY_labels_default.update(XY_labels)
+    XY_data_fmt_default.update(XY_data_fmt)
+    Z_labels        = Z_labels_default
+    XY_labels       = XY_labels_default
+    XY_data_fmt     = XY_data_fmt_default
+    
+    if isinstance(Z_keys, str): Z_keys = [Z_keys] # make sure that Z_keys is a list of str
+    
+    # Initializing figure
+    plt.rcParams['figure.constrained_layout.use'] = False
+    fig, axs = plt.subplots(len(Z_keys),1, sharex=True, figsize=(8,7), squeeze=False,
+                            num=figname if figname else "Results: {} ({})".format('-'.join(Z_keys), fname_bn))
+    fig.subplots_adjust(hspace=0.0)
+    
+    # iterating over keys for Z (actual results), e.g. Force F, excited state fraction Ne
+    for i,(ax,Z_key) in enumerate(zip(axs[:,0],Z_keys)):
+        
+        # load results and make meshgrid for plotting
+        Z_dict, XY, XYY = get_results(fname, Z_keys=Z_key, scale_F=scale_F,
+                                      XY_data_fmt=XY_data_fmt,**kwargs)
+        Z       = Z_dict[Z_key]
+        X,Y     = np.meshgrid(*XY.values())
+        
+        # update axes labels for undefined values:
+        for XY_key in [*list(XY.keys()),*(XYY.keys())]:
+            if XY_key not in XY_labels:
+                XY_labels.update({XY_key:XY_key})
+        
+        if Z_key in Z_percent: 
+            Z *= 1e2 # in percent
+            
+        # ======== PLOTTING ========
+        # set title
+        if i == 0 and len(XYY) != 0:
+            title = ',\n'.join([f'{XY_labels[key]}: {data:4g}'
+                                for key,data in XYY.items()])
+            ax.set_title(title)
+        # set x, y labels
+        if i == len(Z_keys)-1:
+            ax.set_xlabel(XY_labels[list(XY.keys())[0]])
+        if i == len(Z_keys) //2:
+            ax.set_ylabel(XY_labels[list(XY.keys())[1]])
+        # set axes limits
+        if Xlim:    ax.set_xlim(*Xlim)
+        if Ylim:    ax.set_ylim(*Ylim)
+        vmin,vmax = None, None
+        if Z_key in Zlim:
+            vmin, vmax= Zlim[Z_key]
+        # draw 2D countour data and colourbar
+        CS = ax.contourf(X,Y,Z.T,levels=levels,cmap=cmap,vmin=vmin,vmax=vmax)#np.linspace(1.,2.,11))
+        CS2= ax.contour(CS, levels=[0.0], colors='k', origin='lower',linestyles='dashed')
+        cbar = plt.colorbar(CS, ax=ax, aspect=14, pad=0.01, shrink=0.90)
+        cbar.add_lines(CS2)
+        cbar.ax.set_ylabel(Z_labels[Z_key])
+        if Z_key in Z_percent: # showing Z data in percent
+            cbar.ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+    
+    # saving figure    
+    if savefig:
+        if isinstance(savefig, str):
+            figname = savefig
+        elif not figname:
+            figname = f"{fname}_{'-'.join(Z_keys)}"
+            if len(iterinds) != 0: figname += f"_{iter_i}"
+        plt.savefig(figname)
