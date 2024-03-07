@@ -4,7 +4,7 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.3.1
+v3.3.2
 
 This module contains all different kinds of tools to be used in the other main
 modules.
@@ -77,7 +77,10 @@ def get_constants_dict(name=''):
             # from an arbitrary directory provided that the respective path is in the PYTHONPATH variable.
             return openjson(script_dir + "\\..\\constants\\")
         except FileNotFoundError:
-            return openjson("./constants/")
+            try:
+                return openjson("./constants/")
+            except FileNotFoundError:
+                return openjson("./mymodules/constants/")
     else:
         return {}
 

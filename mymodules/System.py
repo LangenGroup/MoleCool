@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.3.0
+v3.3.2
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -684,9 +684,6 @@ class System:
         
         iterator = tqdm(v0_arr,smoothing=0.0) if verbose else v0_arr
         for i,v0 in enumerate(iterator):
-            if 'max_step' not in kwargs:
-                kwargs['max_step'] = t_int[i]/200 # default value 200
-            
             sol = solve_ivp(ode_MC1D, (0.,t_int[i]), np.array([*v0, *r0_arr[i], 0.0]),
                             t_eval=t_eval, args=(force_axis[i],position_dep),
                             **kwargs)

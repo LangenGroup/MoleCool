@@ -4,7 +4,7 @@ Created on Mon Mar  4 17:45:03 2024
 
 @author: fkogel
 
-v3.3.1
+v3.3.2
 
 This Module contains different type of functions and classes, e.g. to calculate
 simple linear trajectories through multiple apertures and to evaluate trajectories
@@ -463,10 +463,14 @@ def get_hist_vals(system, yz='z', w=0, radial=False,
         System instance from which the distributions are to be loaded..
     yz : str, optional
         Axis for which the histogram should be calculated. The default is 'z'.
-    w : float, optional
+    w : float or dict, optional
+        Parameter(s) for weighting along the other transversal axis.    
         Should imitate the imaging laser beam width as a width of the slice
-        which is cut out of the 2D plane. So, it is the standard deviation
-        in m of the Gaussian integrating over z-axis. The default is 0.
+        which is cut out of the 2D plane. So, when a float number is provided,
+        it is the standard deviation in m of the Gaussian integrating over z-axis.
+        If otherwise a dictionary is provided, it can contain all parameters
+        corresponding to the gaussian function (:func:`tools.gaussian`).
+        The default is 0.
     radial : bool, optional
         Whether to use a radial distribution. The default is False.
     bins_per_unit : float, optional
@@ -493,12 +497,14 @@ def get_hist_vals(system, yz='z', w=0, radial=False,
     
     if radial:
         weights = 1/values
-    elif w != 0.:
+    elif w:
         yz_     = dict(y='z',z='y')[yz] # other transversal axis, i.e. switch y and z axes
         kwargs_weights = {k:v for k,v in kwargs.items() if k not in ['key']}
         values_weights  = get_dist(system, key='r', xyz=yz_, radial=radial,
                                          **kwargs_weights)
-        weights = gaussian(values_weights, std=w)
+        if not isinstance(w, dict):
+            w = dict(std=w)
+        weights = gaussian(values_weights, **w)
     else:
         weights = None
         
