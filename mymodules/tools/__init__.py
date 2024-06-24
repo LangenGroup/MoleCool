@@ -483,7 +483,7 @@ def plot_results(fname, Z_keys=['F'], XY_data_fmt={}, scale_F='hbar*k*Gamma/2',
     # Initializing figure
     plt.rcParams['figure.constrained_layout.use'] = False
     fig, axs = plt.subplots(len(Z_keys),1, sharex=True, figsize=(8,7), squeeze=False,
-                            num=figname if figname else "Results: {} ({})".format('-'.join(Z_keys), fname_bn))
+                            num=figname if figname else None)
     fig.subplots_adjust(hspace=0.0)
     
     # iterating over keys for Z (actual results), e.g. Force F, excited state fraction Ne
@@ -535,5 +535,4 @@ def plot_results(fname, Z_keys=['F'], XY_data_fmt={}, scale_F='hbar*k*Gamma/2',
             figname = savefig
         elif not figname:
             figname = f"{fname}_{'-'.join(Z_keys)}"
-            if len(iterinds) != 0: figname += f"_{iter_i}"
         plt.savefig(figname)
