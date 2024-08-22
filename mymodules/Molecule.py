@@ -63,6 +63,7 @@ from scipy.constants import k as k_B
 from scipy.constants import u as u_mass
 from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
 from System import open_object, save_object
+import json
 
 from collections.abc import Iterable
 import _pickle as pickle
@@ -337,15 +338,18 @@ class Molecule:
             Tuple or list including two dictionaries, i.e. see two arguments of
             :func:`multiindex_filter`. Default is no filtering.
         **kwargs : kwargs
-            Additional keyword arguments (see :meth:`calc_branratios`).
+            Additional keyword arguments (see :meth:`calc_branratios`). By default
+            these keyword arguments are ``dict(threshold=0.0, include_Boltzmann=False)``.
 
         Returns
         -------
         pandas.DataFrame
             reduced electric dipole matrix.
         """
+        kwargs_calc_branratios = dict(dict(threshold=0.0,include_Boltzmann=False),
+                                      **kwargs)
         if ('dipmat' not in self.__dict__.keys()) or recalc_branratios:
-            self.calc_branratios(**kwargs)
+            self.calc_branratios(**kwargs_calc_branratios)
         GrSt, ExSt = [self.__dict__[lab] for lab in self.branratios_labels]
         Eigenbasis = [ElSt.get_eigenstates(Hcasebasis=Hcasebasis,
                                            onlygoodQuNrs=onlygoodQuNrs,
@@ -414,7 +418,131 @@ class Molecule:
             return multiindex_filter(DF, rows=index_filter[0], cols=index_filter[1], drop_level=False)
         else:
             return DF
+    
+    def export_OBE_properties(self, gs=None, exs=None, index_filter=({},{}),
+                              fname = '', HFfreq_offsets=[0,0],
+                              QuNrs_const = ([],[]), QuNrs_var = ([],[]),
+                              include_mF=False, vibr_values={}, rounded=None):
+        """Export all the important properties connected to two electronic
+        states to a dictionary in a proper format for the OBE simulation code to
+        import the properties. This dictionary can also directly be saved as
+        a .json file. This method uses the similar function
+        :meth:`ElectronicState.export_OBE_properties`.
+
+        Parameters
+        ----------
+        gs : str, optional
+            label of the ground ElectronicState. The default is None meaning that
+            it is automatically chosen.
+        exs : str, optional
+            label of the excited ElectronicState. The default is None meaning that
+            it is automatically chosen.
+        index_filter : tuple(dict), optional
+            to filter the states of interest. The tuple with two dictionaries
+            is used for ground and excited state see :func:`multiindex_filter`.
+            The default is ({},{}).
+        fname : str, optional
+            filename of the constants file. Should end with '.json'.
+            The default is '' meaning that no file will be saved.
+        HFfreq_offsets : list(float), optional
+            offsets for the hyperfine frequencies of the two electronic states.
+            See `HFfreq_offset` in :meth:`ElectronicState.export_OBE_properties`.
+            The default is [0,0].
+        QuNrs_const : tuple(list), optional
+            constant Quantum numbers (see :func:`get_QuNr_keyval_pairs`).
+            The default is ([],[]).
+        QuNrs_var : TYPE, optional
+            Variable Quantum numbers (see :meth:`ElectronicState.export_OBE_properties`).
+            The default is ([],[]).
+        include_mF : bool, optional
+            Whether to include mF Quantum numbers on top of the ones from `QuNrs_var`.
+            The default is False.
+        vibr_values : dict, optional
+            Dictionary to include the vibrational properties manually.
+            Includes keys 'vibrbranch', 'vibrfreq', 'QuNrs_rows', 'QuNrs_cols'
+            where the last two keys are optional as they will be generated
+            automatically. The default is {}.
+        rounded : int, optional
+            digit to round the frequencies and gfactors. The default is None
+            meaning that no rounding is applied.
+
+        Returns
+        -------
+        dict
+            Dictionary with the properly formatted level and transition properties.
+        """
+        # checking QuNrs_const and QuNrs_var
+        if len(QuNrs_const[0]) != len(QuNrs_const[1]):
+            raise Exception((f"Length of both QuNrs_const list items {QuNrs_const[0]}"
+                             f" and {QuNrs_const[1]} must be the same."))
+        for QuNrs_var_i in QuNrs_var:
+            if 'mF' in QuNrs_var_i:
+                QuNrs_var_i.remove('mF')
+                
+        # checking vibrational values
+        if ('vibrbranch' in vibr_values) and ('vibrfreq' in vibr_values):
+            for i, key in enumerate(['QuNrs_rows','QuNrs_cols']):
+                if key not in vibr_values:
+                    vibr_values.update({key : dict(
+                        v=list(range(np.array(vibr_values['vibrfreq']).shape[i])))})
+        else:
+            vibr_values = {}
         
+        # checking ground and excited electronic state
+        if not gs:  gs  = self.grstates[0]
+        if not exs: exs = self.exstates[0]
+        GrState     = self.__dict__[gs]
+        ExState     = self.__dict__[exs]
+        
+        ##### creating very large dictionary that is saved as json in the end #####
+        dic0        = NestedDict()
+        dic0.update({'mass' : self.mass, 'level-specific' : dict()})
+        
+        ##### transition-specific #####
+        for GrExState in [GrState, ExState]:
+            GrExState.mF_states = bool(include_mF)
+            GrExState.Bfield    = 0
+            GrExState.build_states(GrExState.Fmax)
+        
+        # calculate and round dipole matrix
+        DF          = self.get_dMat_red(recalc_branratios=True, Hcasebasis=True,
+                                        index_filter=index_filter)
+        if rounded != None:
+            DF = DF.round(rounded)
+        
+        # putting the data into the large dictionary:
+        # dic is a sub dict with only the dMat data and the respective rows and cols QuNrs
+        dic     = {['dMat_red','dMat'][int(bool(include_mF))] : DF.to_numpy().tolist()}
+        for key, MI, QuNrs_var_i in zip(['QuNrs_rows','QuNrs_cols'], [DF.index, DF.columns], QuNrs_var):
+            if not QuNrs_var_i:
+                QuNrs_var_ = get_unique_multiindex_names(MI)
+            else:
+                QuNrs_var_ = QuNrs_var_i.copy()
+                if include_mF:
+                    QuNrs_var_.append('mF')
+            dic[key] = get_QuNrvals_from_multiindex(MI, QuNrs_var_)
+
+        key_list = ['transition-specific',
+                    *get_QuNr_keyval_pairs([self.X,self.A], [DF.index, DF.columns], QuNrs_const)]
+        dic0[key_list] = dic
+        dic0[key_list[:2]].update(vibr_values)
+
+        ##### level-specific #####
+        for i, ElState in enumerate([GrState,ExState]):
+            dic0['level-specific'].update(
+                ElState.export_OBE_properties(
+                    index_filter=index_filter[i], rounded=rounded, nested_dict=True,
+                    QuNrs=QuNrs_var[i].copy(), HFfreq_offset=HFfreq_offsets[i],
+                    get_QuNr_keyval_pairs_kwargs=dict(include_v=True,QuNrs_names=QuNrs_const[i]))
+                )
+        
+        # saving as json file
+        if fname and isinstance(fname,str):
+            with open(fname, 'w') as file:
+                json.dump(dic0.copy(), file, sort_keys=False, indent=4)
+        
+        return dic0.copy()
+    
     def __str__(self):
         """prints all general information of the Molecule with its electronic states"""
         
@@ -1185,11 +1313,11 @@ class ElectronicState:
                 
         return self.HcaseBasis
     
-    def get_gfactors(self,Bmax=0.01e-4):
+    def get_gfactors(self, Bmax=1e-4):
         """calculates the mixed g-factors for every hyperfine level eigenstate.
         These g-factors are returned as an array with the same order as the
         eigenstates for zero magnetic field which can be printed via 
-        :meth:`get_eigenstates`. The gfactor array is also stored in the
+        :meth:`get_eigenstates`. The gfactor pd.DataFrame is also stored in the
         attribute ``gfactors``.
 
         Parameters
@@ -1197,53 +1325,51 @@ class ElectronicState:
         Bmax : float, optional
             maximum magnetic field strength in T to which the mixed g-factors are
             calculated. This value should be in the small region where the Zeeman
-            shifts possess only linear behavior. The default is 0.01e-4.
+            shifts possess only linear behavior. The default is 1e-4.
 
         Returns
         -------
-        numpy.ndarray
+        pandas.DataFrame
             array containing the mixed g-factors ordered by energy of the eigenstates.
         """
-        oldBfield = self.Bfield
-        oldstates = self.states
-        if oldBfield == 0.0:
-            self.Bfield = 1e-5 #set to arbitrary non-zero value
-            self.build_states(self.Fmax,self.Fmin)
-        
-        N           = self.N
-        Bfield      = np.array([1e-3*Bmax,Bmax])
-        Ew_B_arr    = np.zeros((len(Bfield),N))
-        for k,B in enumerate(Bfield): #maybe use for the zero Bfield energies Bfield=0.0? --> is also much faster
-            self.Bfield = B
-            self.calc_eigenstates()
-            Ew_B_arr[k,:] = self.Ew
-        
+        Bmax    = 1e-4
         mu_B = physical_constants['Bohr magneton'][0]
-        dB          = Bfield[1] - Bfield[0]
-        gfactors    = np.zeros(N)
-        mF_arr      = np.zeros(N)
-        for i,vec in enumerate(self.Ev.T):
-            j           = np.argsort(np.abs(vec))[-1]
-            mF          = self.states[j].mF
-            mF_arr[i]   = mF
-            if mF == 0.0:
-                continue
-            gfactors[i] = (Ew_B_arr[1,i] - Ew_B_arr[0,i])*cm2MHz*1e6*h/(mu_B*dB*mF)
         
-        gfactors_red = []
-        i = 0
-        for tmp in range(N):
-            gfactors_red.append(gfactors[i])
-            if mF_arr[i] == 0.0:
-                i += 1
-            else: 
-                i += int(2*abs(mF_arr[i]) + 1 +0.01)
-            if i >= N: break
-        self.gfactors = np.array(gfactors_red)
+        oldBfield       = self.Bfield
+        mF_states_old   = self.mF_states
         
-        # set previous value to the Bfield variable
-        self.Bfield = oldBfield
-        self.build_states(Fmax=self.Fmax,Fmin=self.Fmin)
+        # calculate unperturbed eigenvalues without Bfield:
+        self.mF_states  = False
+        self.Bfield     = 0.0
+        self.build_states(self.Fmax, self.Fmin)
+        # DataFrames:
+        Ew              = self.get_eigenstates()    # eigenvalues without mF states
+        gfactors        = Ew.copy()*0.0             # gfactors without mF states 
+        MI              = Ew.index.to_frame()       # multiindex without mF states
+        
+        # calculate new eigenvalues with non-zero Bfield
+        self.Bfield     = Bmax
+        self.build_states(self.Fmax, self.Fmin)
+        # DataFrame: eigenvalues with mFs
+        Ew_B            = self.get_eigenstates()
+        
+        for i, (tmp, row) in enumerate(MI.iterrows()):
+            # subgroup DataFrame with all mF state eigenvalues beloning to certain F state.
+            Ew_mF   = Ew_B.xs(tuple(row.values), level=tuple(row.keys()), axis=0)
+            # a/b := ( eigenvals(B=Bmax) - eigenvals(B=0) ) / (mF_values * mu_B * Bfield)
+            a       = Ew_mF.to_numpy()[:,0] - Ew.iloc[i].mean() 
+            b       = Ew_mF.index.to_frame().to_numpy()[:,0] * mu_B * Bmax / (cm2MHz * 1e6 * h)
+            gfac_all= np.divide(a, b, out=np.empty(a.shape)*np.nan, where=b!=0) # ignore dividing by 0
+            if not np.isnan(gfac_all).all(): # only for F != 0
+                gfactors.iloc[i] = np.nanmean(gfac_all)
+        
+        self.gfactors   = gfactors
+        
+        # set previous values for Bfield and mF_states and build new states
+        self.Bfield     = oldBfield
+        self.mF_states  = mF_states_old
+        self.build_states(Fmax=self.Fmax, Fmin=self.Fmin)
+        
         return self.gfactors
 
     def plot_Zeeman(self,Bfield):
@@ -1285,6 +1411,76 @@ class ElectronicState:
         
         # set previous value to the Bfield variable
         self.Bfield = oldBfield
+        
+    def export_OBE_properties(self, index_filter={}, rounded=None, QuNrs=[], 
+                              HFfreq_offset=0, nested_dict=False,
+                              get_QuNr_keyval_pairs_kwargs={}):
+        """Export all the important properties connected to a single electronic
+        state to a dictionary in a proper format for the OBE simulation code to
+        import the properties from the corresponding json file. This method is
+        e.g. used in the similar function :meth:`Molecule.export_OBE_properties`
+        from the :class:`Molecule.Molecule` class to also save the whole
+        json file with all properties.
+
+        Parameters
+        ----------
+        index_filter : dict, optional
+            to filter the states of interest. See `rows` argument of
+            :func:`multiindex_filter`. The default is {}.
+        rounded : int, optional
+            digit to round the frequencies and gfactors. The default is None
+            meaning that no rounding is applied.
+        QuNrs : list(str), optional
+            Which Quantum numbers should be exported into the output dictionary.
+            The default is [] meaning that only the necessary unique Quantum numbers
+            are used (see :func:`get_unique_multiindex_names`).
+        HFfreq_offset : float, optional
+            applying an offset to the whole array of hyperfine frequencies (MHz)
+            whose lowest eigenvalue is always normalized to 0. The default is 0.
+        nested_dict : bool, optional
+            Whether the raw dictionary with the data or properties should be nested
+            into other dictionaries required by the json file. See
+            :func:`get_QuNr_keyval_pairs`. The default is False.
+        get_QuNr_keyval_pairs_kwargs : kwargs, optional
+            keyword arguments for :func:`get_QuNr_keyval_pairs`. The default is {}.
+
+        Returns
+        -------
+        dict
+            Dictionary with the properly formatted ElectronicState level properties.
+        """
+        def DF2list(df): # round and convert DataFrame to list for saving in json dict
+            if rounded != None:
+                df = df.round(rounded)
+            return list(df.to_numpy()[:,0])
+        
+        old_values = {key:self.__dict__[key] for key in ['mF_states', 'Bfield']}
+        self.mF_states = False
+        self.Bfield    = 0
+        self.build_states(self.Fmax)
+        
+        Ew      = multiindex_filter(self.get_eigenstates(), rows=index_filter, drop_level=False)
+        Ew      = (Ew-Ew.min())*cm2MHz + HFfreq_offset
+        gfac    = multiindex_filter(self.get_gfactors(), rows=index_filter, drop_level=False)
+        if not QuNrs:
+            QuNrs = get_unique_multiindex_names(Ew.index)
+            
+        OBE_props   = dict(gfac    = DF2list(gfac),
+                           HFfreq  = DF2list(Ew),
+                           QuNrs   = get_QuNrvals_from_multiindex(Ew.index, QuNrs))
+        
+        if nested_dict:
+            key_list    = get_QuNr_keyval_pairs(self, Ew.index, **get_QuNr_keyval_pairs_kwargs)
+            OBE_props_  = OBE_props.copy()
+            OBE_props   = NestedDict()
+            OBE_props[key_list] = OBE_props_
+            if self.grex == 'excited state':
+                OBE_props[key_list[0]].update(dict(Gamma=self.Gamma*cm2MHz))
+            
+        self.__dict__.update(old_values)
+        self.build_states(self.Fmax)
+        
+        return OBE_props
         
     def __str__(self):
         """prints all general information of the ElectronicState"""
@@ -1862,6 +2058,133 @@ def multiindex_filter(DF,rows=dict(),cols=dict(), drop_level=True):
         DF = DF.xs(tuple(cols.values()), level=tuple(cols.keys()), axis=1, drop_level=drop_level)
     return DF
 
+def get_QuNrvals_from_multiindex(multiindex, QuNrs):
+    """Extract lists with the values certain Quantum numbers from a
+    pandas.MultiIndex object.
+
+    Parameters
+    ----------
+    multiindex : pandas.MultiIndex
+        MultiIndex with one or multiple columns corresponding to Quantum numbers.
+    QuNrs : list(str)
+        names of the Quantum number for which the values should be extracted.
+
+    Returns
+    -------
+    d : dict
+        dictionary with Quantum number names as keys and the Quantum number values
+        as lists.
+    """
+    d = dict()
+    for QuNr in QuNrs[:]:
+        QuNrs_arr = list(multiindex.to_frame().get(QuNr).to_numpy())
+        if np.all(list(map(isint, QuNrs_arr))):
+            QuNrs_arr = list(map(int, QuNrs_arr))
+        d[QuNr] = QuNrs_arr
+    return d
+
+def get_QuNr_keyval_pairs(ElState, multiindex, QuNrs_names=[], include_v=True):
+    """Calculated list of pairs of the name and value of certain Quantum numbers
+    included in a MultiIndex object.
+
+    Parameters
+    ----------
+    ElState : :class:`ElectronicState`
+        ElectronicState for which the vibrational and ground or excited data is
+        extracted.
+    multiindex : pandas.MultiIndex
+        MultiIndex object which includes multiple rows of Quantum number values
+        for multiple Quantum number names columns.
+    QuNrs_names : list(str), optional
+        all Quantum number names to be ectraced. The default is [].
+    include_v : bool, optional
+        Whether to include the vibrational Quantum numbers. The default is True.
+    
+    Example
+    -------
+    ::
+        
+        >>> get_QuNr_keyval_pairs(Mol.A, Mol.A.get_eigenstates().iloc[:10].index, QuNrs_names=['Om'])
+        Out: ['exs=A', 'v=0', 'Om=0.5']
+        
+    Returns
+    -------
+    list(str)
+        list of Quantum number key and value pairs, e.g. ['gs=X', 'v=0', 'N=1'].
+    """
+    if isinstance(ElState, list):
+        if len(ElState) != 2:
+            raise Exception(f"<ElState> list must be of len 2, not {len(ElState)}")
+        if QuNrs_names == []:
+            QuNrs_names = [[],[]]
+        pairs_list = [get_QuNr_keyval_pairs(ElState[i], multiindex[i], QuNrs_names[i])
+                      for i in range(2)]
+        return [f"{str_g} <- {str_e}" for str_g, str_e in zip(*pairs_list)]
+    
+    gsexs   = {'ground state':'gs', 'excited state':'exs'}[ElState.grex]
+    # list of QuNrs label and value pairs
+    pairs   = [f"{gsexs}={ElState.label}"]
+    if include_v:
+        pairs.append(f"v={ElState.nu}")
+    # add values to the names/ labels of the Quantum numbers
+    for QuNr_name in QuNrs_names[:]:
+        values = multiindex.get_level_values(QuNr_name)
+        if not np.all(values == values[0]):
+            raise Exception(f"not all values {values} are the same for QuNr {QuNr_name}")
+        value = int(values[0]) if isint(values[0]) else values[0]
+        pairs.append(f"{QuNr_name}={value}")
+    return pairs
+
+def get_unique_multiindex_names(multiindex):
+    """Calculate list of unique column names from a pandas.MultiIndex object."""
+    multiindex      = multiindex.copy()
+    nunique         = multiindex.to_frame().nunique()
+    cols_to_drop    = nunique[nunique == 1].index
+    multiindex      = multiindex.droplevel(list(cols_to_drop.values))
+    return list(multiindex.names)
+
+class NestedDict(dict):
+    """Nested dictionary class to handle multiple key with the corresponding
+    ``__getitem__`` and ``__setitem__`` methods.
+    
+    Example
+    -------
+    ::
+        
+        >>> f1 = NestedDict()
+        >>> f1
+        {}
+        >>> f1[['a','b','c']]
+        >>> f1
+        {'a': {'b': {'c': {}}}}
+        >>> f1[['a2','b2','c2']] =1234
+        >>> f1
+        {'a': {'b': {'c': {}}}, 'a2': {'b2': {'c2': 1234}}}
+        >>> f1[['a','b']].update(dict(c2=1234))
+        >>> f1
+        {'a': {'b': {'c': {}, 'c2': 1234}}, 'a2': {'b2': {'c2': 1234}}}
+    """
+    def __getitem__(self, item):
+        if isinstance(item, list):
+            if len(item) > 1:
+                return self[item[0]][item[1:]]
+            else:
+                item = item[0]
+        try:
+            return dict.__getitem__(self, item)
+        except KeyError:
+            value = self[item] = type(self)()
+            return value
+        
+    def __setitem__(self, key, value):
+        # optional processing here
+        if isinstance(key, list):
+            if len(key) > 1:
+                self[key[0]][key[1:]] = value
+            else:
+                self[key[0]] = value
+        else:
+            super(NestedDict, self).__setitem__(key, value)
 #%%
 if __name__ == '__main__':
     # BaF constants for the isotopes 138 and 137 from Steimle paper 2011
