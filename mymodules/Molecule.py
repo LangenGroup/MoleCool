@@ -420,7 +420,7 @@ class Molecule:
             return DF
     
     def export_OBE_properties(self, gs=None, exs=None, index_filter=({},{}),
-                              fname = '', HFfreq_offsets=[0,0],
+                              fname = '', HFfreq_offsets=[0,0], Bmaxs=[1e-4,1e-4],
                               QuNrs_const = ([],[]), QuNrs_var = ([],[]),
                               include_mF=False, vibr_values={}, rounded=None):
         """Export all the important properties connected to two electronic
@@ -448,6 +448,9 @@ class Molecule:
             offsets for the hyperfine frequencies of the two electronic states.
             See `HFfreq_offset` in :meth:`ElectronicState.export_OBE_properties`.
             The default is [0,0].
+        Bmaxs : list(float), optional
+            Determines how the gfactors of the two ElectronicStates are calculated 
+            (see :meth:`ElectronicState.get_gfactors`). The default is [1e-4,1e-4].
         QuNrs_const : tuple(list), optional
             constant Quantum numbers (see :func:`get_QuNr_keyval_pairs`).
             The default is ([],[]).
@@ -532,7 +535,7 @@ class Molecule:
             dic0['level-specific'].update(
                 ElState.export_OBE_properties(
                     index_filter=index_filter[i], rounded=rounded, nested_dict=True,
-                    QuNrs=QuNrs_var[i].copy(), HFfreq_offset=HFfreq_offsets[i],
+                    QuNrs=QuNrs_var[i].copy(), HFfreq_offset=HFfreq_offsets[i], Bmax=Bmaxs[i],
                     get_QuNr_keyval_pairs_kwargs=dict(include_v=True,QuNrs_names=QuNrs_const[i]))
                 )
         
@@ -1332,7 +1335,6 @@ class ElectronicState:
         pandas.DataFrame
             array containing the mixed g-factors ordered by energy of the eigenstates.
         """
-        Bmax    = 1e-4
         mu_B = physical_constants['Bohr magneton'][0]
         
         oldBfield       = self.Bfield
@@ -1413,7 +1415,7 @@ class ElectronicState:
         self.Bfield = oldBfield
         
     def export_OBE_properties(self, index_filter={}, rounded=None, QuNrs=[], 
-                              HFfreq_offset=0, nested_dict=False,
+                              HFfreq_offset=0, Bmax=1e-4, nested_dict=False,
                               get_QuNr_keyval_pairs_kwargs={}):
         """Export all the important properties connected to a single electronic
         state to a dictionary in a proper format for the OBE simulation code to
@@ -1437,6 +1439,9 @@ class ElectronicState:
         HFfreq_offset : float, optional
             applying an offset to the whole array of hyperfine frequencies (MHz)
             whose lowest eigenvalue is always normalized to 0. The default is 0.
+        Bmax : float, optional
+            Determines how the gfactors are calculated (see :meth:`get_gfactors`).
+            The default is 1e-4.
         nested_dict : bool, optional
             Whether the raw dictionary with the data or properties should be nested
             into other dictionaries required by the json file. See
@@ -1461,7 +1466,7 @@ class ElectronicState:
         
         Ew      = multiindex_filter(self.get_eigenstates(), rows=index_filter, drop_level=False)
         Ew      = (Ew-Ew.min())*cm2MHz + HFfreq_offset
-        gfac    = multiindex_filter(self.get_gfactors(), rows=index_filter, drop_level=False)
+        gfac    = multiindex_filter(self.get_gfactors(Bmax), rows=index_filter, drop_level=False)
         if not QuNrs:
             QuNrs = get_unique_multiindex_names(Ew.index)
             
