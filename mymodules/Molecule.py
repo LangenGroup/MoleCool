@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.8
+v0.3.12
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -73,6 +73,7 @@ import warnings
 import matplotlib.pyplot as plt
 #: Constant for converting a unit in wavenumbers (cm^-1) into MHz.
 cm2MHz = 299792458.0*100*1e-6 #using scipys value for the speed of light
+cm2THz = cm2MHz*1e-6
 
 try:
     import pywigxjpf as wig
@@ -545,6 +546,65 @@ class Molecule:
                 json.dump(dic0.copy(), file, sort_keys=False, indent=4)
         
         return dic0.copy()
+    
+    def plot_fortrat(self, QuNrs, ax=None, limits=None, branratio_TH=1e-2,
+                     limits_unit='THz', markers = ['+','x','.','1','2','3','4'],
+                     legend=True, xaxis_func=lambda x: x):
+        """Plotting Quantum number values over transition frequencies. It
+        makes sense to combine this plot with the actual spectrum.
+
+        Parameters
+        ----------
+        QuNrs : list
+            Quantum number names for which the values are plotted.
+        ax : matplotlib.axis, optional
+            axis where to put the plot. The default is None meaning to use
+            ``plt.gca()``.
+        limits : tuple or list, optional
+            frequency limits which determine the minimum and maximum of the 
+            frequency axis. The default is None meaning the whole range is used.
+        branratio_TH : float, optional
+            branching ratio threshold. Transitions with smaller branching ratios
+            are ignored. The default is 1e-2.
+        limits_unit : str, optional
+            Unit of the limits that are provided (['THz','cm-1','MHz']).
+            The default is 'THz'.
+        markers : list(str), optional
+            markers to be used for the plotted points for each Quantum number.
+            The default is ['+','x','.','1','2','3','4'].
+        legend : bool, optional
+            Whether to use a legend. The default is True.
+        xaxis_func : func, optional
+            function to convert the x axis. The default is lambda x: x.
+        """
+        if not ax:
+            ax = plt.gca()
+            
+        E       = self.get_E()
+        brans   = self.get_branratios().to_numpy()
+
+        E_np    = E.to_numpy()
+        if not np.all(limits):
+            limits = (self.E.min(), self.E.max())
+        else:
+            limits = np.array(limits) * {'THz':1/cm2THz, 'cm-1':1, 'MHz':1/cm2MHz}[limits_unit]
+            
+        inds    = np.argwhere((E_np>limits[0]) & (E_np<limits[1]) & (brans>branratio_TH))
+        E_index = E.index.to_frame(index=False) # ground state QuNrs
+        E_cols  = E.columns.to_frame(index=False) # excited state QuNrs
+        
+        for i,QuNr in enumerate(QuNrs):
+            if QuNr[-1] == "'":
+                QuNrs_vals = E_cols[QuNr[:-1]].iloc[inds[:,1]] # excited state
+            else:
+                QuNrs_vals = E_index[QuNr].iloc[inds[:,0]] # ground state
+                
+            E_arr   = np.array([E_np[ixy[0],ixy[1]] for ixy in inds]) # eigenenergies
+            ax.plot(xaxis_func(E_arr*cm2MHz*1e-6), QuNrs_vals, marker=markers[i], ls='', label=QuNr)
+            ax.set_ylabel('Quant. Nrs.')
+            
+        if legend:
+            ax.legend()
     
     def __str__(self):
         """prints all general information of the Molecule with its electronic states"""
