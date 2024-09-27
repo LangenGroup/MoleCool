@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.12
+v0.3.13
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -926,6 +926,10 @@ class ElectronicStateConstants:
         return self['b_F'] - self['c']/3
     
     @property
+    def b_2(self):
+        return self['b_F_2'] - self['c_2']/3
+    
+    @property
     def A_v(self):
         """returns the vibrational-state-dependent spin-orbit constant `A_v`.
         
@@ -1811,7 +1815,7 @@ def H_tot(x,y,const):
         for q in [-1,+1]:
             sum2 += kd(L, L_-2*q)*phs(J-Om+q+S-Si)*cb(S) \
                     *w3j(J,1,J_,-Om,-q,Om_)*w3j(S,1,S,-Si,q,Si_)
-        term2 = const['d_2']*sum2
+        term2 = -const['d_2']*sum2
         
         H_hfs2 = phs(F1_+I2+F)*phs(J+I1+F1_+1)*cb(I2)*sb(F1)*sb(F1_)*sb(J)*sb(J_) \
                 *w6j(I2,F1_,F,F1,I2,1)*w6j(J_,F1_,I1,F1,J,1) * (term1 + term2)
