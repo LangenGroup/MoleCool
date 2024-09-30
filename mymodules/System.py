@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.3.2
+v3.3.4
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -406,7 +406,7 @@ class System:
         leg = plt.legend(title='States:',loc='center left',labelspacing=-0.0,
                          bbox_to_anchor=(1, 0.5),fontsize='x-small')
         # set the linewidth of each legend object
-        for legobj in leg.legendHandles:
+        for legobj in leg.legend_handles:
             legobj.set_linewidth(1.4)
         
     def plot_Nscatt(self,sum_over_ElSts=False):
@@ -1228,7 +1228,11 @@ class System:
                                      yaxis_unit=yaxis_unit)
                                      for i, ElSt in enumerate(GrSts)]
         
-        cmap        = mpl.cm.get_cmap(cmap)
+        try:
+            get_cmap = mpl.cm.get_cmap
+        except AttributeError:
+            get_cmap = mpl.colormaps.get_cmap
+        cmap        = get_cmap(cmap)
         
         # map branching ratios onto a color using a certain function:
         if branratios:
