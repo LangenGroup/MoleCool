@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.2.2
+v3.3.6
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -80,6 +80,7 @@ printed to display all attributes via::
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g
 from scipy.constants import u as u_mass
+from scipy.special import voigt_profile
 from tools import dict2DF, get_constants_dict
 from collections.abc import Iterable
 import matplotlib.pyplot as plt
@@ -212,6 +213,11 @@ class Levelsystem:
         **kwargs : kwargs
             keyword arguments for the eletronic state (see
             :class:`ElectronicState` for the specific parameters)
+        
+        Returns
+        -------
+        :class:`ElectronicState`
+            Initialized electronic state instance.
         """
         if not label.isidentifier():
             raise ValueError('Please provide a valid variable/ instance name for `label`!')
@@ -223,15 +229,19 @@ class Levelsystem:
             raise Exception('There is already an ElectronicState {label} defined!')
         
         if gs_exs == 'gs':
-            self.__dict__[label] = ElectronicGrState(load_constants=load_constants,label=label,**kwargs)
+            ElSt = ElectronicGrState(load_constants=load_constants,label=label,**kwargs)
         elif gs_exs == 'exs':
-            self.__dict__[label] = ElectronicExState(load_constants=load_constants,label=label,**kwargs)
+            ElSt = ElectronicExState(load_constants=load_constants,label=label,**kwargs)
         elif gs_exs == 'ims':
-            self.__dict__[label] = ElectronicImState(load_constants=load_constants,label=label,**kwargs)
+            ElSt = ElectronicImState(load_constants=load_constants,label=label,**kwargs)
         else:
             raise ValueError(("Please provide 'gs', 'exs', or 'ims' as `gs_exs` for "
                               "an electronic ground, excited or intermediate state"))
+            
+        self.__dict__[label] = ElSt
         self.__ElSts_labels.append(label)
+        
+        return ElSt
     #%% get functions
     # def load_save_DF(func):
     #     def wrapper(*args,**kwargs):
@@ -723,6 +733,178 @@ class Levelsystem:
             print(ElSt)
         return self.description
     
+    def transitions_energies_strengths(self, include_forbidden=False,
+                                       gs=None, exs=None, use_calc_props=False):
+        """Yields the transition strengths and energies without including all mF
+        levels. This is e.g. used by the method :meth:`plot_transition_spectrum`.
+        The strengths are solely calculated using the property :meth:`dMat_red`.
+        
+        Parameters
+        ----------
+        include_forbidden : bool, optional
+            Whether to include also the transitions with vanishing branchings.
+            The default is False.
+        gs : str, optional
+            Electronic ground state label. The default is None.
+        exs : str, optional
+            Electronic excited state label. The default is None.
+        use_calc_props : bool, optional
+            If True, the properties like the dipole matrix and all transition
+            energies are calculated and then used to plot the spectrum with
+            exactly the values that are used for the simulation. If False,
+            the reduced dipole matrix property is directly used and the
+            wavelengths property is not taken into account.
+
+        Returns
+        -------
+        Es : np.ndarray
+            Energies in MHz.
+        branchings : np.ndarray
+            reduced branching ratios.
+        states : list(tuple)
+            list of tuple pairs containing the ground and excited state for each
+            transition energy and branching.
+        """
+        if gs == None:  gs =    self.grstates_labels[0]
+        if exs == None: exs =   self.exstates_labels[0]
+        
+        states_sets = dict()
+        inds = dict()
+        for j,ElSt_label in enumerate([gs,exs]):
+            states = []
+            indices = []
+            for i,st in enumerate(self[ElSt_label].states):
+                if not np.any([st.is_equal_without_mF(st2) for st2 in states]):
+                    states.append(st)
+                    indices.append(i)
+            states_sets[ElSt_label] = states
+            inds[ElSt_label] = indices
+        
+        if use_calc_props:
+            inds2 = []
+            for j, ElSt in enumerate([self[gs], self[exs]]):
+                inds2.append([[i for i,st in enumerate(ElSt) if st0.is_equal_without_mF(st)]
+                              for st0 in states_sets[ElSt.label]])
+        
+        Es = []
+        branchings = []
+        states = []
+        ElGr, ElEx = list(states_sets.keys())
+        for i,gr in enumerate(states_sets[ElGr]):
+            for j,ex in enumerate(states_sets[ElEx]):
+                if use_calc_props:
+                    branching = self.calc_branratios()[np.ix_(inds2[0][i],inds2[1][j])].sum()
+                    E = ((self.calc_freq()/2/pi)*1e-6)[inds[gs][i],inds[exs][j]]
+                else:
+                    branching = self.val_states_in_DF(gr, ex, self.get_dMat_red(gs=gs,exs=exs)**2)
+                    E = self.val_state_in_DF(ex, self[ElEx].get_freq()) \
+                        - self.val_state_in_DF(gr, self[ElGr].get_freq())
+                if include_forbidden or branching:
+                    branchings.append(branching)
+                    Es.append(E)
+                    states.append((gr,ex))
+                    
+        return Es, branchings, states
+
+    def plot_transition_spectrum(self, std=0, xaxis=[], xaxis_ext=5, N_points=500,
+                                 kwargs_single=dict(), kwargs_sum=dict(ls='-', color='k'),
+                                 plot_single=True, plot_sum=True,
+                                 ax=None, legend=True, QuNrs=[['F'],['F']],
+                                 E_offset=0, kwargs_trans_ener_stre=dict()):
+        """Plotting the transition spectrum with Voigt profiles using the energies
+        and strengths from :meth:`transitions_energies_strengths`.
+
+        Parameters
+        ----------
+        std : float, optional
+            Standard deviation resulting in the Gaussian broadening of the voigt
+            profile in MHz. The Lorentzian broadening is always given by the
+            natural linewidth of the electronic excited state. The default is 0.
+        xaxis : list or np.ndarray, optional
+            xaxis data points. The default is [].
+        xaxis_ext : float, optional
+            if not xaxis is given, the range of the xaxis, given by the
+            lowest and highest transition frequency, is extended by this
+            factor multiplied by the sum of the Gaussian and Lorentzian broadening.
+            The default is 5.
+        N_points : int, optional
+            number of points plotted. The default is 500.
+        kwargs_single : dict, optional
+            keyword arguments used in ``plt.plot()`` for the single transition lines.
+            The default is dict().
+        kwargs_sum : dict, optional
+            same as ``kwargs_single`` but for the sum.
+            The default is dict(ls='-', color='k').
+        plot_single : bool, optional
+            Whether to plot single transition lines. The default is True.
+        plot_sum : bool, optional
+            Whether to plot the sum of all transition lines. The default is True.
+        ax : matplotlib.pyplot.axes, optional
+            axis to put the plot on. The default is None.
+        legend : bool, optional
+            Whether to show legend. The default is True.
+        QuNrs : list(list), optional
+            QuNrs of ground and excited state used for labelling and legend.
+            The default is [['J','F'],['F']].
+        E_offset : float, optional
+            Energy offset on the xaxis. The default is 0.
+        kwargs_trans_ener_stre : dict, optional
+            keyword arguments for :meth:`transitions_energies_strengths`, e.g.
+            gs as label used for the electronic ground state.
+
+        Returns
+        -------
+        ax : matplotlib.pyplot.axes
+            axis of the plot.
+        data : dict(np.ndarray)
+            raw data thats plotted. Includes the single transitions, the sum and
+            the x axis data.
+        """
+        
+        if not 'exs' in kwargs_trans_ener_stre:
+            exs =   self.exstates_labels[0]
+            kwargs_trans_ener_stre['exs'] = exs
+        else:
+            exs = kwargs_trans_ener_stre['exs']
+            
+        out     = self.transitions_energies_strengths(**kwargs_trans_ener_stre)
+        
+        Gamma   = self[exs].Gamma # natural linewidth
+        x_ext   = (Gamma+std)*xaxis_ext # extension on the x axis
+        if len(xaxis) == 0:
+            xaxis = np.linspace(min(out[0])-x_ext, max(out[0])+x_ext, N_points)
+            
+        spectrum = np.zeros(len(xaxis))
+        y_arr       = []
+        
+        if not ax:
+            ax = plt.gca()
+        norm = voigt_profile(np.linspace(-(std+Gamma),+(std+Gamma),500), std, Gamma/2).max()
+        for E,bran,(gr,ex) in zip(*out):
+            # y       = gaussian(xaxis, a=bran, x0=E, std=std, y_off=0)
+            # Gaussian and Lorentzian (note factor of 2) broadening in Voigt profile
+            voigt   = voigt_profile(E-xaxis, std, Gamma/2)
+            y       = bran*voigt/norm
+            y_arr.append(y)
+            label   = None
+            if legend:
+                strings = [[str(st.__dict__[QuNr]) for QuNr in QuNrs_] for st,QuNrs_ in zip([gr,ex],QuNrs)]
+                label = ', '.join(strings[0]) + '$\\rightarrow$' + ', '.join(strings[1])
+                                                                   
+            spectrum += y
+            if plot_single:
+                ax.plot(xaxis+E_offset, y, label=label, **kwargs_single)
+                
+        if plot_sum:
+            ax.plot(xaxis+E_offset, spectrum, **kwargs_sum)
+            
+        ax.set_xlabel('Frequency (MHz)')
+        ax.set_ylabel('Line strength')
+        if legend:
+            ax.legend(title=', '.join(QuNrs[0]) + '$\\rightarrow$' + "', ".join(QuNrs[1]) + "'")
+        data = dict(x=xaxis+E_offset, sum=spectrum, single=np.array(y_arr))
+        return ax, data
+
     def print_properties(self): 
         """Prints all relevant constants and properties of the composed levelsystem
         in a convenient way to modify them if needed afterwards.
@@ -1475,6 +1657,9 @@ class State:
         """
         return_bool = True
         for QuNr,val in QuNrvals.items():
+            if (QuNr not in self.__dict__) and (QuNr in ['gs','exs','ims']):
+                return_bool = False
+                break
             if self.__dict__[QuNr] != val:
                 return_bool = False
                 break

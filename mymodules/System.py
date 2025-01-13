@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.3.4
+v3.3.6
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -980,6 +980,36 @@ class System:
             #transform these initial values into the density matrix elements N0mat
             N0mat[(np.arange(N),np.arange(N))] = self.N0
             return N0mat
+
+    def get_N(self, return_sum=True, **QuNrs):
+        """Returns the time-dependent populations as results after calculating
+        the dynamics. Can be used to either obtain the populations of all
+        individual levels or to conveniently combine the populations for only a 
+        subset of levels with specific Quantum numbers.
+
+        Parameters
+        ----------
+        return_sum : bool, optional
+            Whether to sum up of all levels. The default is True.
+        **QuNrs : kwargs
+            Keyword arguments as Quantum numbers can be provided for only a subset
+            of levels with specific Quantum numbers, e.g. v=0. If empty, all
+            levels are considered.
+
+        Returns
+        -------
+        np.ndarrays
+            Time-dependent population(s).
+        """
+        if not QuNrs:
+            return self.N
+        
+        states = self.levels.states
+        inds = np.array([i for i,st in enumerate(states) if st.check_QuNrvals(**QuNrs)])
+        if return_sum:
+            return self.N[inds,:].sum(axis=0)
+        else:
+            return self.N[inds,:]    
 
     def get_Nscattrate(self,sum_over_ElSts=False):
         Nscattrate_arr = self.levels.calc_Gamma()[:,None]*self.N[self.levels.lNum:,:]
