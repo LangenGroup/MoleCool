@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.13
+v0.3.14
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -1310,6 +1310,9 @@ class ElectronicState:
                 
                 DF1 = pd.DataFrame(self.Ew, columns=['eigenvalue'],
                                    index=DF1.index.to_frame().iloc[argmax_arr].index)
+        else:
+            DF1 = DF1.sort_index()
+            
         if rounded:
             DF1 = DF1.round(rounded)
         if createHTML:
