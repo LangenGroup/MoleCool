@@ -4,7 +4,7 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.4.0
+v3.4.1
 
 This module contains all different kinds of tools to be used in the other main
 modules.
@@ -67,15 +67,15 @@ def open_object(filename):
 #%%
 def get_constants_dict(name=''):
     def openjson(root_dir):
-        with open(root_dir + name + ".json", "r") as read_file:
+        with open(os.path.join(root_dir, f"{name}.json"), "r") as read_file:
             data = json.load(read_file)
         return data
+
     if name:
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__)) #directory where this script is stored.
-            # Using this directory path, the module System (and the others) can be imported
-            # from an arbitrary directory provided that the respective path is in the PYTHONPATH variable.
-            return openjson(script_dir + "\\..\\constants\\")
+            constants_dir = os.path.join(os.path.dirname(script_dir), "constants")
+            return openjson(constants_dir)
         except FileNotFoundError:
             try:
                 return openjson("./constants/")
