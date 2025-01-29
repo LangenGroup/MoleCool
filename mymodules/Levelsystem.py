@@ -4,7 +4,7 @@ Created on Thu May 14 02:03:38 2020
 
 @author: fkogel
 
-v3.3.6
+v3.3.7
 
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
@@ -301,7 +301,7 @@ class Levelsystem:
                     dMat_row = []
                     index.append([*index1,mF])
                     columns = []
-                    for index2,row2 in row1.iteritems():
+                    for index2,row2 in row1.items():
                         F_ = index2[row1.index.names.index('F')]
                         for mF_ in np.arange(-F_,F_+1):
                             dMat_row.append( row2 * (-1)**(F_-mF_) * float(wigner_3j(F_,1,F,-mF_,mF_-mF,mF)) )
@@ -579,7 +579,7 @@ class Levelsystem:
         col_names = list(DF.keys().names)
         for index1,row1 in DF.iterrows():
             if len(ind_names) == 1: index1 = (index1,) #index1 must be a iterable tuple even if it containts only 1 element
-            for index2,row2 in row1.iteritems():
+            for index2,row2 in row1.items():
                 if len(col_names) == 1: index2 = (index2,)
                 allTrue = [True]
                 for i,ind_name in enumerate(ind_names):
@@ -604,7 +604,7 @@ class Levelsystem:
     
     def val_state_in_DF(self,st,DF):
         ind_names = list(DF.index.names)
-        for index1,row1 in DF.iteritems():    
+        for index1,row1 in DF.items():
             allTrue = [True]
             for i,ind_name in enumerate(ind_names):
                 if not np.all(allTrue): break

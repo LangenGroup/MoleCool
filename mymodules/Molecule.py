@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v0.3.14
+v0.3.15
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -1298,7 +1298,7 @@ class ElectronicState:
                                    index=np.arange(len(DF1.index)))#DF1.index.to_frame().iloc[argmax_arr].index)
             else:
                 argmax_arr = []
-                for (i,Ew),Ev in DF1.iteritems():
+                for (i,Ew),Ev in DF1.items():
                     argmax = Ev.abs().argmax()
                     if argmax in argmax_arr:
                         for argsort_ind in Ev.abs().argsort():
