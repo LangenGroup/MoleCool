@@ -4,7 +4,7 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.3.2
+v3.4.0
 
 This module contains all different kinds of tools to be used in the other main
 modules.

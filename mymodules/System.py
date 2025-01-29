@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.3.6
+v3.4.0
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -103,16 +103,16 @@ a repumper each in the distance :math:`4mm`::
     system.plot_all()
 """
 import numpy as np
-from scipy.integrate import solve_ivp, cumtrapz
+from scipy.integrate import solve_ivp, cumulative_trapezoid
 from scipy.constants import c,h,hbar,pi,g,physical_constants
 from scipy.constants import k as k_B
 from scipy.constants import u as u_mass
 from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
-from Lasersystem import *
-from Levelsystem import *
-import tools
-from tools import save_object, open_object, ODEs
-from Bfield import Bfield
+from .Lasersystem import *
+from .Levelsystem import *
+from . import tools
+from .tools import save_object, open_object, ODEs
+from .Bfield import Bfield
 import time
 import sys, os
 from copy import deepcopy
@@ -1025,7 +1025,7 @@ class System:
             return np.sum(Nscattrate_arr,axis=0)
         
     def get_Nscatt(self,sum_over_ElSts=False):
-        return cumtrapz(self.get_Nscattrate(sum_over_ElSts=sum_over_ElSts), 
+        return cumulative_trapezoid(self.get_Nscattrate(sum_over_ElSts=sum_over_ElSts), 
                         self.t, initial = 0.0, axis=-1)
     
     def get_photons(self,sum_over_ElSts=False):
