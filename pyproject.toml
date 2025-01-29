@@ -1,0 +1,80 @@
+[build-system]
+requires = [
+    "setuptools >= 65",
+    "wheel >= 0.38",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+
+# name: String, REQUIRED
+name = "MolLaserCoolSimulations"
+
+# version: String, REQUIRED
+# Should follow PEP 440 rules
+# Can be provided dynamically, see the lesson on publishing
+version = "1.0.0"
+
+# description: String
+# A simple summary of the project
+description = "Molecular Laser-Cooling and Spectra Simulation"
+
+keywords = ["Molecules", "Laser cooling", "Optical Bloch equations"]
+
+# readme: String
+# Full description of the project.
+# Should be the path to your README file, relative to pyproject.toml
+readme = "README.md"
+
+# requires-python: String
+# The Python version required by the project
+requires-python = ">=3.8"
+
+# license: Table
+# The license of your project.
+# Can be provided as a file or a text description.
+# Discussed in the lesson on publishing
+# license = {file = "LICENSE.md"}
+# or...
+license = {text = "BDS 3-Clause License"}
+
+classifiers = [
+    # "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.8",
+]
+
+# authors: Array of Tables
+# Can also be called 'maintainers'.
+# Each entry can have a name and/or an email
+authors = [
+    {name = "Felix Kogel", email = "felix.kogel@t-online.de"},
+]
+
+# dependencies: Array of Strings
+# A list of requirements for our package
+dependencies = [
+    "numpy < 2.0",
+    "numba >= 0.53.1",
+    "pandas",#" < 2.0.0",
+    "scikit-optimize==0.9.0",
+    "scipy >= 1.5.4",
+    "sympy < 1.13",
+    "tqdm",
+    "matplotlib"
+]
+
+[project.optional-dependencies]
+doc = [
+    "sphinx",
+]
+
+[project.urls]
+# urls: Table
+# Should describe where to find useful info for your project
+# source = "github.com/MyProfile/my_project"
+Homepage = "https://github.com/LangenGroup/"
+# documentation = "my_project.readthedocs.io/en/latest"
+
+[tool.setuptools.package-data]
+"*" = ["*.json"]
