@@ -22,7 +22,7 @@ Examples
 ========
 
 The following source code collection is automatically generated
-from all python files \*.py located in the folder mymodules/Examples.
+from all python files \*.py located in the folder MoleCool/Examples.
 
 .. toctree::
    :maxdepth: 4

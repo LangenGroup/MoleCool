@@ -1,7 +1,7 @@
 Molecule module
 ===============
 
-.. automodule:: Molecule
+.. automodule:: MoleCool.Molecule
    :members:
    :undoc-members:
    :show-inheritance:

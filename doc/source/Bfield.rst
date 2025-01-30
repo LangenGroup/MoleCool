@@ -1,7 +1,7 @@
 Bfield module
 =============
 
-.. automodule:: Bfield
+.. automodule:: MoleCool.Bfield
    :members:
    :undoc-members:
    :show-inheritance:

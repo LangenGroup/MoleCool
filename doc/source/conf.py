@@ -12,14 +12,14 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../mymodules'))
+sys.path.insert(0, os.path.abspath('../..'))
 # sys.path.insert(0, os.path.abspath('../../'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'Diatomic Laser Cooling Simulations'
-copyright = '2020, fkogel'
-author = 'fkogel'
+project = 'MoleCool'
+copyright = '2025, Felix Kogel'
+author = 'Felix Kogel'
 
 
 # -- General configuration ---------------------------------------------------
@@ -71,7 +71,7 @@ html_theme = 'sphinx_rtd_theme' # 'sphinxdoc' 'alabaster'
 # Manually generating Examples.rst file for showing the source codes of all
 # .py files located in the mymodules/Examples folder.
 
-pathtoEx = r'../../mymodules/Examples/'
+pathtoEx = r'../../MoleCool/Examples/'
 files = os.listdir(pathtoEx)
 with open('Examples.rst', 'w') as rstfile:
     for i,filename in enumerate(files):

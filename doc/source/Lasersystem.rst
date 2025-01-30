@@ -1,7 +1,7 @@
 Lasersystem module
 ==================
 
-.. automodule:: Lasersystem
+.. automodule:: MoleCool.Lasersystem
    :members:
    :undoc-members:
    :show-inheritance:

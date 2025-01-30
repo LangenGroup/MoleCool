@@ -4,7 +4,7 @@ tools package
 Module contents
 ---------------
 
-.. automodule:: tools
+.. automodule:: MoleCool.tools
    :members:
    :undoc-members:
    :show-inheritance:
@@ -12,7 +12,7 @@ Module contents
 tools.ODEs module
 -----------------
 
-.. automodule:: tools.ODEs
+.. automodule:: MoleCool.tools.ODEs
    :members:
    :undoc-members:
    :show-inheritance:
@@ -20,7 +20,7 @@ tools.ODEs module
 tools.dict2DF module
 --------------------
 
-.. automodule:: tools.dict2DF
+.. automodule:: MoleCool.tools.dict2DF
    :members:
    :undoc-members:
    :show-inheritance:
@@ -28,7 +28,7 @@ tools.dict2DF module
 tools.diststraj module
 ----------------------
 
-.. automodule:: tools.diststraj
+.. automodule:: MoleCool.tools.diststraj
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,7 +1,7 @@
 System module
 =============
 
-.. automodule:: System
+.. automodule:: MoleCool.System
    :members:
    :undoc-members:
    :show-inheritance:

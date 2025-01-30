@@ -1,7 +1,7 @@
 Levelsystem module
 ==================
 
-.. automodule:: Levelsystem
+.. automodule:: MoleCool.Levelsystem
    :members:
    :undoc-members:
    :show-inheritance:

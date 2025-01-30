@@ -8,12 +8,12 @@ build-backend = "setuptools.build_meta"
 [project]
 
 # name: String, REQUIRED
-name = "MolLaserCoolSimulations"
+name = "MoleCool"
 
 # version: String, REQUIRED
 # Should follow PEP 440 rules
 # Can be provided dynamically, see the lesson on publishing
-version = "1.0.0"
+version = "3.4.2"
 
 # description: String
 # A simple summary of the project
@@ -48,7 +48,7 @@ license = {file = "LICENSE.md"}
 # license = {text = "CC-BY-4.0"}
 
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
@@ -74,7 +74,8 @@ dependencies = [
     "scipy >= 1.5.4",
     "sympy < 1.13",
     "tqdm",
-    "matplotlib"
+    "matplotlib",
+    "h5py",
 ]
 
 [project.optional-dependencies]
