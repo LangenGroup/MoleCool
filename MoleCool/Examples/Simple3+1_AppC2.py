@@ -7,7 +7,7 @@ Created on Thu Apr 14 08:40:18 2022
 tested with version v3.0.0
 """
 
-from System import *
+from MoleCool import System, np, plt, pi, hbar
 # required for multiprocessing: function definition for returning desired quantities
 def return_fun(system):
     return {'Ne' : system.N[-1,-1], 'exectime' : system.exectime}

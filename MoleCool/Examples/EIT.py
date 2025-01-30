@@ -6,7 +6,7 @@ Created on Fri Mar 10 15:09:30 2023
 
 tested with version v3.1.1
 """
-from System import *
+from MoleCool import System, np, plt, pi
 
 det_pump = 0*1e6 # pump laser detuning for for EIT resonance position in Hz
 I_probe  = 0.2 # laser intensity of probe beam in W/m^2

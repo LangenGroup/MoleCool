@@ -6,7 +6,7 @@ Created on Fri Mar 10 11:44:02 2023
 
 tested with version v3.2.2
 """
-from System import *
+from MoleCool import System, pi, plt
  
 system = System('Rabi-2level')
 

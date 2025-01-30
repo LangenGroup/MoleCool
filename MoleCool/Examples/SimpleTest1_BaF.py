@@ -7,7 +7,7 @@ Created on Wed Jun  1 10:35:14 2022
 tested with version v3.1.0
 """
 
-from System import *
+from MoleCool import System, np
 system = System(description='SimpleTest1_BaF',load_constants='138BaF')
 
 # set up the lasers each with four sidebands

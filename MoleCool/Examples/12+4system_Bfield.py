@@ -7,7 +7,7 @@ Created on Wed Nov 23 13:02:22 2022
 tested with v3.2.2
 """
 
-from System import *
+from MoleCool import System, np, open_object, plt
 
 def return_fun1(obj):
     if obj.calcmethod=='OBEs':

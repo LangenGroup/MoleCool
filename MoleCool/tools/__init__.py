@@ -4,7 +4,7 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.4.2
+v3.4.3
 
 This module contains all different kinds of tools to be used in the other main
 modules.
@@ -16,7 +16,7 @@ from tqdm import tqdm
 import multiprocessing
 from copy import deepcopy
 import os, json
-# import _pickle as pickle
+import pickle #_pickle as pickle
 import time
 from collections.abc import Iterable
 #%%

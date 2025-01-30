@@ -66,7 +66,6 @@ from .tools import save_object, open_object, ODEs
 import json
 
 from collections.abc import Iterable
-# import _pickle as pickle
 from copy import deepcopy
 from tqdm import tqdm
 import warnings
