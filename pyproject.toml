@@ -19,7 +19,16 @@ version = "1.0.0"
 # A simple summary of the project
 description = "Molecular Laser-Cooling and Spectra Simulation"
 
-keywords = ["Molecules", "Laser cooling", "Optical Bloch equations"]
+keywords = [
+    "cold molecules",
+    "laser cooling",
+    "optical Bloch equations",
+    "rate equations",
+    "diatomic molecules",
+    "multi-level systems",
+    "Rabi-oscillations",
+    "coherent laser forces"
+    ]
 
 # readme: String
 # Full description of the project.
@@ -34,14 +43,18 @@ requires-python = ">=3.8"
 # The license of your project.
 # Can be provided as a file or a text description.
 # Discussed in the lesson on publishing
-# license = {file = "LICENSE.md"}
+license = {file = "LICENSE.md"}
 # or...
-license = {text = "BDS 3-Clause License"}
+# license = {text = "CC-BY-4.0"}
 
 classifiers = [
-    # "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python",
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.8",
+    "Topic :: Scientific/Engineering :: Physics",
 ]
 
 # authors: Array of Tables
