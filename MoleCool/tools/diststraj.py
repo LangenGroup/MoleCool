@@ -4,7 +4,7 @@ Created on Mon Mar  4 17:45:03 2024
 
 @author: fkogel
 
-v3.3.2
+v3.4.2
 
 This Module contains different type of functions and classes, e.g. to calculate
 simple linear trajectories through multiple apertures and to evaluate trajectories
@@ -14,7 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import h5py
-from tools import Ttov, vtoT, gaussian, FWHM2sigma, sigma2FWHM
+from . import Ttov, vtoT, gaussian, FWHM2sigma, sigma2FWHM
 
 #%%
 def transversal_width2Temp(w_sigma=1.2e-3, v_Fw=170, total_dist=58e-2, mass=157,

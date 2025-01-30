@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v3.4.0
+v3.4.2
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -66,7 +66,7 @@ from .tools import save_object, open_object, ODEs
 import json
 
 from collections.abc import Iterable
-import _pickle as pickle
+# import _pickle as pickle
 from copy import deepcopy
 from tqdm import tqdm
 import warnings

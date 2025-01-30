@@ -4,7 +4,7 @@ Created on Wed May 13 18:27:42 2020
 
 @author: fkogel
 
-v3.0.0
+v3.4.2
 
 This module contains several functions as tools for converting the .json files
 with all the specific constants of a certain atom, molecule into pandas.DataFrames.
@@ -22,7 +22,7 @@ import numpy as np
 from scipy.constants import c,h,hbar,pi,g,u
 import pandas as pd
 from collections.abc import Iterable
-import _pickle as pickle
+# import _pickle as pickle
 import os
 from copy import deepcopy
 #%%
