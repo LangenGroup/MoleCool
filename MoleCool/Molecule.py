@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v3.4.2
+v3.4.4
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -62,7 +62,6 @@ from scipy.constants import c,h,hbar,pi,g,physical_constants
 from scipy.constants import k as k_B
 from scipy.constants import u as u_mass
 from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
-from .tools import save_object, open_object, ODEs
 import json
 
 from collections.abc import Iterable
