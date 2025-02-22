@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v3.4.4
+v3.4.5
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -1297,14 +1297,10 @@ class ElectronicState:
             else:
                 argmax_arr = []
                 for (i,Ew),Ev in DF1.items():
-                    argmax = Ev.abs().argmax()
-                    if argmax in argmax_arr:
-                        for argsort_ind in Ev.abs().argsort():
-                            if argsort_ind not in argmax_arr:
-                                argmax_arr.append( argsort_ind )
-                                break
-                    else:
-                        argmax_arr.append( argmax )
+                    for argsort_ind in Ev.abs().argsort()[::-1]:
+                        if argsort_ind not in argmax_arr:
+                            argmax_arr.append( argsort_ind )
+                            break
                 
                 DF1 = pd.DataFrame(self.Ew, columns=['eigenvalue'],
                                    index=DF1.index.to_frame().iloc[argmax_arr].index)
