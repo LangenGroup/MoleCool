@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v3.4.5
+v3.4.6
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -1069,12 +1069,18 @@ class ElectronicState:
         cs = self.const
         nu  = self.nu
         A_v, B_v, D_v = cs.A_v, cs.B_v, cs.D_v
-        if Omega > self.L: pm = +1
-        else: pm = -1
+        if Omega > self.L:
+            pm      = +1
+            Ldoubl  = 0#cs['q'] * (J+0.5)**2
+            warnings.warn("Lambda doubling not implemented for Omega > Lambda \
+                          and is set to zero for now")
+        else:
+            pm      = -1
+            Ldoubl  = (cs['p']+2*cs['q']) * (J+0.5)
         
         E = cs.electrovibr_energy + pm*A_v*self.L*self.S \
             + (B_v *(J*(J+1) + self.S*(self.S+1) - Omega**2 - self.S**2) - D_v *(J*(J+1))**2) \
-            + p*phs(J+0.5) * (cs['p']+2*cs['q'])/2 *(J+0.5)
+            + p*phs(J+0.5) * Ldoubl/2
         return E
     
     def get_energy_caseb(self,N,sr):
@@ -1169,7 +1175,7 @@ class ElectronicState:
                         for L in np.unique([-self.L,self.L]):
                             Om = L + Si
                             for J in addJ(F1, self.I1):
-                                # if J < (abs(Om)-1e-3): continue # also here this selection rule???
+                                if J < (abs(Om)-1e-3): continue
                                 if (self.Bfield != 0.0) or self.mF_states:
                                     for mF in np.arange(-F,F+1e-3,1):
                                         self.states.append(Hcasea(L=L,Si=Si,Om=Om,J=J,F1=F1,F=F,mF=mF,
