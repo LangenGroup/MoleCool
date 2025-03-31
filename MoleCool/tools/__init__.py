@@ -4,7 +4,7 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.4.3
+v3.4.7
 
 This module contains all different kinds of tools to be used in the other main
 modules.
@@ -73,14 +73,17 @@ def get_constants_dict(name=''):
 
     if name:
         try:
-            script_dir = os.path.dirname(os.path.abspath(__file__)) #directory where this script is stored.
-            constants_dir = os.path.join(os.path.dirname(script_dir), "constants")
-            return openjson(constants_dir)
+            return openjson(".")
         except FileNotFoundError:
             try:
-                return openjson("./constants/")
+                script_dir = os.path.dirname(os.path.abspath(__file__)) #directory where this script is stored.
+                constants_dir = os.path.join(os.path.dirname(script_dir), "constants")
+                return openjson(constants_dir)
             except FileNotFoundError:
-                return openjson("./mymodules/constants/")
+                try:
+                    return openjson("./constants/")
+                except FileNotFoundError:
+                    return openjson("./mymodules/constants/")
     else:
         return {}
 
