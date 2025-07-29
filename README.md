@@ -1,5 +1,7 @@
 # MoleCool
 
+![Logo](molecool_logo.jpg)
+
 A python package for molecular laser cooling and spectra simulation.
 
 ## Installation
