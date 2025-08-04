@@ -4,7 +4,7 @@ Created on Wed May 13 18:34:09 2020
 
 @author: fkogel
 
-v3.3.0
+v3.5.0
 
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
@@ -103,6 +103,35 @@ class Lasersystem:
         else:
             dtype = float
         return np.array([getattr(la,var) for la in self],dtype=dtype)
+    
+    def _identify_iter_params(self):
+        """Identify which parameters are iterative arrays  to loop through.
+        This function is inevitable to determine whether multiple
+        evaluations of the OBEs and rate equations are efficiently conducted 
+        using the multiprocessing package from python (see :meth:`tools.multiproc`).
+
+        Returns
+        -------
+        iters_dict : dict
+            Dictionary with all iterative parameters and their number of iterations.
+        """
+        # loop through laser objects to get to know which variables have to get
+        # iterated and how many iterations
+        #--> for the dictionaries used here it'S important that the order is ensured
+        #    (this is the case since python 3.6 - now (3.8))
+        laser_list = []
+        laser_iters_N = {}
+        for l1,la in enumerate(self):
+            laser_dict = {}
+            for key in ['omega','freq_Rabi','I','phi','beta','k','r_k','f_q']:
+                value = la.__dict__[key]
+                if (np.array(value).ndim == 1 and key not in ['k','r_k','f_q']) \
+                    or (np.array(value).ndim == 2 and key in ['k','r_k','f_q']):
+                    laser_dict[key] = value
+                    laser_iters_N[key] = len(value)
+            laser_list.append(laser_dict)
+        
+        return laser_iters_N, laser_list
         
     def add_sidebands(self,lamb=860e-9,offset_freq=0.0,mod_freq=1e6,
                       ratios=None,sidebands=[-1,1],**kwargs):

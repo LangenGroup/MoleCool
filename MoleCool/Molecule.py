@@ -4,7 +4,7 @@ Created on Mon Feb  1 13:03:28 2021
 
 @author: Felix
 
-v3.4.6
+v3.5.0
 
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
@@ -1355,10 +1355,8 @@ class ElectronicState:
         else:
             states = self.states
             
-        for i,st in enumerate(states):
-            if i==0: DF = st.DF(onlygoodQuNrs)
-            else:    DF = DF.append(st.DF(onlygoodQuNrs),ignore_index=True)
-        return DF
+        return pd.concat([st.DF(onlygoodQuNrs) for st in states],
+                         ignore_index=True)
     
     def calc_basis_change(self):
         '''Calculates the Hund's case states from the pure case a states and determines

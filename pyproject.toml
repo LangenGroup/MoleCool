@@ -69,7 +69,7 @@ authors = [
 dependencies = [
     "numpy < 2.0",
     "numba >= 0.53.1",
-    "pandas",#" < 2.0.0",
+    "pandas < 1.4",
     "scikit-optimize==0.9.0",
     "scipy >= 1.5.4",
     "sympy < 1.13",
