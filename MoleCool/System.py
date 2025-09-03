@@ -148,7 +148,7 @@ class System:
     
         Example
         -------
-        After initiating a :class:`~System.System` object, the instances of 
+        After initiating a :class:`~MoleCool.System.System` object, the instances of 
         :py:class:`~Lasersystem.Lasersystem`, :class:`~Levelsystem.Levelsystem`,
         and :class:`~Bfield.Bfield` can be accessed via::
             
@@ -254,6 +254,7 @@ class System:
         * ``r`` : calculated positions of the molecule at times ``t``
           (only given if `trajectory` == True)
         """
+        
         self.calcmethod = 'rateeqs'
         #___input arguments of this called function
         self.args = locals()
@@ -357,7 +358,7 @@ class System:
         if ('trajectory' in self.args) and self.args['trajectory']:
             self.plot_r(); self.plot_v()
         
-    def plot_N(self,figname=None,figsize=(12,5),smallspacing=0.0005):
+    def plot_N(self,figname=None,figsize=(12,5),smallspacing=0):
         """plot populations of all levels over time."""
         if figname == None:
             plt.figure('N ({}): {}, {}, {}'.format(
@@ -553,15 +554,32 @@ class System:
                 self.calcmethod,self.description,self.levels.description,
                 self.lasers.description))
         else: plt.figure(figname)
-        lamb = c/(self.levels.calc_freq()[0,0]/2/pi)
-        F = self.F/ (hbar*2*pi/860e-9*self.levels.calc_Gamma()[0]/2)
         ls_arr = ['-','--','-.']
         for axis in axes:
             i = {'x':0,'y':1,'z':2}[axis]
-            plt.plot(self.t*1e6,F[i,:],label='$F_{}$'.format(axis),ls=ls_arr[i])
+            plt.plot(self.t * 1e6, F[i,:] / self.hbarkG2,
+                     label='$F_{}$'.format(axis),ls=ls_arr[i])
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Force $F$ in $\hbar k \Gamma_{}/2$'.format(self.levels.exstates_labels[0]))
         plt.legend()
+    
+    @property
+    def hbarkG2(self):
+        lambs   = self.lasers.getarr('lamb')
+        dev     = 1e-3
+        diff    = lambs.std()/lambs.mean()
+        Gamma   = self.levels.exstates[0].Gamma*2*pi*1e6
+        if len(self.levels.exstates) > 1:
+            warnings.warn("For calculation of hbar * k * Gamma/2, Gamma of the first ElSt is used")
+        if diff > dev:
+            warnings.warn(
+                ("For calculation of hbar * k * Gamma/2, the wavelengths "
+                 f"of the lasers' wavelengths differ by {diff*1e2:.2f} % "
+                 f"(which is more than {dev*1e2:.2f} %). The "
+                 "returned unit might thus me inappropriate.")
+                )
+        
+        return hbar*2*pi/lambs.mean()*Gamma/2
     
     @property
     def F(self):
@@ -1019,7 +1037,9 @@ class System:
         **QuNrs : kwargs
             Keyword arguments as Quantum numbers can be provided for only a subset
             of levels with specific Quantum numbers, e.g. v=0. If empty, all
-            levels are considered.
+            levels are considered. If only a specific ground or excited
+            electronic state should be included, add e.g. `gs='X'` or `exs='A'`
+            as a first QuNr keyword.
 
         Returns
         -------
@@ -1194,7 +1214,11 @@ class System:
     @property
     def v0(self):
         """Initial velocity vector or array of vectors."""
-        return self.__v0
+        if 'v0' in self.__dict__:
+            val = self.__dict__['v0']
+        else:
+            val = self.__v0
+        return val
     
     @v0.setter
     def v0(self,val):
@@ -1203,7 +1227,11 @@ class System:
     @property
     def r0(self):
         """Initial position vector or array of vectors."""
-        return self.__r0
+        if 'r0' in self.__dict__:
+            val = self.__dict__['r0']
+        else:
+            val = self.__r0
+        return val
     
     @r0.setter
     def r0(self,val):
@@ -1351,7 +1379,7 @@ class System:
             self.calc_OBEs(t_int=1e-11, t_start=0., dt=None, t_eval = [],
                           magn_remixing=False, freq_clip_TH=freq_clip_TH, steadystate=False,
                           position_dep=False, rounded=False,
-                          verbose=False, mp=False, return_fun=None, method='RK45')
+                          verbose=False, return_fun=None, method='RK45')
             
             for GrSt,coords_l_ in zip(GrSts,coords_l):
                 for ExSt,coords_u_ in zip(ExSts,coords_u):

@@ -20,6 +20,7 @@ import pickle #_pickle as pickle
 import time
 from collections.abc import Iterable
 from collections import namedtuple
+Results_OBEs_rateeqs = namedtuple("Results_OBEs_rateeqs", ["vals", "iters"])
 #%%
 def save_object(obj,filename=None):
     """Save an entire class with all its attributes (or any other python object).
@@ -79,7 +80,7 @@ def return_fun_default(system):
             steps   = system.step+1,
             )
     else:
-        tNum    = obj.t.size//10
+        tNum    = system.t.size//10
         dic.update(
             F       = system.F[:,-tNum:].mean(axis=-1),
             Ne      = system.N[-NeNum:,-tNum:].sum(axis=0).mean(),
@@ -202,6 +203,7 @@ def multiproc(obj,kwargs):
         iterator = tqdm(result_objects,smoothing=0.0)
     else:
         iterator = result_objects
+    
     for r in iterator:
         results.append(list(r.get().values()))
     keys = result_objects[0].get().keys() #switch this task with the one above?
@@ -218,8 +220,7 @@ def multiproc(obj,kwargs):
             out[key] = np.squeeze(np.reshape(np.concatenate(
                 np.array(results,dtype=object)[:,i], axis=None), tuple([*iters_dict.values(),*(first_el.shape)])))
     
-    Results = namedtuple("Results_OBEs_rateeqs", ["vals", "iters"])
-    return Results(out, iters_dict)
+    return Results_OBEs_rateeqs(out, iters_dict)
 
 #%%
 def vtoT(v,mass=157):
