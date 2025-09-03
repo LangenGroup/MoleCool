@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu May 14 02:03:38 2020
-
-@author: fkogel
-
-v3.4.0
-
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
 

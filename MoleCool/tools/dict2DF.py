@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 13 18:27:42 2020
-
-@author: fkogel
-
-v3.4.2
-
 This module contains several functions as tools for converting the .json files
 with all the specific constants of a certain atom, molecule into pandas.DataFrames.
 These DataFrames will be imported in the class :class:~`Levelsystem.Levelsystem`

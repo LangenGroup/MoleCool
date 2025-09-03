@@ -14,12 +14,16 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../..'))
 
+from MoleCool import __version__
+
 # -- Project information -----------------------------------------------------
 
 project = 'MoleCool'
 copyright = '2025, Felix Kogel'
 author = 'Felix Kogel'
 
+release = __version__
+version = ".".join(release.split(".")[:3])  # major.minor.patch
 
 # -- General configuration ---------------------------------------------------
 

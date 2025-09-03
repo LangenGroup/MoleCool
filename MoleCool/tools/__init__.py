@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Mar  9 14:18:38 2023
-
-@author: fkogel
-
-v3.5.0
-
 This module contains all different kinds of tools to be used in the other main
 modules.
 """

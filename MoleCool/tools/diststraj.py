@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar  4 17:45:03 2024
-
-@author: fkogel
-
-v3.4.2
-
 This Module contains different type of functions and classes, e.g. to calculate
 simple linear trajectories through multiple apertures and to evaluate trajectories
 as solutions of the Monte Carlo simulations.

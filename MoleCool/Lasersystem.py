@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 13 18:34:09 2020
-
-@author: fkogel
-
-v3.5.0
-
 This module contains all classes and functions to define a System including
 multiple :class:`Laser` objects.
 

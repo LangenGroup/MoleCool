@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue June 09 10:17:00 2020
-
-@author: fkogel
-
-v3.5.0
-
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
 and the magnetic field to carry out simulation calculations, e.g.
