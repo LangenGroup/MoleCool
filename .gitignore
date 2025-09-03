@@ -3,9 +3,24 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# documentation build, auto-generated Example file
+# sphinx documentation build, auto-generated Example file
 build/
 Examples.rst
+auto_examples
+sg_execution_times.rst
+generated
+gen_modules
+
+# Jupyter checkpoints
+**/.ipynb_checkpoints/
+
+# 
 
 #temporary python files
-mymodules/tmp/
+tmp
+
+# Distribution / packaging
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST

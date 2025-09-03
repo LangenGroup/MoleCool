@@ -1,6 +1,6 @@
 # MoleCool
 
-![Logo](molecool_logo.jpg)
+![Logo](doc/source/_static/molecool_logo.png)
 
 A python package for molecular laser cooling and spectra simulation.
 
