@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jun  2 16:54:59 2022
+Simplest type-II levelsystem
+============================
 
-@author: fkogel
-
-tested with version v3.0.0
+creating 3+1 level system and observing time-dependent populatios.
 """
 
 from MoleCool import System

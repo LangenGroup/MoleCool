@@ -1,18 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar 10 15:09:30 2023
+EIT
+===
 
-@author: fkogel
+This examples employs a 3-level system to show the effect of EIT.
 
-tested with version v3.1.1
+EIT (electromagnetically-induced transparency).
 """
+
+# %%
+# Import
+# ------
 from MoleCool import System, np, plt, pi
 
 det_pump = 0*1e6 # pump laser detuning for for EIT resonance position in Hz
 I_probe  = 0.2 # laser intensity of probe beam in W/m^2
 I_pump   = 5.0 # laser intensity of pump beam in W/m^2
 gr_split = 1000 # splitting between both ground states in MHz
-#%%
+# %%
+# ## calculation routine
+# normal text
 Deltas  = np.array([*np.arange(-3,-0.5,0.1),*np.arange(-0.5,0.,0.01)])*1e6
 Deltas  = np.array([*Deltas,*(-np.flip(Deltas[:-1]))]) + det_pump
 
@@ -62,4 +69,3 @@ plt.ylabel('Susceptibility $\\rho_{eg}$')
 # plt.legend(loc='lower right',mode='expand', ncols=2,
            # bbox_to_anchor=(0., 1.02, 1., .102))
 plt.legend(loc='upper right')
-plt.savefig("Fig3_EIT")

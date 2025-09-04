@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar 10 11:44:02 2023
+Simple Rabi oscilaations
+========================
 
-@author: fkogel
+This tutorial shows how to set up the most basic two-level system and add a laser.
 
-tested with version v3.2.2
+The top-level docstring becomes the intro text.
 """
+# %%
+# importing and initializing the :class:`~MoleCool.System.System` instance
 from MoleCool import System, pi, plt
  
 system = System('Rabi-2level')
@@ -22,6 +25,9 @@ ratio_OmGa  = 20 # ratio between Rabi frequency and the linewidth
 Omega       = system.levels.calc_Gamma()[0] * ratio_OmGa # Rabi frequency
 T_Om        = 2*pi/Omega # time of one period
 
+# %%
+# Plotting
+# --------
 plt.figure(system.description)
 plt.ylim([0,1])
 plt.xlabel('Time $t$ [$2\pi/\Omega$]')
@@ -37,4 +43,3 @@ for det in [0,1,2]:
     plt.plot(system.t/T_Om, system.N[1,:], label=str(det))
     
 plt.legend(title='$\Delta/\Omega$',loc='upper right',ncols=3)
-plt.savefig("Fig2_Rabi-2level")

@@ -5,6 +5,8 @@ MoleCool is a Python library for numerical modeling of light-matter interactions
 specializing in laser cooling in molecules -- from simple few-level systems
 and diatomics to polyatomics and radioactive species.
 
+Current version: |version|
+
 .. grid:: 1 2 3 3
    :gutter: 2
    :margin: 2 0 2 0

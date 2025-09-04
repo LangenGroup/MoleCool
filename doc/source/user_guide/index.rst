@@ -3,6 +3,11 @@ User Guide
 
 This guide will walk you through everything you need to know to get started with MoleCool.
 
+.. exec_code::
+
+   import numpy as np
+   np.arange(5)
+   
 .. toctree::
    :maxdepth: 2
 

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Nov 23 13:02:22 2022
+Optical cycling 12+4
+====================
 
-@author: fkogel
-
-tested with v3.2.2
+Testing similar optical cycling as for 3+1 level system for the simplest levelsystem
+in BaF.
 """
 
 from MoleCool import System, np, open_object, plt
@@ -73,6 +73,4 @@ if __name__ == '__main__':
     plt.ylabel('Scattering rate $R_{sc}$ [$\Gamma/2$]')
     print('Mean execution time per Bfield, Intensity, and core:',
           '{:.2f} s'.format(sys_load.results[0]['exectime'].mean()))
-    
-    plt.savefig("Fig5_12+4system_Bfield")
 

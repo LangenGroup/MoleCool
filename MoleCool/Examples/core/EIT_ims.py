@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar 10 15:09:30 2023
+EIT option 2
+============
 
-@author: fkogel
-
-tested with version v3.1.1
+Here, we have an alternative to the original EIT examples using an intermediate
+electronic state.
 """
 from System import *
 

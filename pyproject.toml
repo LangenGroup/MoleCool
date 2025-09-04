@@ -86,6 +86,7 @@ doc = [
     "sphinx-gallery", # auto-generated examples in a gallery
     "sphinx-copybutton",
     "sphinx-design", # design elements
+    "sphinx-exec-code", # execute individual code blocks
     # "myst-nb",
 ]
 dev = [
