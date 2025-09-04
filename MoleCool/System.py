@@ -551,7 +551,7 @@ class System:
         ls_arr = ['-','--','-.']
         for axis in axes:
             i = {'x':0,'y':1,'z':2}[axis]
-            plt.plot(self.t * 1e6, F[i,:] / self.hbarkG2,
+            plt.plot(self.t * 1e6, self.F[i,:] / self.hbarkG2,
                      label='$F_{}$'.format(axis),ls=ls_arr[i])
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Force $F$ in $\hbar k \Gamma_{}/2$'.format(self.levels.exstates_labels[0]))
