@@ -242,11 +242,13 @@ def sigma2FWHM(sigma):
     return sigma*2.3548200450309493
 
 #%%
-def get_results(fname, Z_keys='F', XY_keys=[], XY_data_fmt={}, XYY_inds=[],
+def get_results(fname, Z_keys='F', XY_keys=[],
+                Z_data_fmt={}, XY_data_fmt={}, XYY_inds=[],
                 add_v0=False, add_flip_v=False, add_I0=False, scale_F='N'):
-    """Extract results from an .pkl file as observables of a high-dimensional
-    parameter space in a certain order of parameters and their values as numpy
-    arrays. Optionally, one can add e.g. zero force values, manually.
+    """Extract :class:`Results_OBEs_rateeqs` results from an .pkl file as observables
+    of a high-dimensional parameter space in a certain order of parameters
+    and their values as numpy arrays.
+    Optionally, one can add e.g. zero force values, manually.
 
     Parameters
     ----------
@@ -255,11 +257,23 @@ def get_results(fname, Z_keys='F', XY_keys=[], XY_data_fmt={}, XYY_inds=[],
     Z_keys : str, optional
         Observable calculated in the results. The default is 'F'.
     XY_keys : list of str, optional
-        Parameters that the results are dependent on, e.g. ['v0','I']. The default is [].
+        Parameters that the results are dependent on, e.g. ``['v0','I']``.
+        The default is [].
+    Z_data_fmt : dict of func, optional
+        Dictionary with the observables as keys and functions as their respective
+        values. The argument of these functions is the individual calculated value
+        from the result :class:`Results_OBEs_rateeqs` object for each parameter
+        combination.
+        When the calculated value is e.g. a force array ``np.array([0,0,2.4])``,
+        then only the 'z' component can be exctracted using ``{'F': lambda x: x[2]}``.
+        The default is {}.
     XY_data_fmt : dict of func, optional
-        Dictionary with parameters as keys and functions as dict values which
-        determine how the parameter values are converted or formatted, e.g. 
-        {'strength': lambda system: system.Bfield.strength}. The default is {}.
+        Dictionary with iteration parameters as keys and functions as their
+        respective values. These functions take the loaded system as argument
+        to return the actual XY data of the iteration parameters to be plotted,
+        e.g. ``{'strength': lambda system: system.Bfield.strength}``.
+        The default is {} and includes e.g. ``{'I': lambda x: x.lasers.I_sum,
+        'v0': lambda x: x.v0[:,2]}``.
     XYY_inds : list of inds, optional
         list of indices to choose values of further parameters included in the
         results dataset for more than 3 dimensions. The default is [].
@@ -270,7 +284,7 @@ def get_results(fname, Z_keys='F', XY_keys=[], XY_data_fmt={}, XYY_inds=[],
     add_I0 : bool, optional
         adding intensity I=0 where the force is zero. The default is True.
     scale_F : str, optional
-        scale F to either 'N' or 'hbar*k*Gamma/2'. Do nothing if scale_F=='.',
+        scale F to either 'N' or 'hbar*k*Gamma/2'. Do nothing if ``scale_F==''``,
         The default is 'N'.
 
     Returns
@@ -334,10 +348,20 @@ def get_results(fname, Z_keys='F', XY_keys=[], XY_data_fmt={}, XYY_inds=[],
         if Z_key not in s4.results[0].keys():
             raise ValueError("Z_key '{}' not included in results, try one of {}".format(
                 Z_key, list(s4.results[0].keys())))
+        
+        Z = s4.results[0][Z_key]
+        if Z_key in Z_data_fmt:
+            Z = np.apply_along_axis(Z_data_fmt[Z_key], -1, Z)
+        if Z.ndim != len(s4.results[1]):
+            raise Exception((
+                f"The number of iteration parameters ({len(s4.results[1])}) does "
+                f"not match the dimension of the calculated value ({Z.ndim}). "
+                "Use argument <Z_data_fmt> to reduce the dimensionality."
+                ))
             
-        Z = s4.results[0][Z_key].transpose((iterinds.pop(XY_keys[0]),
-                                            iterinds.pop(XY_keys[1]),
-                                            *iterinds.values()))
+        Z = Z.transpose((iterinds.pop(XY_keys[0]),
+                         iterinds.pop(XY_keys[1]),
+                         *iterinds.values()))
         
         # values of further parameters in dataset if Z has more than 2 dimensions
         XYY = dict()
@@ -382,10 +406,7 @@ def get_results(fname, Z_keys='F', XY_keys=[], XY_data_fmt={}, XYY_inds=[],
             
         if scale_F and (Z_key == 'F'):
             # Further scaling of the Z data, i.e. the force to more intuitive unit
-            from System import hbar, pi
-            Gamma   = s4.levels.calc_Gamma().mean()
-            lamb    = s4.lasers.getarr('lamb').mean()
-            unit    = hbar*2*pi/lamb*Gamma/2
+            unit    = s4.hbarkG2
             if (scale_F == 'hbar*k*Gamma/2') and (abs(Z.max()) < 100*unit):
                 Z /= unit
             elif (scale_F == 'N') and (abs(Z.max()) > 100*unit):

@@ -75,7 +75,7 @@ import numpy as np
 from scipy.constants import c,h,hbar,pi,g
 from scipy.constants import u as u_mass
 from scipy.special import voigt_profile
-from .tools import dict2DF, get_constants_dict
+from MoleCool.tools import dict2DF, get_constants_dict
 from collections.abc import Iterable
 import matplotlib.pyplot as plt
 import warnings
