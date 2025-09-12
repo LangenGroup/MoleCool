@@ -75,7 +75,7 @@ import numpy as np
 from scipy.constants import c,h,hbar,pi,g
 from scipy.constants import u as u_mass
 from scipy.special import voigt_profile
-from MoleCool.tools import dict2DF, get_constants_dict
+from MoleCool.tools import dict2DF, get_constants_dict, auto_subplots
 from collections.abc import Iterable
 import matplotlib.pyplot as plt
 import warnings
@@ -728,7 +728,7 @@ class Levelsystem:
         return self.description
     
     def transitions_energies_strengths(self, include_forbidden=False,
-                                       gs=None, exs=None, use_calc_props=False):
+                                       gs=None, exs=None, use_calc_props=True):
         """Yields the transition strengths and energies without including all mF
         levels. This is e.g. used by the method :meth:`plot_transition_spectrum`.
         The strengths are solely calculated using the property :meth:`dMat_red`.
@@ -801,9 +801,11 @@ class Levelsystem:
         return Es, branchings, states
 
     def plot_transition_spectrum(self, std=0, xaxis=[], xaxis_ext=5, N_points=500,
+                                 wavelengths=[], relative_to_wavelengths=False,
                                  kwargs_single=dict(), kwargs_sum=dict(ls='-', color='k'),
                                  plot_single=True, plot_sum=True,
                                  ax=None, legend=True, QuNrs=[['F'],['F']],
+                                 exs=[], subplot_sep=200., E_unit='MHz',
                                  E_offset=0, kwargs_trans_ener_stre=dict()):
         """Plotting the transition spectrum with Voigt profiles using the energies
         and strengths from :meth:`transitions_energies_strengths`.
@@ -823,6 +825,12 @@ class Levelsystem:
             The default is 5.
         N_points : int, optional
             number of points plotted. The default is 500.
+        wavelengths : list, optional
+            wavelengths that should be plotted within the range ``subplot_sep``.
+            By default all available transition wavelengths are used.
+        relative_to_wavelengths : bool, optional
+            Whether the x-axis should be plotted in absolute frequency units or
+            relative to ``wavelengths``.
         kwargs_single : dict, optional
             keyword arguments used in ``plt.plot()`` for the single transition lines.
             The default is dict().
@@ -833,13 +841,23 @@ class Levelsystem:
             Whether to plot single transition lines. The default is True.
         plot_sum : bool, optional
             Whether to plot the sum of all transition lines. The default is True.
-        ax : matplotlib.pyplot.axes, optional
-            axis to put the plot on. The default is None.
+        ax : ``matplotlib.pyplot.axis`` or list of ``axis``, optional
+            axis or multiple axes to put the plot(s) on. The default is None.
         legend : bool, optional
             Whether to show legend. The default is True.
         QuNrs : list(list), optional
             QuNrs of ground and excited state used for labelling and legend.
             The default is [['J','F'],['F']].
+        exs : list(str), optional
+            List of excited states to be plotted (see :meth:`transitions_energies_strengths`).
+            By default only the first excited electronic state is used.
+        subplot_sep : float, optional
+            Defines the range of the plotted x-axis and the separation for the 
+            automatic inclusion of all wavlengths (see parameter ``wavelengths``)
+            in units of :meth:`ElectronicExState.Gamma`. Default is 200.
+        E_unit : str, optional
+            Unit of the x-axis to be plotted.
+            Can be one of ``['GHz','MHz','kHz','Hz','Gamma']``. Default is 'MHz'.
         E_offset : float, optional
             Energy offset on the xaxis. The default is 0.
         kwargs_trans_ener_stre : dict, optional
@@ -848,56 +866,100 @@ class Levelsystem:
 
         Returns
         -------
-        ax : matplotlib.pyplot.axes
+        ax : matplotlib.pyplot.axes or list for multiple plots
             axis of the plot.
-        data : dict(np.ndarray)
+        data : dict(np.ndarray) or list for multiple plots
             raw data thats plotted. Includes the single transitions, the sum and
             the x axis data.
         """
+        if not exs:
+            exs = [self.exstates_labels[0]]
         
-        if not 'exs' in kwargs_trans_ener_stre:
-            exs =   self.exstates_labels[0]
-            kwargs_trans_ener_stre['exs'] = exs
+        if len(exs)>1:
+            raise Exception('Multiple excited electronic states are not supported yet.')
         else:
-            exs = kwargs_trans_ener_stre['exs']
+            ExSt = exs[0]
+            kwargs_trans_ener_stre['exs'] = ExSt
+        
+                
+        if not 'exs' in kwargs_trans_ener_stre:
+            kwargs_trans_ener_stre['exs'] = self.exstates_labels[0]
+        exs     = kwargs_trans_ener_stre['exs']
             
         out     = self.transitions_energies_strengths(**kwargs_trans_ener_stre)
+        for i,el in enumerate(out[0]):
+            out[0][i] *= 1e6 # from MHz to Hz
         
-        Gamma   = self[exs].Gamma # natural linewidth
+        
+        Gamma   = self[ExSt].Gamma*1e6 # natural linewidth in Hz
+        subplot_sep *= Gamma
         x_ext   = (Gamma+std)*xaxis_ext # extension on the x axis
-        if len(xaxis) == 0:
-            xaxis = np.linspace(min(out[0])-x_ext, max(out[0])+x_ext, N_points)
-            
-        spectrum = np.zeros(len(xaxis))
-        y_arr       = []
+        fac_x   = {'GHz':1e9, 'MHz':1e6, 'kHz':1e3, 'Hz':1, 'Gamma':Gamma}[E_unit]
         
-        if not ax:
-            ax = plt.gca()
-        norm = voigt_profile(np.linspace(-(std+Gamma),+(std+Gamma),500), std, Gamma/2).max()
-        for E,bran,(gr,ex) in zip(*out):
-            # y       = gaussian(xaxis, a=bran, x0=E, std=std, y_off=0)
-            # Gaussian and Lorentzian (note factor of 2) broadening in Voigt profile
-            voigt   = voigt_profile(E-xaxis, std, Gamma/2)
-            y       = bran*voigt/norm
-            y_arr.append(y)
-            label   = None
-            if legend:
-                strings = [[str(st.__dict__[QuNr]) for QuNr in QuNrs_] for st,QuNrs_ in zip([gr,ex],QuNrs)]
-                label = ', '.join(strings[0]) + '$\\rightarrow$' + ', '.join(strings[1])
-                                                                   
-            spectrum += y
-            if plot_single:
-                ax.plot(xaxis+E_offset, y, label=label, **kwargs_single)
-                
-        if plot_sum:
-            ax.plot(xaxis+E_offset, spectrum, **kwargs_sum)
+        # get wavelengths of all transition blocks that span subplot_sep*Gamma
+        if not list(wavelengths):
+            fsort   = np.sort(out[0]) # sorted
             
-        ax.set_xlabel('Frequency (MHz)')
-        ax.set_ylabel('Line strength')
-        if legend:
-            ax.legend(title=', '.join(QuNrs[0]) + '$\\rightarrow$' + "', ".join(QuNrs[1]) + "'")
-        data = dict(x=xaxis+E_offset, sum=spectrum, single=np.array(y_arr))
-        return ax, data
+            inds    = [i+1 for i,df in enumerate(np.diff(fsort)) if df > subplot_sep]
+            inds    = [0, *inds]
+        
+            fmean   = np.array([ fsort[i:j].mean() for i,j in zip(inds, inds[1:]+[None])])
+            
+            wavelengths = c/fmean
+        
+        
+        # generate subplots
+        axs     = auto_subplots(len(wavelengths), axs=[] if ax==None else ax)
+        data_list = []
+        
+        for j,(ax,wavelength) in enumerate(zip(axs,wavelengths)):
+            
+            xconv   = lambda x: (x - c/wavelength*int(bool(relative_to_wavelengths)))/fac_x
+            
+            inds    = np.argwhere((out[0]>c/wavelength-subplot_sep) \
+                                  & (out[0]<c/wavelength+subplot_sep))[:,0]
+            
+            out_cut = [[out_i[i] for i in inds] for out_i in out]
+            if not out_cut[0]:
+                continue
+            if len(xaxis) == 0 or j>0:
+                xaxis   = np.linspace(min(out_cut[0])-x_ext, max(out_cut[0])+x_ext, N_points)
+                
+            spectrum = np.zeros(len(xaxis))
+            y_arr    = []
+            
+            
+            norm = voigt_profile(np.linspace(-(std+Gamma),+(std+Gamma),500), std, Gamma/2).max()
+            for E,bran,(gr,ex) in zip(*out_cut):
+                # Gaussian and Lorentzian (note factor of 2) broadening in Voigt profile
+                voigt   = voigt_profile(E-xaxis, std, Gamma/2)
+                y       = bran*voigt/norm
+                y_arr.append(y)
+                label   = None
+                if legend:
+                    strings = [[str(st.__dict__[QuNr]) for QuNr in QuNrs_] for st,QuNrs_ in zip([gr,ex],QuNrs)]
+                    label = ', '.join(strings[0]) + '$\\rightarrow$' + ', '.join(strings[1])
+                                                                       
+                spectrum += y
+                if plot_single:
+                    ax.plot(xconv(xaxis)+E_offset, y, label=label, **kwargs_single)
+                    
+            if plot_sum:
+                ax.plot(xconv(xaxis)+E_offset, spectrum, **kwargs_sum)
+                
+            xlabel = f'Frequency ({E_unit})'
+            if relative_to_wavelengths:
+                xlabel += f" at {wavelength*1e9:f} nm"
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel('Line strength')
+            if legend:
+                ax.legend(title=', '.join(QuNrs[0]) + '$\\rightarrow$' + "', ".join(QuNrs[1]) + "'")
+            data_list.append(dict(x=xaxis+E_offset, sum=spectrum, single=np.array(y_arr)))
+            
+        if len(wavelengths) == 1:
+            return axs[0], data_list[0]
+        else:
+            return axs, data_list
 
     def print_properties(self): 
         """Prints all relevant constants and properties of the composed levelsystem

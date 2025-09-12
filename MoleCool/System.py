@@ -556,6 +556,101 @@ class System:
         plt.xlabel('time $t$ in $\mu$s')
         plt.ylabel('Force $F$ in $\hbar k \Gamma_{}/2$'.format(self.levels.exstates_labels[0]))
         plt.legend()
+        
+    def plot_spectrum(self, wavelengths=[], lasers=True, transitions=True,
+                      unit = 'MHz',
+                      exs = [],
+                      relative_to_wavelengths = False,
+                      axs = [],
+                      subplot_sep = 200, 
+                      laser_spectrum_kwargs = dict(),
+                      transitions_kwargs = dict(),
+                      ):
+        """Plotting the spectrum of :class:`~.Lasersystem.Laser` objects
+        and transition spectra with their respective intensities.
+        This method cleverly combines :meth:`~.Lasersystem.plot_spectrum`
+        and :meth:`.Levelsystem.plot_transition_spectrum` methods.
+
+        Parameters
+        ----------
+        wavelengths : list, optional
+            wavelengths that should be plotted within the range ``subplot_sep``.
+            By default all available laser wavelengths are used.
+        lasers : bool, optional
+            Whether to include the laser spectrum. The default is True.
+        transitions : bool, optional
+            Whether to include the transition spectrum. The default is True.
+        unit : str, optional
+            Unit of the x-axis to be plotted.
+            Can be one of ``['GHz','MHz','kHz','Hz','Gamma']``. Default is 'MHz'.
+        exs : list(str), optional
+            See ``exs`` in :meth:`.Levelsystem.plot_transition_spectrum`.
+        relative_to_wavelengths : bool, optional
+            Whether the x-axis should be plotted in absolute frequency units or
+            relative to ``wavelengths``.
+        axs : list of ``matplotlib.pyplot.axis`` objects, optional
+            axis objects to put the plot(s) on. The default is [].
+        subplot_sep : float, optional
+            Defines the range of the plotted x-axis and the separation for the 
+            automatic inclusion of all wavlengths (see parameter ``wavelengths``)
+            in units of ``ElectronicState.Gamma``. Default is 200.
+        laser_spectrum_kwargs : kwargs, optional
+            Additional keyword arguments
+            (see :meth:`.Lasersystem.plot_spectrum`). The default is dict().
+        transitions_kwargs : kwargs, optional
+            Additional keyword arguments
+            (see :meth:`.Levelsystem.plot_transition_spectrum`). The default is dict().
+
+        Returns
+        -------
+        axs : list of ``matplotlib.pyplot.axis``.
+            Axes of the subplot(s).
+        """
+        if (not lasers) and (not transitions):
+            raise Exception("Either one of <lasers> or <transitions> must be True!")
+        
+        # exctract Gamma
+        if not 'exs' in transitions_kwargs:
+            transitions_kwargs['exs'] = [self.levels.exstates_labels[0]]
+        ExSt    = transitions_kwargs['exs'][0]
+        Gamma   = self.levels[ExSt].Gamma*1e6
+        
+        if lasers and self.lasers.entries:
+            subplot_sep_las = subplot_sep*Gamma
+            if not wavelengths:
+                wavelengths = self.lasers._get_wavelength_regimes(subplot_sep_las)
+            std         = laser_spectrum_kwargs.pop('std', Gamma/2)
+            axs_lasers  = self.lasers.plot_spectrum(
+                axs = axs,
+                wavelengths = wavelengths,
+                unit = unit,
+                relative_to_wavelengths = relative_to_wavelengths,
+                subplot_sep = subplot_sep_las,
+                std = std,
+                **laser_spectrum_kwargs,
+                )
+        
+            if transitions:
+                axs = [ax.twinx() for ax in axs_lasers]
+                for ax in axs_lasers:
+                    ax.tick_params(axis='y', labelcolor='grey')
+                    ax.yaxis.label.set_color('grey')
+            else:
+                axs = axs_lasers
+
+        if transitions and self.levels.exstates and self.levels.grstates and self.levels.states:
+            kwargs_sum = transitions_kwargs.pop(
+                'kwargs_sum', dict(color='k',alpha=0.7,ls='--'))
+            self.levels.plot_transition_spectrum(
+                ax = axs,
+                wavelengths = wavelengths,
+                E_unit = unit,
+                relative_to_wavelengths = relative_to_wavelengths,
+                subplot_sep = subplot_sep,
+                **transitions_kwargs,
+                )
+        
+        return axs
     
     @property
     def hbarkG2(self):

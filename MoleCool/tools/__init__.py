@@ -4,6 +4,7 @@ This module contains all different kinds of tools to be used in the other main
 modules.
 """
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from tqdm import tqdm
@@ -129,7 +130,45 @@ def make_axes_invisible(axes,xaxis=False,yaxis=False,
         ax.axes.get_yaxis().set_visible(yaxis)
         for pos in invisible_spines:
             ax.spines[pos].set_visible(False)
+
+def auto_subplots(nplots, ratio=2/1, axs=[], xlabel='', ylabel='',**subplots_kwargs):
+    """
+    Generate rows and cols for a subplot layout
+    aiming for a given rows/cols ratio (default 2:1).
+    """
+    if len(axs):
+        if not isinstance(axs, Iterable): 
+            axs = [axs]
+        
+        axs = np.array(axs).ravel()
+        
+        if len(axs) != nplots:
+            raise Exception(
+                (f"length of given axes {len(axs)} doesn't match "
+                 f"the number of subplots {nplots} to be generated"))
+    else:
+        # start with a square-ish grid
+        cols    = math.ceil(math.sqrt(nplots / ratio))
+        rows    = math.ceil(nplots / cols)
+        
+        fig,axs = plt.subplots(rows,cols,**subplots_kwargs,squeeze=False)
+    
+        if xlabel:
+            fig.supxlabel(xlabel)
+        if ylabel:
+            for axs_row in axs:
+                axs_row[0].set_ylabel(ylabel)
+            # fig.supylabel(ylabel)
             
+        # Flatten axes to easily iterate
+        axs     = np.array(axs).ravel()
+        
+        # Hide unused axes (if any)
+        for j in range(nplots, len(axs)):
+            axs[j].set_visible(False)
+            
+    return axs
+    
 #%%
 def multiproc(obj,kwargs):
     #___problem solving with keyword arguments

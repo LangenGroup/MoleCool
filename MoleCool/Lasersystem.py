@@ -33,6 +33,7 @@ from scipy.constants import c,h,hbar,pi,g
 from numba import jit
 import matplotlib.pyplot as plt
 import warnings
+from MoleCool import tools
 #%%
 class Lasersystem:
     def __init__(self,freq_pol_switch=5e6):
@@ -473,7 +474,143 @@ class Lasersystem:
         plt.legend()
         plt.xlabel('position {} in mm'.format(ax))
         plt.ylabel('Intensitiy $I$ in W/m$^2$')
+    
+    def _get_wavelength_regimes(self, subplot_sep):
+        # sorted frequencies
+        fsort   = np.sort(np.atleast_2d( self.getarr('f').T )[0])
         
+        # indices of laser blocks that are separated by the frequency subplot_sep
+        inds    = [i+1 for i,df in enumerate(np.diff(fsort)) if df > subplot_sep]
+        inds    = [0, *inds]
+    
+        # mean of each block of frequencies
+        fmean   = np.array([ fsort[i:j].mean() for i,j in zip(inds, inds[1:]+[None])])
+        
+        return list(c/fmean) # wavelengths
+    
+    def plot_spectrum(self, axs=[], unit='MHz', subplot_sep=1e9, std=0, wavelengths=[],
+                   invert=False, N_points=500, xaxis_ext=5, cmap=None, relative_to_wavelengths=False,
+                   fill_between_kwargs=dict(alpha=0.2, color='grey'),
+                   plot_kwargs=dict(color='grey',ls='-')):
+        """Plotting the spectrum of :class:`~.Lasersystem.Laser` objects
+        with their respective intensities.
+        Either as Gaussians for each single laser object or as vertical lines.
+        
+        Note
+        ----
+        This method also supports plotting multiple detunings with different colors
+        from ``matplotlib.colormap`` into a single subplot.
+
+        Parameters
+        ----------
+        axs : list of ``matplotlib.pyplot.axis`` objects, optional
+            axis/axes to put the plot(s) on. The default is [].
+        unit : str, optional
+            Unit of the x-axis to be plotted.
+            Can be one of ``['GHz','MHz','kHz','Hz']``. Default is 'MHz'.
+        subplot_sep : float, optional
+            Defines the range of the plotted x-axis and the separation for the 
+            automatic inclusion of all wavlengths (see parameter ``wavelengths``)
+            in Hz. The default is 1e9.
+        std : float, optional
+            Standard deviation of the individual Gaussians to be drawn in MHz.
+            The default is 0 meaning that instead of Gaussians, vertical lines
+            are drawn.
+        wavelengths : list, optional
+            wavelengths that should be plotted within the range ``subplot_sep``.
+            By default all available laser wavelengths are used.
+        invert : bool, optional
+            Whether the plot y-axis should be inverted. The default is False.
+        N_points : int, optional
+            number of points plotted. The default is 500.
+        xaxis_ext : TYPE, optional
+            The range of the xaxis, given by the lowest and highest transition
+            frequency, is extended by this factor multiplied by the sum of the
+            Gaussian broadening (``std``). The default is 5.
+        cmap : std, optional
+            ``matplotlib.colormap`` for plotting multiple spectra for multiple
+            detunings. The default is None.
+        relative_to_wavelengths : bool, optional
+            Whether the x-axis should be plotted in absolute frequency units or
+            relative to ``wavelengths``. The default is False.
+        fill_between_kwargs : dict, optional
+            kwargs for the method ``matplotlib.pyplot.fill_between``.
+            For disabling this plotting, just provide an empty dictionary or False.
+            The default is dict(alpha=0.2, color='grey').
+        plot_kwargs : dict, optional
+            kwargs for the method normal line plotting method ``matplotlib.pyplot.plot``.
+            For disabling this plotting, just provide an empty dictionary or False.
+            The default is dict(color='grey',ls='-').
+
+        Returns
+        -------
+        axs : list of ``matplotlib.pyplot.axis``
+            Axes of the subplot(s).
+        """
+        
+        # get wavelengths of all laser wavelength blocks that span subplot_sep*Gamma
+        if not wavelengths:
+            wavelengths = self._get_wavelength_regimes(subplot_sep=subplot_sep)
+        
+        # check iterating laser parameters
+        iters = self._identify_iter_params()[0]
+        if 'omega' in iters:
+            iters.pop('omega')
+        if iters:
+            raise Exception((f"The iterating parameters {list(iters.keys())} of laser "
+                             "objects is not supported for plotting (except for 'omega')."))
+
+        # generate subplots
+        axs = tools.auto_subplots(len(wavelengths), axs=axs, 
+                                  ylabel=f'Intensity (W/m$^2$)')
+        f_arr   = np.atleast_2d( self.getarr('f').T )
+        # scaling x
+        fac_x = {'GHz':1e9, 'MHz':1e6, 'kHz':1e3, 'Hz':1}[unit]
+        
+        for ax,wavelength in zip(axs,wavelengths):
+            
+            xconv   = lambda x: (x - c/wavelength*int(bool(relative_to_wavelengths)))/fac_x
+            yconv   = lambda y: y
+            
+            inds    = np.argwhere((f_arr[0]>c/wavelength-subplot_sep) \
+                                  & (f_arr[0]<c/wavelength+subplot_sep))[:,0]
+            
+            for j,f_arr_i in enumerate(f_arr):
+                
+                if f_arr.shape[0] != 1:
+                    color   = plt.get_cmap(cmap)(j/(len(f_arr)-1))
+                    fill_between_kwargs.update(color=color)
+                    
+                f_cut   = f_arr_i[inds]
+                spectrum = []
+                for i in inds:
+                    la = self[i]
+                    if std:
+                        x_ext   = std*xaxis_ext # extension on the x axis
+                        xaxis = np.linspace(min(f_cut)-x_ext, max(f_cut)+x_ext, N_points)
+                        y = tools.gaussian(xaxis, a=la.I, x0=f_arr_i[i], std=std, y_off=0)
+                        spectrum.append(y)
+                    else:
+                        ax.plot(2*[xconv(f_arr_i[i])], [0, yconv(la.I)],
+                                lw=2, **plot_kwargs)
+                        # ax.axvline((la.f-c/wavelength)/fac_x, ymin=0, ymax=la.I/Inorm,
+                        #            color='grey', lw=2, alpha=1)
+                if std:
+                    spectrum = np.sum(spectrum, axis=0)
+                    if fill_between_kwargs:
+                        ax.fill_between(xconv(xaxis), 0, yconv(spectrum), **fill_between_kwargs)
+                    if plot_kwargs:
+                        ax.plot(xconv(xaxis), yconv(spectrum),
+                                **plot_kwargs)
+            xlabel = f'Frequency ({unit})'
+            if relative_to_wavelengths:
+                xlabel += f" at {wavelength*1e9:f} nm"
+            ax.set_xlabel(xlabel)
+            if invert:
+                ax.yaxis.set_inverted(True)  # inverted axis with autoscaling
+            
+        return axs
+    
     def __delitem__(self,index):
         """delete lasers using del system.lasers[<normal indexing>], or delete all del system.lasers[:]"""
         #delete lasers with del system.lasers[<normal indexing>], or delete all del system.lasers[:]
