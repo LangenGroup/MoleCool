@@ -1329,24 +1329,52 @@ class ElectronicState:
         else:
             return DF1
         
-    def get_states_as_DF(self,onlygoodQuNrs=False,Hcasebasis=False):
-        """returns the states included in the instance :class:`ElectronicState`
-        in a nice format via the datatype `pandas.DataFrame` in order to be printed.
-        But at first any states have to be added via :func:`build_states`.
+    # def get_states_as_DF(self,onlygoodQuNrs=False,Hcasebasis=False):
+    #     """returns the states included in the instance :class:`ElectronicState`
+    #     in a nice format via the datatype `pandas.DataFrame` in order to be printed.
+    #     But at first any states have to be added via :func:`build_states`.
 
+    #     Parameters
+    #     ----------
+    #     onlygoodQuNrs : bool, optional
+    #         specifies if only the good Quantum numbers are included for getting
+    #         a better overview of the printed DataFrame. The default is False.
+    #     Hcasebasis : bool, optional
+    #         specifies whether the pure states or the states in the respective
+    #         Hund's case basis are shown.
+
+    #     Returns
+    #     -------
+    #     pandas.DataFrame
+    #         the rounded DataFrame comprising the pure states to be nicely printed
+    #     """
+    #     if Hcasebasis:
+    #         if len(self.states_Hcase) == 0:
+    #             self.calc_basis_change()
+    #         states = self.states_Hcase
+    #     else:
+    #         states = self.states
+            
+    #     for i,st in enumerate(states):
+    #         if i==0: DF = st.DF(onlygoodQuNrs)
+    #         else:    DF = DF.append(st.DF(onlygoodQuNrs),ignore_index=True)
+    #     return DF
+    
+    def get_states_as_DF(self, onlygoodQuNrs=False, Hcasebasis=False):
+        """Returns the states included in the instance :class:`ElectronicState`
+        in a nice format via `pandas.DataFrame`.
+    
         Parameters
         ----------
         onlygoodQuNrs : bool, optional
-            specifies if only the good Quantum numbers are included for getting
-            a better overview of the printed DataFrame. The default is False.
+            Whether to include only the good quantum numbers. Default is False.
         Hcasebasis : bool, optional
-            specifies whether the pure states or the states in the respective
-            Hund's case basis are shown.
-
+            Whether to use Hund's case basis. Default is False.
+    
         Returns
         -------
         pandas.DataFrame
-            the rounded DataFrame comprising the pure states to be nicely printed
+            A rounded DataFrame comprising the pure states.
         """
         if Hcasebasis:
             if len(self.states_Hcase) == 0:
@@ -1354,11 +1382,10 @@ class ElectronicState:
             states = self.states_Hcase
         else:
             states = self.states
-            
-        for i,st in enumerate(states):
-            if i==0: DF = st.DF(onlygoodQuNrs)
-            else:    DF = DF.append(st.DF(onlygoodQuNrs),ignore_index=True)
-        return DF
+    
+        df_list = [st.DF(onlygoodQuNrs) for st in states]
+        return pd.concat(df_list, ignore_index=True)
+
     
     def calc_basis_change(self):
         '''Calculates the Hund's case states from the pure case a states and determines

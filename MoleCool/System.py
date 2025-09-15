@@ -108,11 +108,12 @@ from scipy.constants import c,h,hbar,pi,g,physical_constants
 from scipy.constants import k as k_B
 from scipy.constants import u as u_mass
 from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
-from .Lasersystem import *
-from .Levelsystem import *
-from . import tools
-from .tools import save_object, open_object, ODEs
-from .Bfield import Bfield
+import MoleCool
+from MoleCool.Lasersystem import *
+from MoleCool.Levelsystem import *
+from MoleCool import tools
+from MoleCool.tools import save_object, open_object, ODEs
+from MoleCool.Bfield import Bfield
 import time
 import sys, os
 from copy import deepcopy
@@ -887,6 +888,8 @@ class System:
             
         #: execution time for the ODE solving
         self.exectime = time.perf_counter() - start_time
+        
+        if verbose: print('Verifying calculations.')
         self._verify_calculation()
         if return_fun == True: return {'system':self}
         if return_fun: return {**return_fun(self),'steps':step+1,'exectime':self.exectime}
