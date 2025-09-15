@@ -4,7 +4,7 @@ Created on Thu Mar  9 14:18:38 2023
 
 @author: fkogel
 
-v3.4.7
+v3.5.0
 
 This module contains all different kinds of tools to be used in the other main
 modules.
@@ -19,6 +19,7 @@ import os, json
 import pickle #_pickle as pickle
 import time
 from collections.abc import Iterable
+from collections import namedtuple
 #%%
 def save_object(obj,filename=None):
     """Save an entire class with all its attributes (or any other python object).
@@ -64,6 +65,29 @@ def open_object(filename):
         output = pickle.load(input)
     return output
 
+def return_fun_default(system):
+    NeNum       = system.levels.uNum
+    dic         = dict(
+        exectime    = system.exectime,
+        photons     = system.photons, #np.squeeze()
+        success     = system.success,
+        )
+    if 'steadystate' in system.args and system.args['steadystate']:
+        dic.update(
+            F       = system.F.mean(axis=-1),
+            Ne      = system.N[-NeNum:,:].sum(axis=0).mean(),
+            steps   = system.step+1,
+            )
+    else:
+        tNum    = obj.t.size//10
+        dic.update(
+            F       = system.F[:,-tNum:].mean(axis=-1),
+            Ne      = system.N[-NeNum:,-tNum:].sum(axis=0).mean(),
+            )
+    
+    return dic
+    # return dict(system=system)
+    
 #%%
 def get_constants_dict(name=''):
     def openjson(root_dir):
@@ -114,7 +138,6 @@ def make_axes_invisible(axes,xaxis=False,yaxis=False,
 #%%
 def multiproc(obj,kwargs):
     #___problem solving with keyword arguments
-    kwargs['mp'] = False
     for kwargs2 in kwargs['kwargs']:
         kwargs[kwargs2] = kwargs['kwargs'][kwargs2]
     del kwargs['self']
@@ -123,35 +146,7 @@ def multiproc(obj,kwargs):
     #no looping through magnetic field strength or direction for rateeqs so far
     if obj.calcmethod == 'rateeqs': obj.Bfield.reset()
     
-    #___expand dimensions of strength, direction, v0, r0 in order to be able to loop through them    
-    if np.array(obj.Bfield.strength).ndim == 0:   strengths = [obj.Bfield.strength]
-    else:                               strengths = obj.Bfield.strength
-    if np.array(obj.Bfield.direction).ndim == 1:  directions = [obj.Bfield.direction]
-    else:                               directions = obj.Bfield.direction    
-    if obj.r0.ndim == 1:    r0_arr = obj.r0[None,:]
-    else:                   r0_arr = obj.r0
-    if obj.v0.ndim == 1:    v0_arr = obj.v0[None,:]
-    else:                   v0_arr = obj.v0
-    
-    #___loop through laser objects to get to know which variables have to get
-    #___iterated and how many iterations
-    #--> for the dictionaries used here it'S important that the order is ensured
-    #    (this is the case since python 3.6 - now (3.8))
-    laser_list = []
-    laser_iters_N = {}
-    for l1,la in enumerate(obj.lasers):
-        laser_dict = {}
-        for key in ['omega','freq_Rabi','I','phi','beta','k','r_k','f_q']:
-            value = la.__dict__[key]
-            if (np.array(value).ndim == 1 and key not in ['k','r_k','f_q']) \
-                or (np.array(value).ndim == 2 and key in ['k','r_k','f_q']): #or also with dict comprehension
-                laser_dict[key] = value
-                laser_iters_N[key] = len(value)
-        laser_list.append(laser_dict)
-    laser_iters = list(laser_iters_N.keys())
-    # if kwargs['verbose']: print(laser_list,laser_iters,laser_iters_N)
-    
-    #___recursive function to loop through all iterable laser variables
+    #___recursive function to loop through all iterable laser variables and append result objects
     def recursive(_laser_iters,index):
         if not _laser_iters:
             for i,dic in enumerate(laser_list):
@@ -159,7 +154,6 @@ def multiproc(obj,kwargs):
                     # if kwargs['verbose']: print('Laser {}: key {} is set to {}'.format(i,key,value[index[key]]))
                     obj.lasers[i].__dict__[key] = value[index[key]]
                     #or more general here: __setattr__(self, attr_name, value)
-            # if kwargs['verbose']: print('b1={},b2={},b3={},b4={}'.format(b1,b2,b3,b4))
             # result_objects.append(pool.apply_async(np.sum,args=(np.arange(3),)))
             if obj.calcmethod == 'OBEs':
                 result_objects.append(pool.apply_async(deepcopy(obj).calc_OBEs,kwds=(kwargs)))
@@ -174,24 +168,29 @@ def multiproc(obj,kwargs):
     #___Parallelizing using Pool.apply()
     pool = multiprocessing.Pool(obj.multiprocessing['processes'],
                                 maxtasksperchild=obj.multiprocessing['maxtasksperchild']) #Init multiprocessing.Pool()
-    result_objects = []
-    iters_dict = {'strength': len(strengths),
-                  'direction': len(directions),
-                  'r0':len(r0_arr),
-                  'v0':len(v0_arr),
-                  **laser_iters_N}
+    result_objects  = []
+
+    # identify which parameters to loop through (including Bfield, v0, r0, laser parameters)
+    laser_iters_N, laser_list = obj.lasers._identify_iter_params()
+    iters_dict      = dict(obj._identify_iter_params(), **laser_iters_N)
+    
+    #___expand dimensions of v0, r0 in order to be able to loop through them
+    r0_arr          = np.atleast_2d(obj.r0)
+    v0_arr          = np.atleast_2d(obj.v0)
     #if v0_arr and r0_arr have the same length they should be varied at the same time and not all combinations should be calculated.
-    if len(r0_arr) == len(v0_arr) and len(r0_arr) > 1: del iters_dict['v0']
+    if len(r0_arr) == len(v0_arr) and len(r0_arr) > 1:
+        del iters_dict['v0']
+    
     #___looping through all iterable parameters of system and laser
-    for b1,strength in enumerate(strengths):
-        for b2,direction in enumerate(directions):
+    for b1,strength in enumerate(np.atleast_1d(obj.Bfield.strength)):
+        for b2,direction in enumerate(np.atleast_2d(obj.Bfield.direction)):
             obj.Bfield.turnon(strength,direction)
             for b3,r0 in enumerate(r0_arr):
                 obj.r0 = r0
                 for b4,v0 in enumerate(v0_arr):
                     if (len(r0_arr) == len(v0_arr)) and (b3 != b4): continue
                     obj.v0 = v0
-                    recursive(laser_iters,{})
+                    recursive(list(laser_iters_N.keys()),{})
                     
     if kwargs['verbose']: print('starting calculations for iterations: {}'.format(iters_dict))
     time.sleep(.5)
@@ -210,7 +209,6 @@ def multiproc(obj,kwargs):
     pool.join()     # Wait for the worker processes to exit.
     
     out = {}
-    iters_dict = {key:value for key,value in list(iters_dict.items()) if value != 1}
     for i,key in enumerate(keys):
         first_el = np.array(results[0][i])
         if first_el.size == 1:
@@ -220,21 +218,8 @@ def multiproc(obj,kwargs):
             out[key] = np.squeeze(np.reshape(np.concatenate(
                 np.array(results,dtype=object)[:,i], axis=None), tuple([*iters_dict.values(),*(first_el.shape)])))
     
-    return out, iters_dict# also here iters_dict with actual values???
-
-                    # index = {}
-                    # for l1 in range(laser_iters_N['omega']):
-                    #     index['omega'] = l1  
-                    #     for l2 in range(laser_iters_N['k']):
-                    #         index['k'] = l2
-                    #         for i,dic in enumerate(laser_list):
-                    #             for key,value in dic.items():
-                    #                 print('Laser {}: key {} is set to {}'.format(i,key,value[index[key]]))
-                    #                 # obj.lasers[i].__dict__[key] = value[index[key]]
-                    # if calling_fun == 'calc_OBEs':
-                        # result_objects.append(pool.apply_async(np.sum,args=(np.arange(3),)))
-                        # result_objects.append(mp_calc(obj,betaB[c1,c2,:],**kwargs)) # --> without Pool parallelization
-                    # result_objects.append(pool.apply_async(deepcopy(obj).calc_OBEs,kwds=(kwargs)))
+    Results = namedtuple("Results_OBEs_rateeqs", ["vals", "iters"])
+    return Results(out, iters_dict)
 
 #%%
 def vtoT(v,mass=157):

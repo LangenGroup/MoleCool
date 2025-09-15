@@ -4,7 +4,7 @@ Created on Tue June 09 10:17:00 2020
 
 @author: fkogel
 
-v3.4.0
+v3.5.0
 
 This module contains the main class :class:`~System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
@@ -108,12 +108,11 @@ from scipy.constants import c,h,hbar,pi,g,physical_constants
 from scipy.constants import k as k_B
 from scipy.constants import u as u_mass
 from sympy.physics.wigner import clebsch_gordan,wigner_3j,wigner_6j
-import MoleCool
-from MoleCool.Lasersystem import *
-from MoleCool.Levelsystem import *
-from MoleCool import tools
-from MoleCool.tools import save_object, open_object, ODEs
-from MoleCool.Bfield import Bfield
+from .Lasersystem import *
+from .Levelsystem import *
+from . import tools
+from .tools import save_object, open_object, ODEs, return_fun_default
+from .Bfield import Bfield
 import time
 import sys, os
 from copy import deepcopy
@@ -185,7 +184,8 @@ class System:
     def calc_rateeqs(self,t_int=20e-6,t_start=0.,dt=None,t_eval = [],
                      magn_remixing=False, magn_strength=8,
                      position_dep=False, trajectory=False,
-                     verbose=True, mp=False,return_fun=None,**kwargs):
+                     verbose=True, return_fun=return_fun_default,
+                     **kwargs):
         """Calculates the time evolution of the single level populations with
         rate equations.        
 
@@ -231,9 +231,6 @@ class System:
         verbose : bool, optional
             whether to print additional information like execution time or the
             scattered photon number. The default is True.
-        mp : bool, optional
-            determines if multiple parameter configurations are calculated using
-            multiprocessing. The default is False.
         return_fun : function-type, optional
             if `mp` == True, the returned dictionary of this function determines
             the quantities which are save for every single parameter configuration.
@@ -267,7 +264,8 @@ class System:
         
         #___start multiprocessing if desired only after calculating the levels
         #   properties so that they don't have to be re-calculated every time.
-        if mp: return self._start_mp()
+        if self._identify_iter_params() or self.lasers._identify_iter_params()[0]:
+            return self._start_mp()
         
         #___parameters belonging to the lasers  (and partially to the levels)
         # wave vector k
@@ -349,7 +347,8 @@ class System:
         #: solution of the time dependent populations N
         self.N = sol.y[:lNum+uNum]
         self._verify_calculation()    
-        if return_fun: return return_fun(self)           
+        if return_fun == True: return {'system':self}
+        elif return_fun: return return_fun(self)   
         
     #%%        
     def plot_all(self):
@@ -697,7 +696,8 @@ class System:
     def calc_OBEs(self, t_int=20e-6, t_start=0., dt=None, t_eval = [],
                   magn_remixing=False, freq_clip_TH=500, steadystate=False,
                   position_dep=False, rounded=False,
-                  verbose=True, mp=False, return_fun=None, **kwargs):
+                  verbose=True, return_fun=return_fun_default,
+                  **kwargs):
         """Calculates the time evolution of the single level populations with
         the optical Bloch equations.
 
@@ -753,9 +753,6 @@ class System:
         verbose : bool, optional
             whether to print additional information like execution time or the
             scattered photon number. The default is True.
-        mp : bool, optional
-            determines if multiple parameter configurations are calculated using
-            multiprocessing. The default is False.
         return_fun : function-type, optional
             if `mp` == True, the returned dictionary of this function determines
             the quantities which are save for every single parameter configuration.
@@ -791,7 +788,8 @@ class System:
             self.om_eg  = np.around(self.om_eg/rounded)*rounded
         
         #___start multiprocessing if desired
-        if mp: return self._start_mp()
+        if self._identify_iter_params() or self.lasers._identify_iter_params()[0]:
+            return self._start_mp()
         
         #___parameters belonging to the lasers (and partially to the levels)
         # Rabi frequency in dimensionless units (lNum,uNum,pNum)
@@ -845,7 +843,7 @@ class System:
         #___have to be performed while the occupations between this steps are compared
         if not steadystate:
             self._evaluate(t_start, t_int, dt, N0mat)
-            step = 0
+            self.step = 0
         else:
             #___initial propagation of the equations for reaching the equilibrium region
             if self.steadystate['t_ini']:
@@ -873,7 +871,7 @@ class System:
             m1      = self.N.mean(axis=1)
             # if self.steadystate['period'] == None: t_int *= 0.1
             con1, con2 = self.steadystate['condition']
-            for step in range(1,self.steadystate['maxiters']):
+            for self.step in range(1,self.steadystate['maxiters']):
                 self._evaluate(t_start, t_int, dt, N0mat)
                 m2 = self.N.mean(axis=1)
                 # print('diff & prop',np.all(np.abs(m1-m2)*1e2<con1),np.all(np.abs(1-m1/m2)*1e2 <con2))
@@ -884,15 +882,13 @@ class System:
                     m1      = m2
                     N0mat   = self.ymat[:,:,-1]
                     t_start = self.t[-1]       
-            if verbose: print(' calculation steps: ',step+1)
+            if verbose: print(' calculation steps: ',self.step+1)
             
         #: execution time for the ODE solving
         self.exectime = time.perf_counter() - start_time
-        
-        if verbose: print('Verifying calculations.')
         self._verify_calculation()
         if return_fun == True: return {'system':self}
-        if return_fun: return {**return_fun(self),'steps':step+1,'exectime':self.exectime}
+        elif return_fun: return return_fun(self)
     
     def _verify_calculation(self):
         dev_TH  = {'rateeqs':1e-8,'OBEs':1e-6}[self.calcmethod]
@@ -929,6 +925,32 @@ class System:
             except:
                 pass
         return None
+    
+    def _identify_iter_params(self):
+        """Identify which parameters are iterative arrays  to loop through
+        including magnetic field strength and direction, initial position and
+        velocity. This function is inevitable to determine whether multiple
+        evaluations of the OBEs and rate equations are efficiently conducted 
+        using the multiprocessing package from python (see :meth:`tools.multiproc`
+        and :meth:`Lasersystem._identify_iter_params`).
+
+        Returns
+        -------
+        iters_dict : dict
+            Dictionary with all iterative parameters and their number of iterations.
+        """
+        iters_dict = {}
+        
+        for obj, ndim, label in [
+                (self.Bfield.strength, 0, 'strength'),
+                (self.Bfield.direction, 1, 'direction'),
+                (self.r0, 1, 'r0'),
+                (self.v0, 1, 'v0'),
+                ]:
+            if np.array(obj).ndim != ndim:
+                iters_dict[label] = len(obj)        
+        
+        return iters_dict
     
     def reset_N0(self):
         """Reset (last created) initial population self.N0 and initial populations
@@ -1142,34 +1164,51 @@ class System:
             if (self.args['trajectory']) and (self.levels.mass==0.0):
                 raise ValueError('No mass is provided for trajectory to be calculated')
         # check if some lasers are completely off to some states or if some states are not addressed by any laser!?
-        
-    def average_variables(maxsize=20e3):
-        '''
-        
-
-        Parameters
-        ----------
-        maxsize : int, optional
-            With this option the attributes ``N``, ``t``, ``Nscatt`` and
-            ``Nscattrate`` are shrunken to this value by averaging over the other variable
-            entries. Usefull for preventing the files to get to big in disk space.
-            The default is 20e3 which results approximately in a file size of 12MB.
-            The default is 20e3.
-        '''
-        if 't' in self.__dict__:
-            maxs = maxsize
-            if self.t.size > 2*maxs:
-                var_list = [self.N,self.t,self.Nscatt,self.Nscattrate,self.v,self.r]
-                for i,var in enumerate(var_list):
-                    sh1 = int(var.shape[-1])
-                    n1 = int(sh1 // maxs)
-                    if var.ndim > 1:
-                        var = var[:,:sh1-(sh1%n1)].reshape(var.shape[0],-1, n1).mean(axis=-1)
-                    else: var = var[:sh1-(sh1%n1)].reshape(-1, n1).mean(axis=-1)
-                    var_list[i] = var
-                self.N,self.t,self.Nscatt,self.Nscattrate,self.v,self.r = var_list
-            #self.N = np.array(self.N,dtype='float16')
             
+    def __set_v0r0(self, vec=[0,0,0], direction=[], label='v0'):
+        vec = np.array(vec, dtype=np.float64)
+        
+        if isinstance(direction, str):
+            direction = {'x':[1,0,0],'y':[0,1,0],'z':[0,0,1],'':[]}[direction]
+        if np.any(direction):
+            direction = np.array(direction)/np.linalg.norm(direction)
+            if direction.shape != (3,):
+                raise Exception(f"direction vector must be of shape (3,) instead of {direction.shape}")
+            vec = direction[None,:]*vec[:,None]
+        
+        if vec.ndim not in [1,2]:
+            raise Exception(f"{label} must have one or two dimensions instead of {vec.ndim}")
+        if vec.shape[-1] != 3:
+            raise Exception(f"Last dimension of {label} must be of length 3 instead of {vec.shape[-1]}")
+        
+        return vec
+    
+    def set_v0(self, v0=[0,0,0], direction=[]):
+        self.__v0 = self.__set_v0r0(vec=v0, direction=direction, label='v0')
+        return self.__v0
+    
+    def set_r0(self, r0=[0,0,0], direction=[]):
+        self.__r0 = self.__set_v0r0(vec=r0, direction=direction, label='r0')
+        return self.__r0
+    
+    @property
+    def v0(self):
+        """Initial velocity vector or array of vectors."""
+        return self.__v0
+    
+    @v0.setter
+    def v0(self,val):
+        self.set_v0(v0=val)
+        
+    @property
+    def r0(self):
+        """Initial position vector or array of vectors."""
+        return self.__r0
+    
+    @r0.setter
+    def r0(self,val):
+        self.set_r0(r0=val)
+    
     def draw_levels(self,GrSts=None,ExSts=None,branratios=True,lasers=True,
                     QuNrs_sep=[], br_fun='identity', br_TH=0.01, # 1e-16 default
                     freq_clip_TH='auto', cmap='viridis',yaxis_unit='MHz'):
