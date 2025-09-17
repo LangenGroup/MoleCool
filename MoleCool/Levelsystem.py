@@ -785,6 +785,8 @@ class Levelsystem:
         states = []
         ElGr, ElEx = list(states_sets.keys())
         for i,gr in enumerate(states_sets[ElGr]):
+            if gr.is_lossstate:
+                continue
             for j,ex in enumerate(states_sets[ElEx]):
                 if use_calc_props:
                     branching = self.calc_branratios()[np.ix_(inds2[0][i],inds2[1][j])].sum()
@@ -955,7 +957,7 @@ class Levelsystem:
             if legend:
                 ax.legend(title=', '.join(QuNrs[0]) + '$\\rightarrow$' + "', ".join(QuNrs[1]) + "'")
             data_list.append(dict(x=xaxis+E_offset, sum=spectrum, single=np.array(y_arr)))
-            
+        
         if len(wavelengths) == 1:
             return axs[0], data_list[0]
         else:
@@ -1713,7 +1715,7 @@ class State:
         """
         return_bool = True
         for QuNr,val in QuNrvals.items():
-            if (QuNr not in self.__dict__) and (QuNr in ['gs','exs','ims']):
+            if QuNr not in self.QuNrs:
                 return_bool = False
                 break
             if self.__dict__[QuNr] != val:

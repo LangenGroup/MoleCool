@@ -168,7 +168,7 @@ class System:
                             'condition'   : [0.1,50],
                             'period'      : None}
         """dictionary for parameters specifying the multiprocessing of calculations."""
-        self.multiprocessing = {'processes' : multiprocessing.cpu_count()-1,#None
+        self.multiprocessing = {'processes' : int(multiprocessing.cpu_count()*0.95),#None
                                 'maxtasksperchild' : None,
                                 'show_progressbar' : True,
                                 'savetofile'       : True}
