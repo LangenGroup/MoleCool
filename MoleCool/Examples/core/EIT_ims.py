@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar 10 15:09:30 2023
+EIT option 2
+============
 
-@author: fkogel
-
-tested with version v3.1.1
+Here, we have an alternative to the original EIT examples using an intermediate
+electronic state.
 """
-from System import *
+from MoleCool import *
 
 det_pump = +1*1e6 # pump laser detuning for for EIT resonance position in Hz
 I_probe  = 0.2 # laser intensity of probe beam in W/m^2
 Gamma_r  = 1e-3
 I_pump   = 5.0/Gamma_r # laser intensity of pump beam in W/m^2
 gr_split = 1000 # splitting between both ground states in MHz
-#%%
+# %%
 Deltas  = np.array([*np.arange(-4,-0.5,0.1),*np.arange(-0.5,0.,0.01)])*1e6
 Deltas  = np.array([*Deltas,*(-np.flip(Deltas[:-1]))]) + det_pump
 

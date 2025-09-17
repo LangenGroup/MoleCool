@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jun  1 10:35:14 2022
-
-@author: fkogel
-
-tested with version v3.1.0
+Simple Test 1 - BaF
+===================
 """
 
 from MoleCool import System, np

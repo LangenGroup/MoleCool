@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb  1 13:03:28 2021
-
-@author: Felix
-
-v3.5.0
-
 Module for calculating the eigenenergies and eigenstates of diatomic molecules
 exposed to external fields.
 Therefore molecular constants which are measured and fitted in spectroscopic

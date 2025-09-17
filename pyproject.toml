@@ -2,18 +2,19 @@
 requires = [
     "setuptools >= 65",
     "wheel >= 0.38",
+    "setuptools_scm", # for automatic versioning
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
-
 # name: String, REQUIRED
 name = "MoleCool"
 
 # version: String, REQUIRED
 # Should follow PEP 440 rules
 # Can be provided dynamically, see the lesson on publishing
-version = "3.4.2"
+# version = "3.4.2"
+dynamic = ["version"]
 
 # description: String
 # A simple summary of the project
@@ -80,7 +81,20 @@ dependencies = [
 
 [project.optional-dependencies]
 doc = [
-    "sphinx",
+    "sphinx", # Core requirement
+    "sphinx-book-theme", # Theme
+    "sphinx-gallery", # auto-generated examples in a gallery
+    "sphinx-copybutton",
+    "sphinx-design", # design elements
+    "sphinx-exec-code", # execute individual code blocks
+    # "myst-nb",
+]
+dev = [
+    "setuptools>=42",
+    "wheel",
+    "setuptools-scm",
+    "build", # standard tool to create a wheel file for uploading included in ./dist
+    "twine", # tool for uploading our package to PyPI
 ]
 
 [project.urls]
@@ -92,3 +106,8 @@ Homepage = "https://github.com/LangenGroup/"
 
 [tool.setuptools.package-data]
 "*" = ["*.json"]
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+local_scheme = "node-and-date"
+write_to = "MoleCool/_version.py"

@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar  4 17:45:03 2024
-
-@author: fkogel
-
-v3.4.2
-
 This Module contains different type of functions and classes, e.g. to calculate
 simple linear trajectories through multiple apertures and to evaluate trajectories
 as solutions of the Monte Carlo simulations.
@@ -62,7 +56,7 @@ def load_init_distr(system, fname, samplesize=None, x_init=0., plotting=False):
 
     Parameters
     ----------
-    system : System
+    system : ~MoleCool.System.System
         The System into which the distributions should be stored.
     fname : str
         file name of the distribution pkl file.
@@ -400,7 +394,7 @@ def get_dist(system, key='r', unperturbed=False, radial=False,
 
     Parameters
     ----------
-    system : System
+    system : ~MoleCool.System.System
         System instance from which the distributions are to be loaded.
     key : str, optional
         Type of distribution. Can be 'r' for position, 'v' for velocity and
@@ -459,7 +453,7 @@ def get_hist_vals(system, yz='z', w=0, radial=False,
 
     Parameters
     ----------
-    system : System
+    system : ~MoleCool.System.System
         System instance from which the distributions are to be loaded..
     yz : str, optional
         Axis for which the histogram should be calculated. The default is 'z'.
@@ -520,7 +514,7 @@ def plot_hist(system, key='r', yz='z', y_off=0,
     
     Parameters
     ----------
-    system : System
+    system : ~MoleCool.System.System
         See :meth:`TrajectoryApertures.get_hist_data`.
     key : str, optional
         See :meth:`TrajectoryApertures.get_hist_data`. The default is 'r'.

@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Mar  9 13:58:35 2023
-
-@author: fkogel
-
-v3.2.2
-
 This module contains the class :class:`Bfield` which provides methods to represent
 and imitate a realistic DC magnetic field.
 The main intended purpose of this class is to be part of the :class:`System.System`

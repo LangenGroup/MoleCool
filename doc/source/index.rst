@@ -1,63 +1,95 @@
-Welcome to the Diatomic Laser Cooling Simulations Documentation!
-================================================================
+Welcome to MoleCool's documentation!
+====================================
 
-Information
------------
-This python software includes two different programs:
+``MoleCool`` is a Python library for numerical modeling of *light-matter interactions*, 
+specializing in **laser cooling of molecules**.
+It is designed for researchers and physicists working with **atomic and molecular systems**,
+from simple few-level models and diatomics to polyatomics and even radioactive species.
 
-1. Molecular Dynamics Simulation Code
-	The first code only uses pre-defined constants (like the dipole matrix,
-	hyperfine freqs, g-factors, ...) from a .json file which are required
-	to calculate dynamics via the rate or optical Bloch equations.
-	
-2. Molecular Spectra Calculation Code
-	In comparison, the second code only uses constants of the effective
-	Hamiltonian and Quantum numbers of the level structure to evaluate the
-	constants (like dipole matrix, hyperfine freqs, g-factors, ...) which
-	are needed for the dynamics simulation code.
-
---------------------------
-
-To get started:
-^^^^^^^^^^^^^^^
-
-+ SVN Checkout of the repository
-+ the first command in python3 should be::
-	
-	>>> from System import *
-	
-+ This command should be called from the **same directory** as where the
-  modules are stored. Otherwise the module's directory can also be included
-  in an environment variable named "PYTHONPATH" in Windows to call the
-  command from an arbitrary working directory
-+ Then, you see if some further packages have to be installed (e.g. numba, pandas, ..)
-+ Afterwards, some examples from the module's documentation can be tried.
-
-----------------------------
+Current version: |version|
 
 
-Code Structure:
-^^^^^^^^^^^^^^^
+.. grid:: 1 2 2 2
+   :gutter: 3 3 3 4
 
-.. figure:: CodeStructure.jpg
-   :scale: 70
-   :align: center
-   :alt: map to buried treasure
-   :figclass: align-center
+
+   .. grid-item-card:: :material-regular:`download;2em` Installation
+      :link: installation
+      :link-type: doc
+      :class-card: sd-text-center sd-shadow
+
+      Instructions on how to install MoleCool on your system.
+      +++
+
+      .. button-ref:: installation
+         :color: warning
+         :expand:
+
+         To the Installation Guide
+         
+   .. grid-item-card:: :material-regular:`menu_book;2em` User Guide
+      :link: user_guide/introduction
+      :link-type: doc
+      :class-card: sd-text-center sd-shadow
+      
+      Learn how to get started and explore its main features step by step.
+      +++
+
+      .. button-ref:: user_guide/introduction
+         :color: primary
+         :expand:
+
+         To the User Guide
+
+   .. grid-item-card:: :material-regular:`science;2em` Examples
+      :link: auto_examples/core/index
+      :link-type: doc
+      :class-card: sd-text-center sd-shadow
+
+      Browse examples and tutorials generated with sphinx-gallery.
+      +++
+      
+      .. button-ref:: auto_examples/core/index
+         :color: success
+         :expand:
+
+         To the Examples
+
+   .. grid-item-card:: :material-regular:`api;2em` API Reference
+      :link: api
+      :link-type: doc
+      :class-card: sd-text-center sd-shadow
+      
+      Full API documentation with all modules, classes, and functions.
+      +++
+
+      .. button-ref:: api
+         :color: secondary
+         :expand:
+
+         To the API Reference
+
+.. seealso::
    
-   Class diagram of the ``Molecular Dynamics Simulation Code``. While methods
-   are characterized by parentheses,
-   attributes and properties are labeled without parentheses.
-   Class composition is marked by arrows with diamonds and class inheritance by open arrow tip.
+   For having a look on the source code in the GitHub repository:
 
+   .. button-link:: https://github.com/LangenGroup/MoleCool/
+      :color: secondary
+      :outline:
+    
+      :fab:`github` GitHub
 
 .. toctree::
    :maxdepth: 2
-   :caption: API documentation
-   
-   modules.rst
+   :hidden:
+   :caption: Contents:
 
-------------------------
+   installation
+   user_guide/index
+   examples
+   api
+
+-------------------------
 
 Indices and tables
 ==================
