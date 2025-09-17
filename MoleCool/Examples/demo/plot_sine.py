@@ -25,7 +25,6 @@ y = np.sin(x)
 plt.plot(x, y, label="sin(x)")
 plt.title("Simple sine wave")
 plt.legend()
-plt.show()
 
 # %%
 # This is a section header
