@@ -31,7 +31,7 @@ Creating a virtual environment
         .. code-block:: powershell
 
             # Create a virtual environment
-            python -m virtualenv -p python3.8 .venv
+            python -m virtualenv -p python3.10 .venv
 
             # Activate the virtual environment using:
             # - Command Prompt / cmd.exe
@@ -54,28 +54,41 @@ Creating a virtual environment
 Installing MoleCool
 -------------------
 
-Once your virtual environment is active (or your conda env is activated), install **MoleCool** using one of the following methods:
+Once your virtual environment is active (or your conda env is activated),
+install **MoleCool** using one of the following methods.
 
 .. tab-set::
 
-    .. tab-item:: pip (from PyPI)
+    .. tab-item:: pip (stable)
 
+        The easiest way is to install the latest stable release from PyPI.
+        This will install the version that has been officially released and tested.
+        
         .. code-block:: bash
 
+            python -m pip install --upgrade pip
             pip install MoleCool
 
-    .. tab-item:: conda (conda-forge)
+    .. tab-item:: conda (stable)
 
+        Using conda a stable release via conda-forge can be installed via:
+        
         .. code-block:: bash
 
             conda install -c conda-forge MoleCool
 
-    .. tab-item:: Manual (local repository folder)
+    .. tab-item:: git + pip (beta)
 
+        This requires ``git`` to be installed which is used to download
+        the latest development version of the module from GitHub initiating
+        a local copy of the repository.
+        
         .. code-block:: bash
 
-            # From a local wheel or source archive
-            pip install /path/to/downloaded/repository
+            git clone https://www.github.com/LangenGroup/MoleCool
+            cd MoleCool
+            python -m pip install --upgrade pip
+            pip install .
 
 
 Contributing
@@ -89,13 +102,25 @@ Contributing
 
        :fab:`github` GitHub
        
-    To contribute to the code development hosted on GitHub,
-    additional modules need to be installed, which can be achieved
-    by adding the devopment (dev) or documentation (doc) labels:
+    If you want to contribute to the code development hosted on GitHub,
+    manually clone the latest development version using git (see above) and
+    install the module along with optional dependencies for devopment or
+    documentation by using the ``dev`` and ``doc`` extras.
     
     .. code-block:: bash
 
-        pip install -e MoleCool[dev,doc]
+        pip install -e .[dev,doc]    
+
+    Adding the ``-e`` flag enables editable mode, which allows you to modify
+    the source code and immediately test changes without repeatedly
+    running ``pip install .``.
+    
+    .. important::
+        Do not import the package (``import MoleCool``) from the repository's
+        parent folder (as current working directory)
+        if it has the same name as the package (``MoleCool``).
+        Doing so can confuse Python, as it may mistake the repository folder
+        for the package itself.
     
 
 Verifying the installation

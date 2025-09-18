@@ -71,7 +71,6 @@ dependencies = [
     "numpy < 2.0",
     "numba >= 0.53.1",
     "pandas < 1.4",
-    "scikit-optimize==0.9.0",
     "scipy >= 1.5.4",
     "sympy < 1.13",
     "tqdm",
@@ -95,6 +94,7 @@ dev = [
     "setuptools-scm",
     "build", # standard tool to create a wheel file for uploading included in ./dist
     "twine", # tool for uploading our package to PyPI
+    #"scikit-optimize==0.9.0", # for bayesian optimization
 ]
 
 [project.urls]
@@ -106,6 +106,9 @@ Homepage = "https://github.com/LangenGroup/"
 
 [tool.setuptools.package-data]
 "*" = ["*.json"]
+
+[tool.setuptools]
+packages = ["MoleCool"]
 
 [tool.setuptools_scm]
 version_scheme = "post-release"
