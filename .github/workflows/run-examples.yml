@@ -1,0 +1,35 @@
+# This workflow will install Python dependencies, run example codes with a variety of Python versions on different operating systems.
+name: Run Example Scripts
+
+on:
+  workflow_dispatch:   # manual trigger for now
+  # push: # after each push or pull request
+  #   branches: [ "master" ]
+  # pull_request:
+  #   branches: [ "master" ]
+
+jobs:
+  run-examples:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.10"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .  # install your package in editable mode
+
+      - name: Run example scripts
+        run: python -m MoleCool.run_examples
