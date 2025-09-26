@@ -163,8 +163,24 @@ class Molecule:
         if self.__dict__[args[0]].grex == 'ground state':
             self.grstates.append(args[0])
         else: self.exstates.append(args[0])
+        
+    def build_states(self,Fmax,Fmin=None):
+        """Builds the individual Quantum states within all electronic states
+        defined within the Molecule's instance in the range from Fmin to Fmax
+        in units of the total angular momentum quantum number.
+        See :meth:`ElectronicState.build_states` for details.
+
+        Parameters
+        ----------
+        Fmax : float
+            maximum angular momentum quantum number.
+        Fmin : float, optional
+            minimum angular momentum quantum number. The default is None.
+        """
+        for ElSt in [*self.grstates, *self.exstates]:
+            self.__dict__[ElSt].build_states(Fmax=Fmax, Fmin=Fmin)
     
-    def calc_branratios(self,threshold=0.005,include_Boltzmann=True,
+    def calc_branratios(self,threshold=0.0,include_Boltzmann=True,
                         grstate=None,exstate=None):
         """
         calculates the linestrengths (by evaluating the electric dipole matrix)
@@ -186,8 +202,8 @@ class Molecule:
         Parameters
         ----------
         threshold : float, optional
-            all branching ratios below the threshold  in the range from 0.0
-            to 1.0 are set to zero. The default is 0.05.
+            all branching ratios below the threshold in the range from 0.0
+            to 1.0 are set to zero. The default is 0.0.
         include_Boltzmann : bool, optional
             determines if the Boltzmann factor is included weighting ground state
             levels with different energy dependent on the temperature.
@@ -240,7 +256,7 @@ class Molecule:
         #set all branching ratios smaller than the threshold to zero
         self.branratios = np.where(self.branratios<=threshold*np.max(self.branratios),0.0,self.branratios)
     
-    def calc_spectrum(self,limits=None,sigma=None,plotpoints=40000):
+    def calc_spectrum(self,limits=[],sigma=None,plotpoints=40000):
         """ calculates the spectrum in a certain frequency range using the
         branching ratios previously calculated in the method :func:`calc_branratios`.
         The resulting frequency and intensity arrays are not only returned but
@@ -252,7 +268,7 @@ class Molecule:
 
         Parameters
         ----------
-        limits : tuple, optional
+        limits : list, optional
             defines the frequency limits for the plotting the spectrum as list
             or tuple of size 2 in units of wavenumbers 1/cm. By default the
             complete range containing all transitions is chosen. 
@@ -275,7 +291,7 @@ class Molecule:
         grstate, exstate = self.branratios_labels
         X, A        = self.__dict__[grstate], self.__dict__[exstate]
         Gamma       = A.Gamma
-        if limits == None: #limits of the energiy range for the spectrum to be plotted
+        if len(limits) == 0:
             Emin,Emax   = np.min(self.E)-0.1 , np.max(self.E)+0.1
         else:
             Emin,Emax = limits
@@ -522,7 +538,7 @@ class Molecule:
                     *get_QuNr_keyval_pairs([self.X,self.A], [DF.index, DF.columns], QuNrs_const)]
         dic0[key_list] = dic
         dic0[key_list[:2]].update(vibr_values)
-
+        
         ##### level-specific #####
         for i, ElState in enumerate([GrState,ExState]):
             dic0['level-specific'].update(
@@ -592,7 +608,7 @@ class Molecule:
                 QuNrs_vals = E_index[QuNr].iloc[inds[:,0]] # ground state
                 
             E_arr   = np.array([E_np[ixy[0],ixy[1]] for ixy in inds]) # eigenenergies
-            ax.plot(xaxis_func(E_arr*cm2MHz*1e-6), QuNrs_vals, marker=markers[i], ls='', label=QuNr)
+            ax.plot(xaxis_func(E_arr), QuNrs_vals, marker=markers[i], ls='', label=QuNr)
             ax.set_ylabel('Quant. Nrs.')
             
         if legend:
@@ -741,7 +757,7 @@ class ElectronicStateConstants:
         value_arr = np.array([values,values2])
         DF = pd.DataFrame(value_arr.T,
                           index=pd.MultiIndex.from_arrays(np.array(index).transpose()),
-                          columns=['value [1/cm]','value [MHz]'])
+                          columns=['value (1/cm)','value (MHz)'])
         
         if formatting == 'all':
             pass    
@@ -845,7 +861,7 @@ class ElectronicStateConstants:
         ----------
         include_vdep_consts : bool, optional
             whether the dictionary includes also the calculated values, e.g.
-            :meth:`B_v`,:meth:`D_v`, and :meth:`A_v`. The default is True.
+            :meth:`B_v`, :meth:`D_v`, and :meth:`A_v`. The default is True.
         exclude_default : bool, optional
             whether the dictionary includes all possible constants (False) or only
             the constants which differ from the default values (True).
@@ -913,6 +929,12 @@ class ElectronicStateConstants:
     def __str__(self):
         return self.show(formatting='non-zero').to_string()
     
+    def __repr__(self):
+        return repr(self.show(formatting='non-zero'))
+    
+    def _repr_html_(self):
+        return self.show(formatting='non-zero')._repr_html_()
+    
     @property
     def b(self):
         return self['b_F'] - self['c']/3
@@ -965,7 +987,7 @@ class ElectronicState:
         
         Parameters
         ----------
-        label : string
+        label : str
             label of the electronic state: the first character of this string
             has to be specified as 'X' for a ground state or as 'A', 'B', 'C',
             ... for an excited state.
@@ -976,7 +998,7 @@ class ElectronicState:
             state as well as the absolute value of the quantum number Lambda.
             Can either be provided as integer :math:`0,1,2,3,...` or as the
             respective Greek symbol :math:`\Sigma,\Pi,\Delta,\Phi,...`.
-        Hcase : string, optional
+        Hcase : str, optional
             Hund's case describing the states within the electronic
             state manifold.
             Possible values: 'a' for pure Hund's case a, 'a_p' for parity
@@ -1269,10 +1291,6 @@ class ElectronicState:
             the rounded DataFrame comprising the eigenvalues and eigenstates to
             be nicely printed
         """
-        pd.options.display.max_columns = None   # in order to display all eigenstates
-        pd.options.display.max_rows = None      # even if there are a lot
-        # pd.set_option("display.precision", precision)
-        #pd.reset_option('display')
         if not self.eigenst_already_calc: self.calc_eigenstates()
         
         col_arr = [np.arange(len(self.Ew)),self.Ew]
@@ -1452,26 +1470,28 @@ class ElectronicState:
         if Bfield[0] == 0.0:  # prevent the first Bfield value to be zero
             Bfield[0] = Bfield[1]*1e-4
         
-        oldBfield = self.Bfield
-        if oldBfield == 0.0:
-            self.Bfield = 1e-5 #set to arbitrary non-zero value
-            self.build_states(self.Fmax,self.Fmin)
-        Ew_B_arr = np.zeros((len(Bfield),self.N))
+        # don't change states and magnetic field settings in self
+        ElSt = deepcopy(self)
+        
+        ElSt.mF_states  = True
+        ElSt.build_states(ElSt.Fmax, ElSt.Fmin)
+        
+        Ew_B_arr = np.zeros((len(Bfield),ElSt.N))
         for k,B in enumerate(Bfield):
-            self.Bfield = B
-            self.calc_eigenstates()
-            Ew_B_arr[k,:] = self.Ew
+            ElSt.Bfield = B
+            ElSt.calc_eigenstates()
+            Ew_B_arr[k,:] = ElSt.Ew
         
         # plotting 
-        Ew_B_arr = eigensort(Bfield,Ew_B_arr)
-        plt.figure('Zeeman splitting')
+        Ew_B_arr = eigensort(Bfield, Ew_B_arr)
+        plt.figure()
         for i in range(Ew_B_arr.shape[1]):
-            plt.plot(Bfield*1e4,Ew_B_arr[:,i],'-')
-        plt.xlabel('magnetic field in G')
-        plt.ylabel('Energy in cm$^{-1}$')
+            plt.plot(Bfield*1e4, Ew_B_arr[:,i], '-')
+            
+        plt.xlabel('Magnetic field (G)')
+        plt.ylabel('Energy (cm$^{-1}$)')
         
-        # set previous value to the Bfield variable
-        self.Bfield = oldBfield
+        return plt.gca()
         
     def export_OBE_properties(self, index_filter={}, rounded=None, QuNrs=[], 
                               HFfreq_offset=0, Bmax=1e-4, nested_dict=False,

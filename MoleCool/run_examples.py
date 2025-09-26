@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 import runpy
 import matplotlib.pyplot as plt
 import time
+import traceback
 
 # ANSI color codes
 GREEN = "\033[92m"
@@ -58,9 +59,11 @@ def run_example_scripts(filenames, args, verbose=True):
         try:
             # Run the script in an isolated namespace
             runpy.run_path(script, run_name="__main__")
-        except Exception as e:
+        except Exception:
             success = False
-            print(f"  {RED}Script {filename.name} failed with error: {e}{RESET}")
+            print(f"  {RED}Script {filename.name} failed with error:{RESET}")
+            traceback.print_exc()   # <-- prints the full traceback
+            print(RED + "  " + "-" * (n-2) + RESET)
     
         duration = time.time() - start_time
         summary.append((filename.name, success, duration))

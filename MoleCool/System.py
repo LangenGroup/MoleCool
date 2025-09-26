@@ -641,12 +641,14 @@ class System:
         if transitions and self.levels.exstates and self.levels.grstates and self.levels.states:
             kwargs_sum = transitions_kwargs.pop(
                 'kwargs_sum', dict(color='k',alpha=0.7,ls='--'))
+            
             self.levels.plot_transition_spectrum(
                 ax = axs,
                 wavelengths = wavelengths,
                 E_unit = unit,
                 relative_to_wavelengths = relative_to_wavelengths,
                 subplot_sep = subplot_sep,
+                kwargs_sum  = kwargs_sum,
                 **transitions_kwargs,
                 )
         

@@ -557,8 +557,9 @@ class Lasersystem:
         if 'omega' in iters:
             iters.pop('omega')
         if iters:
-            raise Exception((f"The iterating parameters {list(iters.keys())} of laser "
-                             "objects is not supported for plotting (except for 'omega')."))
+            raise Exception(
+                (f"The iterating parameters {list(iters.keys())} of laser "
+                "objects is not supported for plotting (except for 'omega')."))
 
         # generate subplots
         axs = tools.auto_subplots(len(wavelengths), axs=axs, 
