@@ -1,0 +1,6 @@
+/* only affect pandas tables */
+table.dataframe {
+    display: block;
+    overflow-x: auto;
+    max-height: 400px; /* optional: vertical scrolling */
+}
