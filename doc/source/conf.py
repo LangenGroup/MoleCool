@@ -62,7 +62,9 @@ sphinx_gallery_conf = {
     # Generate backreferences for documented functions/classes
     "doc_module": ("MoleCool",),  # replace with your package’s top-level module
     "backreferences_dir": "gen_modules/backreferences",
-    
+    "reference_url": {
+        "MoleCool": None,            # resolves to local API docs
+    },
     # "download_all_examples": False,   # disables .zip with .ipynb
     # "filename_pattern": r".*",        # process all .py
     # "pypandoc": False,
