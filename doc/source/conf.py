@@ -14,6 +14,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../..'))
 
+import sphinx_gallery.sorting
 from MoleCool import __version__
 
 # -- Project information -----------------------------------------------------
@@ -45,24 +46,43 @@ extensions = [
     # 'myst_nb',
     "sphinx_copybutton",
     'sphinx_design',
-    ] 
+    ]
+
+# manual order of example files as shown in the sphinx-gallery
+manual_order = [
+    "plot_RabiOsci_2level.py",
+    "plot_EIT.py",
+    "optcycl_3+1levels.py",
+    "optcycl_12+4levels.py",
+    "YbOH.py",
+    "chirp_slowing.py",
+    "plot_spectra_RaF.py",
+    "cooling_forces_RaF.py",
+    "cooling_forces.py",
+    "BCF.py",
+    "*",
+    ]
+
 
 sphinx_gallery_conf = {
     "examples_dirs": [
         "../../MoleCool/Examples/core",
-        "../../MoleCool/Examples/demo",
+        "../../MoleCool/Examples/misc",
         ],        # where your .py tutorials live
     "gallery_dirs": [
         "auto_examples/core",
-        "auto_examples/demo",
+        "auto_examples/misc",
         ],    # where the generated HTML goes
+    'within_subsection_order': sphinx_gallery.sorting.ExplicitOrder(manual_order),
     "remove_config_comments": True,
     # "filename_pattern": r"^((?!advanced).)*$",  # execute everything except examples_static
     
     # Generate backreferences for documented functions/classes
     "doc_module": ("MoleCool",),  # replace with your package’s top-level module
     "backreferences_dir": "gen_modules/backreferences",
-    
+    "reference_url": {
+        "MoleCool": None,            # resolves to local API docs
+    },
     # "download_all_examples": False,   # disables .zip with .ipynb
     # "filename_pattern": r".*",        # process all .py
     # "pypandoc": False,
@@ -156,7 +176,10 @@ html_theme = "sphinx_book_theme" #'pydata_sphinx_theme'##'sphinx_rtd_theme' # 's
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-# html_static_path = ['_static']
+html_static_path = ['_static']
+html_css_files = [
+    "custom.css",
+]
 
 
 

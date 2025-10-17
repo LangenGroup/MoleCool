@@ -18,7 +18,9 @@ from collections import namedtuple
 Results_OBEs_rateeqs = namedtuple("Results_OBEs_rateeqs", ["vals", "iters"])
 #%%
 def save_object(obj,filename=None):
-    """Save an entire class with all its attributes (or any other python object).
+    """Save any python object as a ``.pkl`` pickle file.
+    This is especially suitable for saving the :class:`MoleCool.System.System`
+    object with all its attributes.
     
     Parameters
     ----------
@@ -46,7 +48,7 @@ def save_object(obj,filename=None):
         pickle.dump(obj,output,protocol=4)
         
 def open_object(filename):
-    """Opens a saved object from a saved .pkl-file with all its attributes.    
+    """Open or load a saved python object from a ``.pkl`` file.
 
     Parameters
     ----------
@@ -62,6 +64,29 @@ def open_object(filename):
     return output
 
 def return_fun_default(system):
+    """Default function defining which values are returned after an evaluation of
+    :meth:`~.System.System.calc_OBEs` or :meth:`~.System.System.calc_rateeqs`.
+    This is especially important to collect important quantities when
+    simulating these internal dynamics for many times configurations
+    using :mod:`multiprocessing` module.
+    
+    Parameters
+    ----------
+    system : :class:`MoleCool.System.System`
+        instance of System after simulating the internal dynamics.
+
+    Returns
+    -------
+    dic : dict
+        dictionary with important quantities, such as
+        
+        - execution time ``exectime`` as ``system.exectime``
+        - scattered photons ``photons`` as ``system.photons``
+        - success message ``success`` as ``system.success``
+        - mean force ``F``
+        - mean excited state population ``Ne``
+    """
+    
     NeNum       = system.levels.uNum
     dic         = dict(
         exectime    = system.exectime,
@@ -86,6 +111,19 @@ def return_fun_default(system):
     
 #%%
 def get_constants_dict(name=''):
+    """Load the level system constants / properties from a ``.json`` file and
+    return it as a dictionary.
+
+    Parameters
+    ----------
+    name : str, optional
+        filename of the json file without the `.json`. The default is ''.
+    
+    Returns
+    -------
+    dict
+        dictionary with all constants / properties.
+    """
     def openjson(root_dir):
         with open(os.path.join(root_dir, f"{name}.json"), "r") as read_file:
             data = json.load(read_file)
@@ -146,27 +184,33 @@ def auto_subplots(nplots, ratio=2/1, axs=[], xlabel='', ylabel='',**subplots_kwa
             raise Exception(
                 (f"length of given axes {len(axs)} doesn't match "
                  f"the number of subplots {nplots} to be generated"))
+        
+        # x- and y-labels on each subplot
+        for ax in axs:
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
     else:
         # start with a square-ish grid
         cols    = math.ceil(math.sqrt(nplots / ratio))
         rows    = math.ceil(nplots / cols)
         
         fig,axs = plt.subplots(rows,cols,**subplots_kwargs,squeeze=False)
-    
+        
+        # draw one xlabel (ylabel) on each column (row)
         if xlabel:
-            fig.supxlabel(xlabel)
+            for axs_col in axs[-1]:
+                axs_col.set_xlabel(xlabel)
         if ylabel:
             for axs_row in axs:
                 axs_row[0].set_ylabel(ylabel)
-            # fig.supylabel(ylabel)
-            
+                
         # Flatten axes to easily iterate
         axs     = np.array(axs).ravel()
         
         # Hide unused axes (if any)
         for j in range(nplots, len(axs)):
             axs[j].set_visible(False)
-            
+        
     return axs
     
 #%%
@@ -463,7 +507,7 @@ def get_results(fname, Z_keys='F', XY_keys=[],
 def plot_results(fname, Z_keys=['F'], XY_data_fmt={}, scale_F='hbar*k*Gamma/2',
                  XY_labels={}, Z_labels={}, cmap='RdBu', levels = 12,
                  Xlim=[], Ylim=[], Zlim={}, Z_percent=['F','Ne'],
-                 figname='', savefig=True, **kwargs):
+                 axs=[], figname='', savefig=False, **kwargs):
     """plot results for calculating one or multiple observables in a high-dimensional
     parameter space.
 
@@ -495,16 +539,18 @@ def plot_results(fname, Z_keys=['F'], XY_data_fmt={}, scale_F='hbar*k*Gamma/2',
     Z_percent : list, optional
         list with the names of observables to be plotted in percent.
         The default is ['F','Ne'].
+    axs : list of ``matplotlib.pyplot.axis`` objects, optional
+        axis/axes to put the plot(s) on. The default is [].
     figname : str, optional
         name of the figure. The default is ''.
     savefig : bool or str, optional
         if True the figure is saved. If str, the figure is saved using the
-        provided string. The default is True.
+        provided string. The default is False.
     **kwargs : keyword arguments
         keyword arguments for the function get_results.
     """
     # defining some default dictionaries for axes labels, and formatters for the axes data
-    Z_labels_default = dict(F='Cooling force $F$ ($\hbar k \Gamma/2$)',
+    Z_labels_default = dict(F='Force $F$ ($\hbar k \Gamma/2$)',
                             Ne='Ex. state population $n_e$',
                             exectime='Execution time (s)',
                             steps='Iter. steps till steady state')
@@ -524,13 +570,11 @@ def plot_results(fname, Z_keys=['F'], XY_data_fmt={}, scale_F='hbar*k*Gamma/2',
     if isinstance(Z_keys, str): Z_keys = [Z_keys] # make sure that Z_keys is a list of str
     
     # Initializing figure
-    plt.rcParams['figure.constrained_layout.use'] = False
-    fig, axs = plt.subplots(len(Z_keys),1, sharex=True, figsize=(8,7), squeeze=False,
-                            num=figname if figname else None)
-    fig.subplots_adjust(hspace=0.0)
+    axs = auto_subplots(len(Z_keys), ratio=3/1, axs=axs, xlabel='', ylabel='',
+                        sharex=True, num=figname if figname else None)
     
     # iterating over keys for Z (actual results), e.g. Force F, excited state fraction Ne
-    for i,(ax,Z_key) in enumerate(zip(axs[:,0],Z_keys)):
+    for i,(ax,Z_key) in enumerate(zip(axs,Z_keys)):
         
         # load results and make meshgrid for plotting
         Z_dict, XY, XYY = get_results(fname, Z_keys=Z_key, scale_F=scale_F,
@@ -552,17 +596,20 @@ def plot_results(fname, Z_keys=['F'], XY_data_fmt={}, scale_F='hbar*k*Gamma/2',
             title = ',\n'.join([f'{XY_labels[key]}: {data:4g}'
                                 for key,data in XYY.items()])
             ax.set_title(title)
+            
         # set x, y labels
         if i == len(Z_keys)-1:
             ax.set_xlabel(XY_labels[list(XY.keys())[0]])
         if i == len(Z_keys) //2:
             ax.set_ylabel(XY_labels[list(XY.keys())[1]])
+            
         # set axes limits
         if Xlim:    ax.set_xlim(*Xlim)
         if Ylim:    ax.set_ylim(*Ylim)
         vmin,vmax = None, None
         if Z_key in Zlim:
             vmin, vmax= Zlim[Z_key]
+            
         # draw 2D countour data and colourbar
         CS = ax.contourf(X,Y,Z.T,levels=levels,cmap=cmap,vmin=vmin,vmax=vmax)#np.linspace(1.,2.,11))
         CS2= ax.contour(CS, levels=[0.0], colors='k', origin='lower',linestyles='dashed')

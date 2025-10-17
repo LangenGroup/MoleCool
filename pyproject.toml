@@ -40,20 +40,16 @@ readme = "README.md"
 # The Python version required by the project
 requires-python = ">=3.8"
 
-# license: Table
-# The license of your project.
-# Can be provided as a file or a text description.
-# Discussed in the lesson on publishing
-license = {file = "LICENSE.md"}
-# or...
-# license = {text = "CC-BY-4.0"}
+# license:
+license = "MIT" # SPDX-style string
+license-files = ["LICENSE.md"] # include actual license file
 
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Topic :: Scientific/Engineering :: Physics",
 ]
@@ -101,16 +97,22 @@ dev = [
 # urls: Table
 # Should describe where to find useful info for your project
 # source = "github.com/MyProfile/my_project"
-Homepage = "https://github.com/LangenGroup/"
-# documentation = "my_project.readthedocs.io/en/latest"
+Homepage = "https://www.coldmolecules.eu/Home/"
+Documentation = "molecool.readthedocs.io/en/stable"
+Repository = "https://github.com/LangenGroup/MoleCool"
+Issues = "https://github.com/LangenGroup/MoleCool/issues"
 
 [tool.setuptools.package-data]
-"*" = ["*.json"]
+"MoleCool" = ["constants/*.json"]
 
 [tool.setuptools]
-packages = ["MoleCool"]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["MoleCool*"]
 
 [tool.setuptools_scm]
 version_scheme = "post-release"
-local_scheme = "node-and-date"
+local_scheme = "no-local-version" # "node-and-date"
 write_to = "MoleCool/_version.py"

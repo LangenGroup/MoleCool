@@ -2,74 +2,6 @@
 """
 This module contains all classes and methods to define all **states** and their
 **properties** belonging to a certain Levelsystem.
-
-===============
-Class Structure
-===============
-
-The general class structure can include several electronic states :class:`ElectronicState`,
-i.e. one ground (:class:`ElectronicGrState`) and several excited (:class:`ElectronicExState`)
-electronic states. These electronic states in turn include all actual single
-quantum states (instances of :class:`State`) with a certain set of quantum numbers.
-So, this leads to a well defined basis of each electronic state.
-
-Example
--------
-
-First, let's create empty Levelsystem instance and add e.g. the two electronic
-states :math:`5^2S_{1/2}` and :math:`5^2P_{3/2}` as ground and excited states
-of 87Rb::
-    
-    levels = Levelsystem()
-    levels.add_electronicstate('S12', 'gs')     # define as ground state ('gs')
-    levels.add_electronicstate('P32', 'exs', Gamma=6.065) # decay rate of excited state 6.065 MHz
-    levels.S12.add(J=1/2,F=[1,2])
-    levels.P32.add(J=3/2,F=[0,1,2,3])
-    print(levels) # with this command we get an overview of all states with their quantum numbers.
-
-================
-Level Properties
-================
-
-The properties of the Levelsystem which are reuqired for simulation the rate equations
-or optical Bloch equations are either imported from a .json file or constructed
-automatically and can be modified afterwards.
-These properties comprise most importantly:
-    
-    * the electric dipole matrix and branching ratios
-    * transition frequenies
-    * magnetic g-factors
-    * lifetimes of the excited states
-    * the mass of the atom or molecule
-
-To modify these properties, simply take the (pandas) DataFrames and change the
-values in these frames.
-
-Example
--------
-
-Taking the example above as starting point, we can now change e.g. the wavelength,
-the magentic g-factor of one of the ground states, and the ground state hyperfine
-splitting.::
-    
-    levels.wavelengths.iloc[:,:] = 780.241 # in nm
-    print(levels.wavelengths)
-    
-    levels.S12.gfac.iloc[0] = 0.1234
-    print(levels.S12.gfac)
-    
-    levels.S12.freq.iloc[0] = -4.272
-    levels.S12.freq.iloc[1] = 2.563
-    print(levels.S12.freq)
-    
-Tip
----
-Every object of the classes :class:`Levelsystem` or :class:`State` can be
-printed to display all attributes via::
-    
-    print(levels)       # all electronic states and their specific quantum numbers.
-    print(levels.S12)   # all states within S12
-    print(levels.S12[0]) # only the first state defined within S12
 """
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g
@@ -87,16 +19,21 @@ from sympy.physics.wigner import wigner_3j,wigner_6j
 #%%
 class Levelsystem:
     def __init__(self,load_constants=None,verbose=True):
-        """Levelsystem consisting of instances or :py:class:`Levelsystem.ElectronicState`
+        """Levelsystem consisting of :class:`ElectronicState` instances
         and methods to add them properly.
         These respective objects can be retrieved and also deleted by using the
         normal item indexing of a :class:`Levelsystem`'s object::
             
+            from MoleCool import Levelsystem
             levels = Levelsystem()
-            levels.add_electronicstate('S12', 'gs')     # define as ground state ('gs')
+            
+            # define as ground state ('gs')
+            levels.add_electronicstate('S12', 'gs')
             levels.S12.add(J=1/2,F=[1,2])
+            
             state1 = levels.S12[0]
             print(state1)
+            
             del levels.S12[-1] # delete last added State instance 
             del levels['S12']  # delete complete electronic state
 
@@ -116,20 +53,20 @@ class Levelsystem:
         levels have to be added.
         
         Then the default constants and properties can be nicely viewed with
-        the function :func:`print_properties`. Afterwards the values in these
+        the function :meth:`print_properties()`. Afterwards the values in these
         pandas.DataFrames (here: vibrational branchings, transition wavelength,
         and g-factor) can be easily modified via `<DataFrame>.iloc[<index>]`.
         
         Tip
         ---
         Important properties within an instance :class:`Levelsystem` can be
-        accessed with the ´get_<property>()´ methods or directly via the properties
-        without ´get_´ in their names, like:
+        accessed with the ``get_<property>()`` methods or directly via the
+        properties without ``get_`` in their names, like:
             
-            * dMat          # electric dipole matrix
-            * dMat_red      # reduced electric dipole matrix
-            * vibrbranch    # vibrational branching ratios
-            * wavelengths   # wavelengths (in nm) between the transitions
+        * dMat          # electric dipole matrix
+        * dMat_red      # reduced electric dipole matrix
+        * vibrbranch    # vibrational branching ratios
+        * wavelengths   # wavelengths (in nm) between the transitions
         """
         # unsorted list containing the labels of all added ElectronicStates:
         self.__ElSts_labels             = []
@@ -166,8 +103,8 @@ class Levelsystem:
         print(f'ElectronicState {label} deleted and all properties resetted!')
         
     def add_all_levels(self,v_max):
-        """Function to add all ground and excited states of a molecule with a
-        loss state in a convenient manner.
+        """Add all ground and excited states of a molecule conveniently with a
+        loss state.
 
         Parameters
         ----------
@@ -189,8 +126,9 @@ class Levelsystem:
                     self[label].load_states(v=np.arange(0,v_max-.5,dtype=int))
         
     def add_electronicstate(self,label,gs_exs,load_constants=None,**kwargs):
-        """adds an electronic state (ground or excited state) as instance of
-        the class :class:`ElectronicState` to this :class:`~Molecule.Molecule`.
+        """Add an electronic state (ground or excited state) as instance of
+        the class :class:`ElectronicState` to this instance of
+        :class:`Levelsystem`.
 
         Parameters
         ----------
@@ -252,10 +190,10 @@ class Levelsystem:
     
     # @load_save_DF
     def get_dMat(self,gs=None,exs=None):
-        """Function which returns the electric dipole matrix. This matrix is
+        """Return the electric dipole matrix. This matrix is
         either simply loaded from the .json file or constructed
         with the reduced electric dipole matrix given by the function
-        :func:`get_dMat_red`.
+        :meth:`get_dMat_red()`.
         
 
         Parameters
@@ -312,11 +250,11 @@ class Levelsystem:
         return dMat
     
     def get_dMat_red(self,gs=None,exs=None):
-        """Function which returns the reduced electric dipole matrix. This matrix is
+        """Return the reduced electric dipole matrix. This matrix is
         either simply loaded from the .json file or constructed
-        with the electric dipole matrix given by the function :func:`dMat_red`. If no
-        dipole matrix or a reduced one is available a new reduced matrix is
-        constructed with only ones for each transition which can be adjusted
+        with the electric dipole matrix given by the function :meth:`dMat_red`.
+        If no dipole matrix or a reduced one is available a new reduced matrix
+        is constructed with only ones for each transition which can be adjusted
         afterwards.
         
         Returns
@@ -358,7 +296,7 @@ class Levelsystem:
         return dMat_red
 
     def get_vibrbranch(self,gs=None,exs=None):
-        """Function returns a matrix for the vibrational branching ratios between
+        """Return a matrix for the vibrational branching ratios between
         vibrational excited levels with :math:`\\nu` and ground levels wth
         :math:`\\nu'`.This matrix is either simply loaded from the .json file
         or constructed with the same branching ratios
@@ -387,6 +325,13 @@ class Levelsystem:
         return DF
     
     def get_transdipmoms(self):
+        """Return transition dipole moments between electronic states.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Transition dipole moments.
+        """
         if len(self._transdipmoms) == 0:
             DF = dict2DF.get_DataFrame(self.const_dict,'transdipmoments')
             if len(DF) == 0:
@@ -403,7 +348,7 @@ class Levelsystem:
         return self._transdipmoms
     
     def get_wavelengths(self,gs=None,exs=None):
-        """Function returns a list of matrices for nicely displaying
+        """Return a list of matrices for nicely displaying
         the wavelengths between the vibrational transitions and the 
         frequencies between hyperfine transitions to conveniently specifying
         or modifying all participating transitions. These wavelengths and
@@ -458,10 +403,13 @@ class Levelsystem:
     transdipmoms= property(get_transdipmoms)
     #%% calc functions for the rate and optical Bloch equations
     def calc_dMat(self):
-        """In contrast to the other functions :func:`get_dMat` or :func:`get_dMat_red`
-        this function calculates a the normalized electric dipole matrix as numpy 
-        array ready to be directly called and used for the functions
-        :func:`~System.System.calc_rateeqs` and :func:`~System.System.calc_OBEs`.
+        """
+        Calculate matrix elements of the electric dipole moment operator.
+        In contrast to the other functions :meth:`get_dMat()` or
+        :meth:`get_dMat_red()`, this method calculates the normalized electric
+        dipole matrix as numpy.ndarray ready to be directly called and used
+        for the methods :meth:`~.System.System.calc_rateeqs` and
+        :meth:`~.System.System.calc_OBEs`.
         This matrix includes also the vibrational branching ratios and handles
         the loss state in a correct way and is not meant to be modified.
 
@@ -511,8 +459,8 @@ class Levelsystem:
         return self.__dMat_arr
     
     def calc_branratios(self):
-        """Function calculates fully normalized branching ratios using the dipole
-        matrix calculated in the function :func:`~System.System.calc_dMat`
+        """Calculate fully normalized branching ratios using the dipole
+        matrix calculated in the function :meth:`calc_dMat()`
         (see for more details).
         
         Returns
@@ -525,11 +473,12 @@ class Levelsystem:
         return self.__branratios_arr
     
     def calc_freq(self):
-        """Function calculates the angular absolute frequency **differences**
+        """Calculate the angular absolute frequency **differences**
         between **all** levels included in this class using the wavelengths and
-        frequencies specified by the function :func:`get_freq`. These values are 
-        returned as numpy array ready to be directly called and used for the functions
-        :func:`~System.System.calc_rateeqs` and :func:`~System.System.calc_OBEs`.
+        frequencies specified by the function :meth:`~ElectronicState.get_freq()`.
+        These values are returned as numpy array ready to be directly called
+        and used for the functions :meth:`~.System.System.calc_rateeqs()`
+        and :meth:`~.System.System.calc_OBEs()`.
         
         Returns
         -------
@@ -616,10 +565,11 @@ class Levelsystem:
         
     
     def calc_muMat(self):
-        """Function calculates the magnetic dipole moment operator matrix for **all** levels
+        """Calculate the magnetic dipole moment operator matrix for **all** levels
         included in this class using the g-factors specified by the function
-        :func:`get_gfac`. These values are returned as numpy array ready to be
-        directly called and used for the function :func:`~System.System.calc_OBEs`.
+        :meth:`~ElectronicState.get_gfac()`.
+        These values are returned as numpy array ready to be directly called
+        and used for the function :meth:`~.System.System.calc_OBEs()`.
         
         Returns
         -------
@@ -656,9 +606,9 @@ class Levelsystem:
         return self._muMat
     
     def calc_M_indices(self):
-        """Function returns the indices determining all hyperfine states within
+        """Calculate the indices determining all hyperfine states within
         a specific F or F' of the ground or excited state. These values are
-        used in the function :func:`~System.System.calc_OBEs` when looping
+        used in the function :meth:`~.System.System.calc_OBEs()` when looping
         through all hyperfine states in conjunction with the g-factors
         for calculation the effect of a magnetic field.
 
@@ -692,12 +642,12 @@ class Levelsystem:
         return self._M_indices
     
     def calc_Gamma(self):
-        """Method calculates the natural decay rate Gamma (in angular frequency)
+        """Calculate the natural decay rate Gamma (in angular frequency)
         for each single excited state.
 
         Returns
         -------
-        np.ndarray
+        numpy.ndarray
             Gamma array of length uNum as angular frequency [Hz].
         """
         if np.all(self._Gamma) != None:
@@ -708,6 +658,11 @@ class Levelsystem:
             return self._Gamma
         
     def calc_all(self):
+        """Calculate all level properties once in the beginning, so that they
+        are stored and calling the method
+        :meth:`~MoleCool.System.System.calc_OBEs()` multiple times doesn't
+        require additional computation time.
+        """
         # initially calculate every property of the level system so that these
         # arrays can simply be called without calculating them every time:
         self.calc_dMat()
@@ -729,7 +684,7 @@ class Levelsystem:
     
     def transitions_energies_strengths(self, include_forbidden=False,
                                        gs=None, exs=None, use_calc_props=True):
-        """Yields the transition strengths and energies without including all mF
+        """Yield the transition strengths and energies without including all mF
         levels. This is e.g. used by the method :meth:`plot_transition_spectrum`.
         The strengths are solely calculated using the property :meth:`dMat_red`.
         
@@ -809,8 +764,8 @@ class Levelsystem:
                                  ax=None, legend=True, QuNrs=[['F'],['F']],
                                  exs=[], subplot_sep=200., E_unit='MHz',
                                  E_offset=0, kwargs_trans_ener_stre=dict()):
-        """Plotting the transition spectrum with Voigt profiles using the energies
-        and strengths from :meth:`transitions_energies_strengths`.
+        """Plot the transition spectrum with Voigt profiles using the energies
+        and strengths from :meth:`transitions_energies_strengths()`.
 
         Parameters
         ----------
@@ -964,7 +919,7 @@ class Levelsystem:
             return axs, data_list
 
     def print_properties(self): 
-        """Prints all relevant constants and properties of the composed levelsystem
+        """Print all relevant constants and properties of the composed levelsystem
         in a convenient way to modify them if needed afterwards.
         """
         n=40
@@ -989,7 +944,7 @@ class Levelsystem:
                       sep='\n')
         
     def check_config(self,raise_Error=False):
-        """checking the configuration of the Levelsystem to be used in calculating
+        """Check the configuration of the Levelsystem to be used in calculating
         laser cooling dynamics. E.g. involves to check whether the states are 
         correctly defined.
         
@@ -1006,7 +961,7 @@ class Levelsystem:
                 else: warnings.warn(Err_str.format(ElSt.label))
                 
     def reset_properties(self):
-        """Method resets and initializes all property objects (e.g. dMat, dMat_red,
+        """Reset and initialize all property objects (e.g. dMat, dMat_red,
         vibrbranch, wavelengths, muMat, Mindices, Gamma).
         """
         self.mass                       = self.const_dict.get('mass',0.0)*u_mass #if no value is defined, mass will be set to 0
@@ -1028,43 +983,43 @@ class Levelsystem:
 
     @property
     def description(self):
-        """str: Displays a short description with the number of included state objects."""
+        """str: Display a short description with the number of included state objects."""
         return "{:d}+{:d} - Levelsystem".format(self.lNum,self.uNum)
     
     @property
     def states(self):
-        """Returns a combined list of all state objects defined in the individual
+        """Return a combined list of all state objects defined in the individual
         electronic states.
         """
         return [st for ElSt in self.electronic_states for st in ElSt.states]
     
     @property
     def lNum(self):
-        '''Returns the total number of states defined in the ground electronic
+        '''Return the total number of states defined in the ground electronic
         states as an integer.'''
         return sum([ElSt.N for ElSt in self.grstates])
     
     @property
     def uNum(self):
-        '''Returns the total number of states defined in the excited electronic
+        '''Return the total number of states defined in the excited electronic
         states as an integer.'''
         return sum([ElSt.N for ElSt in self.exstates])
     
     @property
     def iNum(self):
-        '''Returns the total number of states defined in all intermediate electronic
+        '''Return the total number of states defined in all intermediate electronic
         states as an integer.'''
         return sum([ElSt.N for ElSt in self.grstates if ElSt.gs_exs == 'ims']) 
     
     @property
     def N(self):
-        '''Returns the total number of unique states defined in all electronic
-        states as an integer, i.e. N = :func:`lNum` + :func:`uNum` - :func:`iNum`.'''
+        '''Return the total number of unique states defined in all electronic
+        states as an integer, i.e. N = :meth:`lNum` + :meth:`uNum` - :meth:`iNum`.'''
         return self.lNum + self.uNum -self.iNum
     
     @property
     def grstates(self):
-        '''Returns a list containing all defined instances of ground electronic
+        '''Return a list containing all defined instances of ground electronic
         states (:class:`ElectronicGrState`).'''
         ElSts = [self[label] for label in self.__ElSts_labels] # unsorted
         return [*[ElSt for ElSt in ElSts if ElSt.gs_exs == 'gs'],
@@ -1072,7 +1027,7 @@ class Levelsystem:
     
     @property
     def exstates(self):
-        '''Returns a list containing all defined instances of excited electronic
+        '''Return a list containing all defined instances of excited electronic
         states (:class:`ElectronicExState`).'''
         ElSts = [self[label] for label in self.__ElSts_labels] # unsorted
         return [*[ElSt for ElSt in ElSts if ElSt.gs_exs == 'exs'],
@@ -1080,39 +1035,42 @@ class Levelsystem:
     
     @property
     def electronic_states(self):
-        '''Returns a list containing all defined instances of electronic
-        states, i.e. stacking list of :func:`grstates` and :func:`exstates`.'''
+        '''Return a list containing all defined instances of electronic
+        states, i.e. stacking list of :meth:`grstates` and :meth:`exstates`.'''
         return [*self.grstates,*[ExSt for ExSt in self.exstates if ExSt not in self.grstates]] 
     
     @property
     def grstates_labels(self):
-        '''Returns a list containing the labels of all ground electronic states'''
+        '''Return a list containing the labels of all ground electronic states'''
         return [ElSt.label for ElSt in self.grstates]
     
     @property
     def exstates_labels(self):
-        '''Returns a list containing the labels of all excited electronic states'''
+        '''Return a list containing the labels of all excited electronic states'''
         return [ElSt.label for ElSt in self.exstates]
    
     @property
     def Isat(self):
-        """Calculates the two-level saturation intensity in W/m^2 for all transitions."""
+        """Calculate the two-level saturation intensity in W/m^2 for all
+        transitions.
+        """
         return pi*c*h*self.calc_Gamma()[None,:]/(3*( 2*pi*c/self.calc_freq() )**3)
     
     def Isat_eff(self,GrSt,ExSt):
-        """Calculates the effective multi-level saturation intensity in W/m^2
+        """Calculate the effective multi-level saturation intensity in W/m^2
         between two electronic states whose states are all coupled together.
         This quantity can be derived by rearranging the rate equations into a general
         approximate expression for the scattering rate. Here, the assumptions
         that all detunings are equal, all intensities are equal, and all excited
-        states are equally populated are used."""
+        states are equally populated are used.
+        """
         lNum = self[GrSt].N
         uNum = self[ExSt].N
         i0,i1 = self.index_ElSt(GrSt,'gs'), self.index_ElSt(ExSt,'exs')
         return 2*lNum**2/(lNum+uNum)*self.Isat[i0:i0+lNum, i1:i1+uNum]
    
     def index_ElSt(self,ElSt,gs_exs=None,include_Ngrs_for_exs=False):
-        """Returns the total index of the first state belonging to a certain
+        """Return the total index of the first state belonging to a certain
         electronic state. For example for two electronic excited states with each
         3 single states defined, the method gives 0 and 3 for the first and second
         electronic excited state, respectively.
@@ -1164,7 +1122,7 @@ class ElectronicState():
         self.N0    = [] # initial population
 
     def add(self,**QuNrs):
-        """Method adds an instance of :class:`State` to this electronic state.
+        """Add an instance of :class:`State` to this electronic state.
         
         Using this method arbitrary quantum states with their respective quantum
         numbers can be added to construct a certain levelsystem.
@@ -1235,6 +1193,7 @@ class ElectronicState():
             raise ValueError('Wrong datatype of parameter F')
                 
     def state_exists(self,state):
+        """Check if a state exists in this electronic state."""
         #test if a given state already exists in the ElectronicState and returns boolean
         for st in self.states:
             if st == state:
@@ -1242,6 +1201,9 @@ class ElectronicState():
         return False
     
     def load_states(self,**QuNrs):
+        """Load all states from the corresponding ``.json`` file that match the
+        given ``QuNrs`` as keyword arguments.
+        """
         if len(self.const_dict) == 0:
             raise Exception('There is no constants dictionary available to load states from!')
         if isinstance(QuNrs.get('v',None),Iterable):
@@ -1274,8 +1236,8 @@ class ElectronicState():
                     
     def draw_levels(self, fig=None, QuNrs_sep=[], level_length=0.8,
                     xlabel_pos='bottom',ylabel=True,yaxis_unit='MHz'):
-        """This method draws all levels of the Electronic state sorted
-        by certain Qunatum numbers.
+        """Draw all levels of the Electronic state sorted by certain
+        Quantum numbers.
 
         Parameters
         ----------
@@ -1385,7 +1347,7 @@ class ElectronicState():
         return coords
     
     def set_init_pops(self, QuNrpops):
-        """set initial population of the levels as a starting point for the
+        """Set initial population of the levels as a starting point for the
         simulations.
 
         Parameters
@@ -1417,7 +1379,7 @@ class ElectronicState():
         
     #%%
     def get_freq(self):
-        """Function returns a list of matrices for nicely displaying
+        """Return a list of matrices for nicely displaying
         the wavelengths between the vibrational transitions and the 
         frequencies between hyperfine transitions to conveniently specifying
         or modifying all participating transitions. These wavelengths and
@@ -1441,7 +1403,7 @@ class ElectronicState():
         return self._freq
     
     def get_gfac(self):
-        """Function returns a list of matrices for nicely displaying
+        """Return a list of matrices for nicely displaying
         the g-factors of the ground states and the excited states respectively
         to conveniently specifying or modifying them. These g-factors are
         loaded from the .json file if available. Otherwise
@@ -1490,7 +1452,7 @@ class ElectronicState():
         return "==> Electronic {} state {} with {:d} states in total".format(Name,self.label,self.N)
     
     def print_properties(self): 
-        """Prints all relevant constants and properties of the composed levelsystem
+        """Print all relevant constants and properties of the composed levelsystem
         in a convenient way to modify them if needed afterwards.
         """
         n=40
@@ -1499,7 +1461,7 @@ class ElectronicState():
         print('\nfrequencies (in MHz):', self.freq, sep='\n')
     
     def DFzeros_without_mF(self): #is this important anymore? is required for get functions when no const_dict is available
-        """Property returns two arrays containing the labels of all levels without
+        """Return two arrays containing the labels of all levels without
         the hyperfine magnetic sublevels quantum numbers mF.        
     
         Returns
@@ -1520,11 +1482,12 @@ class ElectronicState():
 
     @property
     def N(self):
-        '''Returns integer as number of defined :class:`State` instances.'''
+        '''Return integer as number of defined :class:`State` instances.'''
         return len(self.states)
 
     @property
     def v_max(self):
+        """Return the maximum quantum number ``v`` available in all state."""
         if len(self.states)==0:
             raise Exception('There are no levels defined! First, levels have to be added to',self.label)
         if not ('v' in self.states[0].QuNrs):
@@ -1539,7 +1502,7 @@ class ElectronicGrState(ElectronicState):
         self.gs_exs = 'gs'
         
     def add_lossstate(self,v=None):
-        """Adds a :class:`Lossstate` object to the self.entries
+        """Add a :class:`Lossstate` object to the self.entries
         list of this class only when no loss state is already included.
 
         Parameters
@@ -1559,7 +1522,7 @@ class ElectronicGrState(ElectronicState):
         else: print('loss state is already included')
     
     def del_lossstate(self):
-        """Function simply deletes a loss state if one is existing in the defined
+        """Delete a loss state if one is existing in the defined
         level system."""
         if self.has_lossstate == True:
             index = None
@@ -1572,7 +1535,7 @@ class ElectronicGrState(ElectronicState):
         
     def print_remix_matrix(self): #old function! either move to Bfield or delete??
         """Print out the magnetic remixing matrix of the ground states by the
-        usage of function :func:`System.magn_remix`.
+        usage of function :meth:`~.Bfield.magn_remix`.
         """
         from System import Bfield
         mat = Bfield().get_remix_matrix(self,0)
@@ -1613,7 +1576,7 @@ class ElectronicExState(ElectronicState):
                 self.Gamma = Gamma.iloc[0]
                 
     def print_properties(self): 
-        """Prints all relevant constants and properties of the composed levelsystem
+        """Print all relevant constants and properties of the composed levelsystem
         in a convenient way to modify them if needed afterwards.
         """
         super().print_properties()
@@ -1660,7 +1623,7 @@ class State:
         self.__dict__.update(QuNrs)
     
     def copy(self):
-        """Returns a deepcopy of this state's instance."""
+        """Return a deepcopy of this state's instance."""
         return deepcopy(self)
     
     def __eq__(self, other):
@@ -1677,7 +1640,7 @@ class State:
         return True
     
     def is_equal_without_mF(self, other):
-        """Returns `True` if a state is equal to an other state neglecting
+        """Return `True` if a state is equal to an other state neglecting
         different mF sublevels.
 
         Parameters
@@ -1734,5 +1697,5 @@ class State:
             str_lossstate)
     @property
     def QuNrs_without_mF(self):
-        '''Returns all the quantum numbers without mF'''
+        '''Return all the quantum numbers without mF'''
         return [QuNr for QuNr in self.QuNrs if QuNr != 'mF']

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Simple Rabi oscilaations
+Simple Rabi oscillations
 ========================
 
 This tutorial shows how to set up the most basic two-level system and add a laser.

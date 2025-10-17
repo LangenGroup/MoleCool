@@ -1,100 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-This module contains the main class :class:`~System.System` which provides all
+This module contains the main class :class:`~MoleCool.System.System` which provides all
 information about the lasers light fields, the atomic or molecular level structure,
 and the magnetic field to carry out simulation calculations, e.g.
 via the rate equations or Optical Bloch equations (OBEs).
-
-Examples
---------
-First simple example to setup and simulate a (3+1)-levelsystem::
-    
-    from System import *
-    system=System(description='Simple3+1') # create empty system instance first
-    
-    # construct level system:
-    # - create empty instances for a ground and excited electronic state
-    system.levels.add_electronicstate(label='X', gs_exs='gs')
-    system.levels.add_electronicstate(label='A', gs_exs='exs', Gamma=1.0)
-    # - add the levels with the respective quantum numbers to the electronic states
-    system.levels.X.add(F=1)
-    system.levels.A.add(F=0)
-    # - next all default level properties can be displayed and simply changed
-    system.levels.print_properties()
-    system.levels.X.gfac.iloc[0] = 1.0 # set ground state g factor to 1.0
-    
-    # set up lasers and magnetic field
-    system.lasers.add(lamb=860e-9, P=5e-3, pol='lin') #wavelength, power, and polarization
-    system.Bfield.turnon(strength=5e-4, direction=[0,1,1]) #magnetic field
-    
-    # simulate dynamics with OBEs and plot population
-    system.calc_OBEs(t_int=5e-6, dt=10e-9, magn_remixing=True, verbose=True)
-    system.plot_N()
-
-Example for setting up a level and laser system for BaF with the cooling and 3 repumping
-lasers and calculating the dynamics::
-    
-    from System import *
-    system = System(description='SimpleTest1_BaF',load_constants='138BaF')
-    
-    # set up the lasers each with four sidebands
-    for lamb in np.array([859.830, 895.699, 897.961])*1e-9:
-        system.lasers.add_sidebands(lamb=lamb,P=20e-3,pol='lin',
-                                    offset_freq=19e6,mod_freq=39.33e6,
-                                    sidebands=[-2,-1,1,2],ratios=[0.8,1,1,0.8])
-    
-    # set up the ground and excited states and include all vibrational levels
-    # up to the ground state vibrational level v=2
-    system.levels.add_electronicstate('X','gs') #add ground state X
-    system.levels.X.load_states(v=[0,1,2]) #loading the states defined in the json file
-    system.levels.X.add_lossstate()
-    
-    system.levels.add_electronicstate('A','exs') #add excited state A
-    system.levels.A.load_states(v=[0,1])
-    
-    system.levels.print_properties() #check the imported properties from the json file
-    
-    # Alternatively, all these steps for the levels can be done simpler with:
-    # system.levels.add_all_levels(v_max=2)
-    
-    # calculate dynamics with rate equations
-    system.calc_rateeqs(t_int=20e-6, magn_remixing=False)
-    
-    # plot populations, force, and scattered photon number
-    system.plot_N()
-    system.plot_F()
-    system.plot_Nscatt()
-    
-Example for a Molecule with a initial velocity and position of :math:`v_x=200m/s`
-and :math:`r_x=-2mm` which is transversely passing two cooling lasers with
-a repumper each in the distance :math:`4mm`::
-    
-    from System import *
-    system = System(description='SimpleTest2Traj_BaF',load_constants='138BaF')
-    
-    # specify initial velocity and position of the molecule
-    system.v0 = np.array([200,0,0])   #in m/s
-    system.r0 = np.array([-2e-3,0,0]) #in m
-    
-    # set up the cooling laser and first repumper with their wave vectors k and positions r_k
-    FWHM,P = 1e-3,5e-3 # 1mm and 5mW
-    for lamb in np.array([859.830, 895.699])*1e-9:
-        for rx in [0, 4e-3]:
-            system.lasers.add_sidebands(lamb=lamb,P=P,FWHM=FWHM,pol='lin',
-                                        r_k=[rx,0,0], k=[0,1,0],
-                                        offset_freq=19e6,mod_freq=39.33e6,
-                                        sidebands=[-2,-1,1,2],ratios=[0.8,1,1,0.8])
-        
-    # include first two vibrational levels of electronic ground state and the
-    # first vibrational level of the excited state
-    system.levels.add_all_levels(v_max=1)
-    
-    # calculate dynamics with velocity and position dependence of the laser beams and molecules
-    system.calc_rateeqs(t_int=40e-6,magn_remixing=False,
-                        trajectory=True,position_dep=True)
-    
-    # plot scattering rate, scattered photons, velocity and position, ...
-    system.plot_all()
 """
 import numpy as np
 from scipy.integrate import solve_ivp, cumulative_trapezoid
@@ -124,9 +33,9 @@ np.set_printoptions(precision=4,suppress=True)
 class System:
     def __init__(self, description=None,load_constants='',verbose=True):
         """An instance of this class is the starting point for simulating any
-        atomic or molecular dynamics simulations. Specficially, it define an object
-        to not only store all important information about the system but also to
-        calculate any time evolution.
+        atomic or molecular dynamics simulations. Specficially, it defines an
+        object to not only store all important information about the system
+        but also to calculate any time evolution.
     
         Parameters
         ----------
@@ -137,14 +46,15 @@ class System:
         load_constants : str, optional
             File name of a certain molecule, atom or more general system whose
             respective level constants to be loaded or imported by the class
-            :class:`~Levelsystem.Levelsystem` via the constants defined in the
-            .json file. The default is ''.
+            :class:`~MoleCool.Levelsystem.Levelsystem` via the constants
+            defined in the .json file. The default is ''.
     
         Example
         -------
-        After initiating a :class:`~MoleCool.System.System` object, the instances of 
-        :py:class:`~Lasersystem.Lasersystem`, :class:`~Levelsystem.Levelsystem`,
-        and :class:`~Bfield.Bfield` can be accessed via::
+        After initiating a :class:`~MoleCool.System.System` object, the
+        instances of :class:`~MoleCool.Lasersystem.Lasersystem`,
+        :class:`~MoleCool.Levelsystem.Levelsystem`,
+        and :class:`~MoleCool.Bfield.Bfield` can be accessed via::
             
             system = System()
             print(system.lasers)
@@ -180,7 +90,7 @@ class System:
                      position_dep=False, trajectory=False,
                      verbose=True, return_fun=return_fun_default,
                      **kwargs):
-        """Calculates the time evolution of the single level populations with
+        """Calculate the time evolution of the single level populations with
         rate equations.        
 
         Parameters
@@ -468,9 +378,6 @@ class System:
             plt.plot(self.t*1e6,self.r[i,:],label='$r_{}$'.format(axis),ls=ls_arr[i])
         plt.legend()
     
-    def plot_init(self,plot_quant=''):
-        pass
-    
     def plot_FFT(self,only_sum=True,start_time=0.0):
         """plot the fast Fourier transform (FFT) of the time-dependent populations.
         
@@ -566,7 +473,7 @@ class System:
                       laser_spectrum_kwargs = dict(),
                       transitions_kwargs = dict(),
                       ):
-        """Plotting the spectrum of :class:`~.Lasersystem.Laser` objects
+        """Plot the spectrum of :class:`~.Lasersystem.Laser` objects
         and transition spectra with their respective intensities.
         This method cleverly combines :meth:`~.Lasersystem.plot_spectrum`
         and :meth:`.Levelsystem.plot_transition_spectrum` methods.
@@ -641,12 +548,14 @@ class System:
         if transitions and self.levels.exstates and self.levels.grstates and self.levels.states:
             kwargs_sum = transitions_kwargs.pop(
                 'kwargs_sum', dict(color='k',alpha=0.7,ls='--'))
+            
             self.levels.plot_transition_spectrum(
                 ax = axs,
                 wavelengths = wavelengths,
                 E_unit = unit,
                 relative_to_wavelengths = relative_to_wavelengths,
                 subplot_sep = subplot_sep,
+                kwargs_sum  = kwargs_sum,
                 **transitions_kwargs,
                 )
         
@@ -654,6 +563,9 @@ class System:
     
     @property
     def hbarkG2(self):
+        """Calculate :math:`\hbar k \Gamma /2` using the wave vector defined
+        in the laser system and natural lifetime defined in the first excited
+        electronic state."""
         lambs   = self.lasers.getarr('lamb')
         dev     = 1e-3
         diff    = lambs.std()/lambs.mean()
@@ -708,7 +620,7 @@ class System:
     def calc_trajectory(self,F_profile,t_int=20e-6,t_start=0.,dt=None,t_eval=None,
                         verbose=True,force_axis=None,
                         interpol_kind='linear',save_scipy_sols=False,**kwargs):
-        """for the calculation of Monte Carlo simulations of classical particles
+        """Calculate Monte Carlo simulations of classical particles
         which are propagated through a provided pre-calculated force profile
         to be used as interpolated function"""
         
@@ -805,7 +717,7 @@ class System:
                   position_dep=False, rounded=False,
                   verbose=True, return_fun=return_fun_default,
                   **kwargs):
-        """Calculates the time evolution of the single level populations with
+        """Calculate the time evolution of the single level populations with
         the optical Bloch equations.
 
         Parameters
@@ -1067,6 +979,25 @@ class System:
             ElSt.N0 = []
     
     def initialize_N0(self,return_densitymatrix=False,random=False):
+        """
+        Initialize initial populations as a starting point for the OBEs or
+        rate equations using pre-defined population attribute ``N0`` of the
+        electronic states :class:`~MoleCool.Levelsystem.ElectronicState`.
+
+        Parameters
+        ----------
+        return_densitymatrix : bool, optional
+            Whether the populations should be transformed into density matrix
+            or one-dimensional population array. The default is False.
+        random : bool, optional
+            Whether the popultions are sampled from a random distirbution.
+            The default is False.
+
+        Returns
+        -------
+        N0mat : numpy.ndarray
+            density matrix with populations on the diagonal.
+        """
         #___specify the initial (normalized) occupations of the levels
         N,iNum = self.levels.N, self.levels.iNum
         if random:
@@ -1114,7 +1045,8 @@ class System:
             return N0mat
 
     def get_N(self, return_sum=True, **QuNrs):
-        """Returns the time-dependent populations as results after calculating
+        """
+        Retrieve the time-dependent populations as results after calculating
         the dynamics. Can be used to either obtain the populations of all
         individual levels or to conveniently combine the populations for only a 
         subset of levels with specific Quantum numbers.
@@ -1146,6 +1078,19 @@ class System:
             return self.N[inds,:]    
 
     def get_Nscattrate(self,sum_over_ElSts=False):
+        """Calculate time dependent scattering rate.
+
+        Parameters
+        ----------
+        sum_over_ElSts : bool, optional
+            Whether to sum over multiple electronic excited states.
+            The default is False.
+
+        Returns
+        -------
+        numpy.ndarray
+            Time dependent scattering rate.
+        """
         Nscattrate_arr = self.levels.calc_Gamma()[:,None]*self.N[self.levels.lNum:,:]
         if not sum_over_ElSts:# and (len(self.levels.exstates_labels) > 1)
             Nscattrate_summed = np.zeros((len(self.levels.exstates_labels),self.N.shape[1]))
@@ -1159,10 +1104,36 @@ class System:
             return np.sum(Nscattrate_arr,axis=0)
         
     def get_Nscatt(self,sum_over_ElSts=False):
+        """Calculate time dependent scatterd photon number.
+
+        Parameters
+        ----------
+        sum_over_ElSts : bool, optional
+            Whether to sum over multiple electronic excited states.
+            The default is False.
+
+        Returns
+        -------
+        numpy.ndarray
+            Time dependent scattered photon number.
+        """        
         return cumulative_trapezoid(self.get_Nscattrate(sum_over_ElSts=sum_over_ElSts), 
                         self.t, initial = 0.0, axis=-1)
     
     def get_photons(self,sum_over_ElSts=False):
+        """Calculate totally scattered photon number.
+
+        Parameters
+        ----------
+        sum_over_ElSts : bool, optional
+            Whether to sum over multiple electronic excited states.
+            The default is False.
+
+        Returns
+        -------
+        numpy.ndarray
+            Totally scattered photon number.
+        """        
         return np.transpose(self.get_Nscatt(sum_over_ElSts=sum_over_ElSts))[-1]
     
     #___compute several physical variables using the solution of the ODE
@@ -1189,7 +1160,7 @@ class System:
             T_eval = self.t_eval * freq_unit
         
         #___transform the initial density matrix N0mat in a vector for the ode
-        self.y0 = self.density_mat2vec(N0mat)
+        self.y0 = self._density_mat2vec(N0mat)
         
         # ---------------Ordinary Differential Equation solver----------------
         # solve initial value problem of the ordinary first order differential equation with scipy
@@ -1221,14 +1192,16 @@ class System:
                                   self.Gfd,self.om_gek,self.betamu,self.dd,self.ck_indices,
                                   self.levels.calc_Gamma()/freq_unit))
         self.sol = sol
-        self.ymat = self.density_vec2mat(sol.y)
+        self.ymat = self._density_vec2mat(sol.y)
         #: solution of the time dependent populations N
         self.N = np.real(self.ymat[(np.arange(self.levels.N),np.arange(self.levels.N))])
         #: array of the times at which the solutions are calculated
         self.t = sol.t/freq_unit
     
-    def density_mat2vec(self,mat):
-        # matrix -> vector
+    def _density_mat2vec(self,mat):
+        """Transform the time dependent density matrix from matrix form to
+        solution vector of the ODEs. Inverse operation to _density_vec2mat.
+        """
         if mat.ndim != 2:
             raise Exception('Matrix must be 2-dimensional')
         if mat.shape[0] != mat.shape[1]:
@@ -1243,9 +1216,10 @@ class System:
                 count += 2
         return vec
     
-    def density_vec2mat(self,vec):
-        # to transform the solution vector of the time dependent density matrix
-        # into matrix form
+    def _density_vec2mat(self,vec):
+        """Transform the solution vector of the time dependent density matrix
+        into matrix form. Inverse operation to _density_mat2vec.
+        """
         N,iNum  = self.levels.N, self.levels.iNum
         if vec.shape[0] != (N+iNum)*(N+iNum+1):
             raise Exception('Shape[0] of vector must have the length N+iNum')
@@ -1263,6 +1237,7 @@ class System:
         return mat
     
     def check_config(self,raise_Error=False):
+        """Check System configuration for simulating internal dynamics."""
         if self.calcmethod == 'rateeqs':
             #pre-defined kwargs for solve_ivp function
             kwargs_default = {'method':'LSODA', 'max_step':10e-6} 
@@ -1293,10 +1268,54 @@ class System:
         return vec
     
     def set_v0(self, v0=[0,0,0], direction=[]):
+        """Set initial velocity of the particle(s).
+
+        Parameters
+        ----------
+        v0 : list or np.ndarray, optional
+            Velocity array. Can be either a one-dimensional array with three
+            entries for the x, y and z component, a two dimensional array
+            where the first dimension corresponds to different particles' 
+            velocities, or a one dimensional array with absolute velocity
+            values while the argument ``direction`` defines the direction.
+            The default is [0,0,0].
+        direction : str, list or np.ndarray, optional
+            Direction of the absolute velocity values defined as the argument
+            ``v0``. Can be either a str (x,y,z) or list / array of length 3.
+            The default is [].
+
+        Returns
+        -------
+        np.ndarray
+            velocity array (1 or 2-dimensional with the shape (number of
+            particles, 3) in cartesian coordinates.
+        """
         self.__v0 = self.__set_v0r0(vec=v0, direction=direction, label='v0')
         return self.__v0
     
     def set_r0(self, r0=[0,0,0], direction=[]):
+        """Set initial position of the particle(s).
+
+        Parameters
+        ----------
+        r0 : list or numpy.ndarray, optional
+            Position array. Can be either a one-dimensional array with three
+            entries for the x, y and z component, a two dimensional array
+            where the first dimension corresponds to different particles' 
+            positions, or a one dimensional array with absolute position
+            values while the argument ``direction`` defines the direction.
+            The default is [0,0,0].
+        direction : str, list or numpy.ndarray, optional
+            Direction of the absolute position values defined as the argument
+            ``r0``. Can be either a str (x,y,z) or list / array of length 3.
+            The default is [].
+
+        Returns
+        -------
+        numpy.ndarray
+            position array (1 or 2-dimensional with the shape (number of
+            particles, 3) in cartesian coordinates.
+        """
         self.__r0 = self.__set_v0r0(vec=r0, direction=direction, label='r0')
         return self.__r0
     
@@ -1329,7 +1348,7 @@ class System:
     def draw_levels(self,GrSts=None,ExSts=None,branratios=True,lasers=True,
                     QuNrs_sep=[], br_fun='identity', br_TH=0.01, # 1e-16 default
                     freq_clip_TH='auto', cmap='viridis',yaxis_unit='MHz'):
-        """This method draws all levels of certain Electronic states sorted
+        """Draw all levels of certain Electronic states sorted
         by certain Qunatum numbers. Additionally, the branching ratios and the
         transitions addressed by the lasers can be added.
 
@@ -1498,16 +1517,29 @@ class System:
 
 #%%
 if __name__ == '__main__':
-    system = System(description='testing_System_module',load_constants='138BaF')
+    system = System(description='test_System_mod',load_constants='138BaF')
     
+    # Build level scheme
     system.levels.add_all_levels(v_max=0)
     system.levels.X.del_lossstate()
     
-    system.lasers.add_sidebands(lamb=859.83e-9,P=20e-3,offset_freq=19e6,mod_freq=39.33e6,
-                                sidebands=[-2,-1,1,2],ratios=[0.8,1,1,0.8])
-
-    system.Bfield.turnon(strength=5e-4,direction=[1,1,1])
-    system.calc_OBEs(t_int=8e-6, dt=1e-9,magn_remixing=True,verbose=True)
-    system.calc_rateeqs(t_int=8e-6,magn_remixing=True,
-                        trajectory=False,position_dep=True,verbose=True)
+    # Add laser configuration
+    system.lasers.add_sidebands(
+        lamb        = 859.83e-9,
+        P           = 20e-3,
+        offset_freq = 19e6,
+        mod_freq    = 39.33e6,
+        sidebands   = [-2, -1, 1, 2],
+        ratios      = [0.8, 1, 1, 0.8]
+    )
+    
+    # Magnetic field
+    system.Bfield.turnon(strength=5e-4, direction=[1, 1, 1])
+    
+    # Dynamics simulations
+    system.calc_OBEs(t_int=8e-6, dt=1e-9,
+                     magn_remixing=True)
+    system.calc_rateeqs(t_int=8e-6, magn_remixing=True,
+                        position_dep=True)
+    system.plot_N()
     

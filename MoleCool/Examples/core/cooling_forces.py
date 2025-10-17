@@ -7,7 +7,6 @@ Calculating the transversal cooling forces for BaF and CaF.
 
 Steady state cooling forces...
 """
-from MoleCool.tools import plot_results, get_results
 from MoleCool import System, np, plt, pi, c, open_object
 import os.path
 

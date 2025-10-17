@@ -1,0 +1,42 @@
+version: "2"
+
+python:
+  install:
+    # Install our python package before building the docs
+    - method: pip
+      path: .
+      extra_requirements:
+        - doc
+
+sphinx:
+  configuration: docs/source/conf.py
+  fail_on_warning: true
+
+# formats:
+#   - pdf
+#   - epub
+
+build:
+  os: "ubuntu-22.04"
+  tools:
+    python: "3.10"
+  jobs:
+    pre_build:
+      # option -W (--warning-is-error) should not be used here, as warning are allowed to appear in the first sphinx build here
+      # this is the original build command, where somehow the cwd is changed into the conf.py file folder
+      # ==> python -m sphinx -T -W --keep-going -b html -d _build/doctrees -D language=en . $READTHEDOCS_OUTPUT/html
+      - date
+      - echo "pre-build manually running sphinx-build to already create objects.inv needed in the second build for API links"
+      - python -m sphinx -T --keep-going -b html -d docs/source/_build/doctrees -D language=en docs/source $READTHEDOCS_OUTPUT/html
+      - date
+      - ls -a
+      - ls -a docs/source
+    # build:
+      # html:
+        # - echo "overriding the default RTD html sphinx build"
+        # python -m sphinx -T -W --keep-going -b html -d docs/source_build/doctrees -D language=en docs/source $READTHEDOCS_OUTPUT/html
+    post_build:
+      - date
+      - ls -a
+      - ls -a docs/source
+      - env
