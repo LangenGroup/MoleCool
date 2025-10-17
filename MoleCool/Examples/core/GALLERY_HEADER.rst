@@ -1,4 +1,4 @@
-MoleCool core examples
-======================
+Core Examples
+=============
 
 Below is a gallery of examples

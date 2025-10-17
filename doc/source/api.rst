@@ -26,5 +26,7 @@ API Reference
    Lasersystem.Laser
    Levelsystem.Levelsystem
    Levelsystem.ElectronicState
+   Levelsystem.ElectronicGrState
+   Levelsystem.ElectronicExState
    Levelsystem.State
    Bfield.Bfield

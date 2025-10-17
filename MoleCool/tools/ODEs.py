@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-This Module contains the definitions of all ordinary differential equations (ODEs)
-which are used in scipy's solve_ivp function e.g. within the rate and optical
-Bloch equations (e.g. :meth:`~System.System.calc_OBEs`).
+This module contains the definitions of all ordinary differential equations
+(ODEs) which are used in scipy's :func:`scipy.integrate.solve_ivp()`, 
+e.g. within the rate model and optical Bloch equations (see
+:meth:`~.System.System.calc_rateeqs` and :meth:`~.System.System.calc_OBEs`).
 """
 import numpy as np
 from scipy.constants import c,h,hbar,pi,g,physical_constants

@@ -18,7 +18,9 @@ from collections import namedtuple
 Results_OBEs_rateeqs = namedtuple("Results_OBEs_rateeqs", ["vals", "iters"])
 #%%
 def save_object(obj,filename=None):
-    """Save an entire class with all its attributes (or any other python object).
+    """Save any python object as a ``.pkl`` pickle file.
+    This is especially suitable for saving the :class:`MoleCool.System.System`
+    object with all its attributes.
     
     Parameters
     ----------
@@ -46,7 +48,7 @@ def save_object(obj,filename=None):
         pickle.dump(obj,output,protocol=4)
         
 def open_object(filename):
-    """Opens a saved object from a saved .pkl-file with all its attributes.    
+    """Open or load a saved python object from a ``.pkl`` file.
 
     Parameters
     ----------
@@ -62,6 +64,29 @@ def open_object(filename):
     return output
 
 def return_fun_default(system):
+    """Default function defining which values are returned after an evaluation of
+    :meth:`~.System.System.calc_OBEs` or :meth:`~.System.System.calc_rateeqs`.
+    This is especially important to collect important quantities when
+    simulating these internal dynamics for many times configurations
+    using :mod:`multiprocessing` module.
+    
+    Parameters
+    ----------
+    system : :class:`MoleCool.System.System`
+        instance of System after simulating the internal dynamics.
+
+    Returns
+    -------
+    dic : dict
+        dictionary with important quantities, such as
+        
+        - execution time ``exectime`` as ``system.exectime``
+        - scattered photons ``photons`` as ``system.photons``
+        - success message ``success`` as ``system.success``
+        - mean force ``F``
+        - mean excited state population ``Ne``
+    """
+    
     NeNum       = system.levels.uNum
     dic         = dict(
         exectime    = system.exectime,
@@ -86,6 +111,19 @@ def return_fun_default(system):
     
 #%%
 def get_constants_dict(name=''):
+    """Load the level system constants / properties from a ``.json`` file and
+    return it as a dictionary.
+
+    Parameters
+    ----------
+    name : str, optional
+        filename of the json file without the `.json`. The default is ''.
+    
+    Returns
+    -------
+    dict
+        dictionary with all constants / properties.
+    """
     def openjson(root_dir):
         with open(os.path.join(root_dir, f"{name}.json"), "r") as read_file:
             data = json.load(read_file)

@@ -8,18 +8,15 @@ Example
 Below an empty Lasersystem is created and a single Laser with wavelength 860nm
 and Power 20 mW with linear polarization is added::
     
+    from MoleCool import Lasersystem
     lasers = Lasersystem()
     lasers.add(860e-9,20e-3,'lin')
 
-But first start python and import the module::
-    
-    $ python
-    >>> import Lasersystem
-    
 Tip
 ---
-Every object of the classes :class:`Lasersystem` or :class:`Laser` class can
-be printed to display all attributes via::
+Every object of the classes :class:`~MoleCool.Lasersystem.Lasersystem` or
+:class:`~MoleCool.Lasersystem.Laser` class can be printed to display
+all attributes via::
     
     print(lasers)
     print(lasers[0])
@@ -29,6 +26,7 @@ To delete all instances use this command::
     del lasers[:]
 """
 import numpy as np
+import pandas as pd
 from scipy.constants import c,h,hbar,pi,g
 from numba import jit
 import matplotlib.pyplot as plt
@@ -37,26 +35,24 @@ from MoleCool import tools
 #%%
 class Lasersystem:
     def __init__(self,freq_pol_switch=5e6):
-        """System consisting of :py:class:`Lasersystem.Laser` objects
+        """System consisting of :class:`~MoleCool.Lasersystem.Laser` objects
         and methods to add them properly.
         These respective objects can be retrieved and also deleted by using the
-        normal item indexing of a :class:`Lasersystem`'s object::
-            
-            lasers = Lasersystem()
-            lasers.add(lamb=860e-9,P=20e-3,pol='lin')
-            lasers.add(lamb=890e-9,I=1000,FWHM=2e-3)            
-            laser1 = lasers[0] # call first Laser object included in lasers
-            del lasers[-1] # delete last added Laser object
-        
-        Within the command in the first line an empty `self.entries` list is
-        created to store all :class:`Laser` objects.
+        normal item indexing of a :class:`~MoleCool.Lasersystem.Lasersystem`
+        object.
         
         Example
         -------
         ::
             
+            from MoleCool import Lasersystem
             lasers = Lasersystem()
-            lasers.add_sidebands(lamb=860e-9,P=20e-3,pol='lin',offset_freq=20e6,mod_freq=39e6)
+            lasers.add(lamb=860e-9,P=20e-3,pol='lin')
+            lasers.add(lamb=890e-9,I=1000,FWHM=2e-3)            
+            laser1 = lasers[0] # call first Laser object included in lasers
+            del lasers[-1] # delete last added Laser object
+            
+            print(lasers[0])
             print(lasers)
 
         Parameters
@@ -70,40 +66,62 @@ class Lasersystem:
         self.freq_pol_switch = freq_pol_switch 
         self.intensity_func = None
         self.intensity_func_sum = None
+        self.pd_display_options = [
+            'display.float_format',     '{:.3e}'.format,
+            "display.max_rows",         None,
+            "display.max_columns",      None,
+            ]
 
     def add(self,lamb=860e-9,P=20e-3,pol='lin',**kwargs):
-        """adds an instance of :class:`Laser` to this class. 
+        """Add a :class:`~MoleCool.Lasersystem.Laser` instance to the laser
+        system.
         
         Note
         ----
-        Is the same as:
-            >>> self.entries.append(Laser(...)).
+        This is the same as::
+            
+            from MoleCool import Laser
+            lasers.entries.append(Laser())
         
         Parameters
         ----------
         **kwargs
             Arbitrary keyword arguments. Same as in the ``__init__`` method of
-            the class :class:`Laser` (further information)
+            the class :class:`~MoleCool.Lasersystem.Laser`.
         """
         self.entries.append( Laser( lamb=lamb, P=P, pol=pol, **kwargs) ) 
         self.intensity_func = None
         self.intensity_func_sum = None
     
-    def getarr(self,var):
+    def getarr(self, attr):
+        """Get an array with a specific attribute of all included
+        :class:`Laser` objects.
+
+        Parameters
+        ----------
+        attr : str
+            Laser attribute, e.g. ``lamb`` or ``P``.
+
+        Returns
+        -------
+        numpy.ndarray
+            Array with the lasers' attributes.
+        """
         self.check_config()
-        if not var in dir(self[0]):
-            raise ValueError('The attribute {} is not included in the Laser objects'.format(var))
-        if var == 'f_q': 
+        if not attr in dir(self[0]):
+            raise ValueError('The attribute {} is not included in the Laser objects'.format(attr))
+        if attr == 'f_q': 
             dtype = complex
         else:
             dtype = float
-        return np.array([getattr(la,var) for la in self],dtype=dtype)
+        return np.array([getattr(la,attr) for la in self],dtype=dtype)
     
     def _identify_iter_params(self):
         """Identify which parameters are iterative arrays  to loop through.
         This function is inevitable to determine whether multiple
         evaluations of the OBEs and rate equations are efficiently conducted 
-        using the multiprocessing package from python (see :meth:`tools.multiproc`).
+        using the multiprocessing package from python
+        (see :meth:`tools.multiproc`).
 
         Returns
         -------
@@ -130,22 +148,24 @@ class Lasersystem:
         
     def add_sidebands(self,lamb=860e-9,offset_freq=0.0,mod_freq=1e6,
                       ratios=None,sidebands=[-1,1],**kwargs):
-        """Adds ``Laser`` instances as sidebands in order to drive multiple
-        hyperfine transitions. The individual sidebands are detuned from the center
-        frequency by the modulation frequency `mod_freq` times the values in the
-        list `sidebands`, i.e. for `mod_freq=1e6` and `sidebands=[-1,0,2]`, the
-        sidebands are detuned by -1 MHz, 0 MHz and 2 MHz. The center frequency
-        is given by the wavelength lamb and an additional general offset frequency
-        `offset_freq`.
+        """Add multiple :class:`~MoleCool.Lasersystem.Laser` instances as
+        sidebands e.g. to drive multiple hyperfine transitions.
+        The individual sidebands are detuned from the center
+        frequency by the modulation frequency ``mod_freq`` times the values
+        in the list ``sidebands``, i.e. for ``mod_freq=1e6`` and
+        ``sidebands=[-1,0,2]``, the sidebands are detuned by -1 MHz, 0 MHz
+        and 2 MHz.
+        The center frequency is given by the wavelength lamb and an additional
+        general offset frequency ``offset_freq``.
         
         Parameters
         ----------
-        lamb : :py:obj:`float`
+        lamb : float
             wavelength of the main transition.
-        P : `float`
+        P : float
             Power, i.e. sum of the powers of all sidebands.
             Alternativley the sum of the intensities can be provided.
-        I : `float`
+        I : float
             Sum of all sideband intensities. Can be provided instead of power P.
         offset_freq : float
             All Laser sidebands are all additionally detuned by the value of
@@ -163,7 +183,7 @@ class Lasersystem:
             determines the number of sidebands and their detuning in units of
             the `mod_freq` parameter.
         **kwargs
-            optional arguments  (see :class:`Laser`).
+            optional arguments  (see :class:`~MoleCool.Lasersystem.Laser`).
         """
         # compatibility for old parameter names:
         if 'AOM_shift' in kwargs:
@@ -200,9 +220,11 @@ class Lasersystem:
                              T_airglass=99.62e-2, R_mirror=98.34e-2,
                              mirror_sep=463e-3, reflections=34,
                              int_length=200e-3, x_offset=15e-3, cut_flanks=True,
-                             printing=True, plotting=False):
-        """Creating all Laser objects for a realistic retroreflecting beam
-        configuration for a long interaction region in the experiment.
+                             printing=True, plotting=False,
+                             **laser_kwargs,
+                             ):
+        """Create all ``Laser`` objects for a realistic retroreflecting beam
+        configuration for a long cooling interaction region in the experiment.
 
         Parameters
         ----------
@@ -238,6 +260,9 @@ class Lasersystem:
             Whether printing additional information. The default is True.
         plotting : bool, optional
             Whether plotting the 1D and 2D intensity distributions. The default is False.
+        **laser_kwargs : kwargs, optional
+            Further keyword arguments for the created laser objects such as e.g.
+            wavelength.
         """
         # longitudinal difference between two reflecting events
         dx          = int_length/(reflections-1)
@@ -269,13 +294,27 @@ class Lasersystem:
                 P_beam = P
             elif beam_config == 'twosides':
                 P_beam = P/2
-            self.add(P=P_beam, k=[dx/mirror_sep,0,+pm1], r_k=[i*dx+x_offset,0,0],
-                     FWHM=FWHM, w_cylind=w_cylind, r_cylind_trunc=r_cylind_trunc,
-                     dir_cylind=[1,0,-pm1*dx/mirror_sep])
+            self.add(
+                P           = P_beam,
+                k           = [dx/mirror_sep, 0, +pm1],
+                r_k         = [i*dx+x_offset, 0, 0],
+                FWHM        = FWHM,
+                w_cylind    = w_cylind,
+                r_cylind_trunc= r_cylind_trunc,
+                dir_cylind  = [1, 0, -pm1*dx/mirror_sep],
+                **laser_kwargs,
+                )
             if beam_config == 'twosides':
-                self.add(P=P_beam, k=[dx/mirror_sep,0,-pm1], r_k=[i*dx+x_offset,0,0],
-                         FWHM=FWHM, w_cylind=w_cylind, r_cylind_trunc=r_cylind_trunc,
-                         dir_cylind=[1,0,+pm1*dx/mirror_sep])
+                self.add(
+                    P           = P_beam,
+                    k           = [dx/mirror_sep, 0, -pm1],
+                    r_k         = [i*dx+x_offset, 0, 0],
+                    FWHM        = FWHM,
+                    w_cylind    = w_cylind,
+                    r_cylind_trunc= r_cylind_trunc,
+                    dir_cylind  = [1, 0, +pm1*dx/mirror_sep],
+                    **laser_kwargs,
+                    )
         if printing:
             print('k=',[dx/mirror_sep,0,+pm1],', dir_cyl=',[1,0,-pm1*dx/mirror_sep])
             print('Power ratio between last and first beam ={:6.2f} %'.format(
@@ -295,10 +334,10 @@ class Lasersystem:
                                   limits=([0e-2,23e-2],[-mirror_sep/2,+mirror_sep/2]))
     
     def get_intensity_func(self,sum_lasers=True,use_jit=True):
-        '''generates a function which uses all the current parameters of all
-        lasers in this Lasersystem for calculating the total intensity.
+        '''Generate a fast function which uses all the current parameters of
+        all lasers in this Lasersystem for calculating the total intensity.
         This function can also be called directly by calling the method
-        :func:`I_tot` with an input parameter r as
+        :func:`I_tot` with an input parameter ``r`` as the
         position at which the total intensity is calculated.
         
         Parameters
@@ -369,7 +408,7 @@ class Lasersystem:
         return I_tot
     
     def I_tot(self,r,**kwargs):
-        '''calculates the total intensity of all lasers in this Lasersystem at
+        '''Calculate the total intensity of all lasers in this Lasersystem at
         a specific position `r`. For this calculation the function generated by
         :func:`get_intensity_func` is used.
 
@@ -388,7 +427,7 @@ class Lasersystem:
         return self.get_intensity_func(**kwargs)(r)
         
     def plot_I_2D(self,ax='x',axshift=0,limits=([-0.05,0.05],[-0.05,0.05]),Npoints=201):
-        """plot the 2D intensity distribution of all laser beams along two axes
+        """Plot the 2D intensity distribution of all laser beams along two axes
         by using the method :func:`get_intensity_func`.
         
         Parameters
@@ -433,7 +472,7 @@ class Lasersystem:
     
     def plot_I_1D(self,ax='x',axshifts=[0,0],limits=[-0.05,0.05],
                   Npoints=1001,label=None):
-        """plot the 1D intensity distribution of all laser beams along an axis
+        """Plot the 1D intensity distribution of all laser beams along an axis
         by using the method :func:`get_intensity_func`.
 
         Parameters
@@ -492,7 +531,7 @@ class Lasersystem:
                    invert=False, N_points=500, xaxis_ext=5, cmap=None, relative_to_wavelengths=False,
                    fill_between_kwargs=dict(alpha=0.2, color='grey'),
                    plot_kwargs=dict(color='grey',ls='-')):
-        """Plotting the spectrum of :class:`~.Lasersystem.Laser` objects
+        """Plot the spectrum of :class:`~.Lasersystem.Laser` objects
         with their respective intensities.
         Either as Gaussians for each single laser object or as vertical lines.
         
@@ -627,13 +666,45 @@ class Lasersystem:
         return [self.entries[i] for i in index]
     
     def __str__(self):
-        """__str__ method is called when an object of a class is printed with print(obj)"""
-        for i in range(self.pNum):
-            la = self.entries[i]
-            print('>>> Laserbeam {:2d}: {}'.format(i,la))
-        return self.description
+        #__str__ method is called when an object of a class is printed with print(obj)
+        with pd.option_context(*self.pd_display_options):
+            return f"{self.description}\n{self.DF()}"
     
+    def __repr__(self):
+        with pd.option_context(*self.pd_display_options):
+            return repr(self.DF())
+    
+    def _repr_html_(self):
+        with pd.option_context(*self.pd_display_options):
+            return self.DF()._repr_html_()
+        
+    def DF(self, **kwargs):       
+        """
+        Create a pretty :class:`pandas.DataFrame` object with all lasers and
+        their attributes. This method basically concatenates the individual
+        laser dataframes from :class:`Laser.DF()`.
+        This method is e.g. used when calling ``print(lasers)``.
+
+        Parameters
+        ----------
+        **kwargs : kwargs
+            Keyword arguments of the respective method :meth:`Laser.DF()`.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Dataframe with the lasers attributes.
+        """
+        if self.pNum == 0:
+            return None
+        else:
+            return pd.concat([la.DF().T for la in self],
+                             ignore_index=True)
+        
     def check_config(self,raise_Error=False):
+        """Check the configuration for simulating internal dynamics using
+        the OBEs or rate equations.
+        """
         if self.pNum == 0:
             Err_str = 'There are no lasers defined!'
             if raise_Error: raise Exception(Err_str)
@@ -643,35 +714,75 @@ class Lasersystem:
         
     @property
     def description(self):
-        """str: Displays a short description with the number of included laser objects."""
+        """
+        Display a short description with the number of included laser objects.
+        
+        Returns
+        -------
+        str
+            description of the lasersystem.
+        """
         return "{:d} - Lasersystem".format(self.pNum)
+    
     @property
     def pNum(self):
-        """int: returns the number of included Laser objects."""
+        """int: Calculate the number of included Laser objects."""
         return len(self.entries)
+    
     @property
     def I_sum(self):
-        """returns the sum of the peak intensities of all laser beams"""
+        """
+        Calculate the sum of the peak intensities of all laser beams
+
+        Returns
+        -------
+        numpy.ndarray or float
+            Sum of peak intensities.
+        """
         return np.array([la.I for la in self]).sum(axis=0)
+    
     @property
     def P_sum(self):
-        """returns the sum of the powers of all laser beams"""
+        """
+        Calculate the sum of the powers of all laser beams
+
+        Returns
+        -------
+        numpy.ndarray or float
+            Sum of all lasers' powers.
+        """
         return np.array([la.P for la in self]).sum()
     
 #%%
 class Laser:
-    name = None #cooling / repumping laser
+    #: units of the laser beam properties
+    UNITS = dict(
+        lamb    = 'm',
+        I       = 'W/m^2',
+        P       = 'W',
+        FWHM    = 'm',
+        k       = '1',
+        r_k     = 'm',
+        phi     = 'rad',
+        beta    = 'Hz/s',
+        f_q     = '1',
+        w       = 'm',
+        _w_clind= 'm',
+        _dir_clind='m',
+        )
+    
     def __init__(self,lamb=860e-9,freq_shift=0,pol='lin',pol_direction=None,
                  P=20e-3,I=None,FWHM=5e-3,w=None,
                  w_cylind=.0,r_cylind_trunc=5e-2,dir_cylind=[1,0,0],
                  freq_Rabi=None,k=[0,0,1],r_k=[0,0,0],beta=0.,phi=0.0,
                  pol2=None,pol2_direction=None):
-        """Containing all properties of a laser which can be assembled in the
-        Lasersystem class.
+        """This class contains all physical properties of a laser which can
+        be assembled in the class :class:`Lasersystem`.
         
         Note
         ----
-        freq_shift without 2pi factor
+        ``freq_shift`` is given as non-angualar frequency, i.e. without the
+        :math:`2 \pi` factor.
         
         Parameters
         ----------
@@ -751,10 +862,11 @@ class Laser:
         Example
         -------
         A fast way to calculate the power of a laser with certain beam radii
-        to reach a certain intensity (or the other way around for an intensity):
+        to reach a certain intensity (or the other way around for an intensity)::
             
-            >>> print(Laser(I=1000.,w=1e-3,w_cylind=5e-2).P)
-            >>> print(Laser(P=0.02,FWHM=5e-3).I)
+            from MoleCool import Laser
+            print( Laser(I = 1000., w = 1e-3, w_cylind = 5e-2).P )
+            print( Laser(P = 0.02,  FWHM = 5e-3).I )
         """
         #: float: angular frequency :math:`\omega`
         self.omega      = 2*pi*(c/lamb + freq_shift)
@@ -838,49 +950,89 @@ class Laser:
             
     def __str__(self):
         #__str__ method is called when an object of a class is printed with print(obj)
-        list1=dir(self).copy()
-        out = ''
-        for el in list1.copy():
-            if el[0]=='_': list1.remove(el)
-        for el in list1:
-            out+='{}='.format(el)
-            value = self.__getattribute__(el)
-            if isinstance(value,(float,np.float64)): out+= '{:.2e}, '.format(value)
-            elif isinstance(value,(list,np.ndarray)) and len(value) >5: out+= '{}..., '.format(value[:5])
-            else: out+= '{}, '.format(value)
-        #'lamb={:.2e}, I={:.2e}, P={:.2e}, FWHM={:.2e} ,f={:.2e}, pol={}, pol_switching={}'.format(self.lamb,self.I,self.P,self.FWHM,(self.pol,self.pol2),self.pol_switching)    
-        return out[:-2]
+        with pd.option_context('display.float_format','{:.3e}'.format):
+            return self.DF().to_string()
+    
+    def __repr__(self):
+        with pd.option_context('display.float_format','{:.3e}'.format):
+            return repr(self.DF())
+    
+    def _repr_html_(self):
+        with pd.option_context('display.float_format','{:.3e}'.format):
+            return self.DF()._repr_html_()
+    
+    def DF(self,
+           attrs  = ['lamb','I','P','FWHM','k','r_k','phi','beta'],
+           units = {},
+           ):
+        """
+        Create a DataFrame with attributes of the Laser instance. This method
+        is e.g. used when calling ``print(lasers[0])``.
+        
+        Parameters
+        ----------
+        attrs : list, optional
+            list of attributes as properties of the Laser.
+            The default is ['lamb', 'I', 'P', 'FWHM', 'k',
+            'r_k', 'phi', 'beta'].
+        units : dict, optional
+            units of the physical attributes. The default is {}.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            All specified attributes with units as a Dataframe.
+        """
+        
+        units = dict(self.UNITS, **units)
+        for attr in attrs:
+            if not hasattr(self, attr):
+                raise ValueError(f"attr {attr} is not an attribute of Laser")
+            if attr not in units:
+                units[attr] = '?'
+        
+        df = pd.DataFrame(
+            [getattr(self, attr) for attr in attrs],
+            index = [f"{attr} ({units[attr]})" for attr in attrs]
+            )
+        
+        return df
     
     @property
     def w(self):
-        """calculates the 1/e^2 beam radius"""
+        """Calculate the 1/e^2 beam radius"""
         return self._w
+    
     @w.setter
     def w(self,w):
         self._w = w
         self._FWHM = 2*w / ( np.sqrt(2)/np.sqrt(np.log(2)) )
         self.intensity_func = None
         self.intensity_func_sum = None
+        
     @property
     def FWHM(self):
-        """calculates the  FWHM (full width at half maximum) of the Gaussian
+        """Calculate the  FWHM (full width at half maximum) of the Gaussian
         intensity distribution of the laserbeam
         """
         return self._FWHM
+    
     @FWHM.setter
     def FWHM(self,FWHM):
         self._FWHM = FWHM
         self._w = np.sqrt(2)/np.sqrt(np.log(2))*FWHM/2 # ~= 1.699*FWHM/2
         self.intensity_func = None
         self.intensity_func_sum = None
+        
     @property
     def P(self):
-        """calculates the Power of the single beam"""
+        """Calculate the Power of the single beam"""
         if np.any(self._P != None): return self._P
         else:
             if np.any(np.array(self._w_cylind) != 0.0):
                 return self.I*(pi*self.w*self._w_cylind)/2
             else: return self.I*(pi*self.w**2)/2
+            
     @P.setter
     def P(self,P):
         """When the power P is set to a value the intensity is automatically
@@ -893,23 +1045,27 @@ class Laser:
             self.I  = 2*self.P/(pi*self.w**2)
         self.intensity_func = None
         self.intensity_func_sum = None
+        
     @property
     def kabs(self):
-        """calculates the absolute value of the wave vector
+        """Calculate the absolute value of the wave vector
         (:math:`= 2 \pi/\lambda = \omega/c`)
         in :math:`\\text{rad}/\\text{m}`.
         
         Note:
             ``self.k`` is a unit vector and defines the direction of the wave vector"""
         return self.omega/c
+    
     @property
     def lamb(self):
-        """calculates the wavelength of the single laser"""
+        """Calculate the wavelength of the single laser"""
         return 2*pi*c/self.omega
+    
     @property
     def f(self):
-        """calculates the frequency (non-angular)"""
+        """Calculate the frequency (non-angular)"""
         return self.omega/(2*pi)
+    
     @property
     def E(self):
         """Energy of the laser's photons."""

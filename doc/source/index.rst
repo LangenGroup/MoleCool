@@ -6,8 +6,9 @@ specializing in **laser cooling of molecules**.
 It is designed for researchers and physicists working with **atomic and molecular systems**,
 from simple few-level models and diatomics to polyatomics and even radioactive species.
 
-Current version: |version|
+More details and citing this package: |arxiv_badge|
 
+Current version: |version|
 
 .. grid:: 1 2 2 2
    :gutter: 3 3 3 4
@@ -18,11 +19,11 @@ Current version: |version|
       :link-type: doc
       :class-card: sd-text-center sd-shadow
 
-      Instructions on how to install MoleCool on your system.
+      Instructions on how to install ``MoleCool`` on your system.
       +++
 
       .. button-ref:: installation
-         :color: warning
+         :color: primary
          :expand:
 
          To the Installation Guide
@@ -32,11 +33,11 @@ Current version: |version|
       :link-type: doc
       :class-card: sd-text-center sd-shadow
       
-      Learn how to get started and explore its main features step by step.
+      Learn how to get started and explore its main features.
       +++
 
       .. button-ref:: user_guide/introduction
-         :color: primary
+         :color: success
          :expand:
 
          To the User Guide
@@ -46,11 +47,11 @@ Current version: |version|
       :link-type: doc
       :class-card: sd-text-center sd-shadow
 
-      Browse examples and tutorials generated with sphinx-gallery.
+      Browse examples and tutorials to apply the features to different level systems.
       +++
       
       .. button-ref:: auto_examples/core/index
-         :color: success
+         :color: secondary
          :expand:
 
          To the Examples
@@ -64,7 +65,7 @@ Current version: |version|
       +++
 
       .. button-ref:: api
-         :color: secondary
+         :color: light
          :expand:
 
          To the API Reference
@@ -97,3 +98,5 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+.. include:: substitutions.rst

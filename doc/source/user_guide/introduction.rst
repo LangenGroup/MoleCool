@@ -1,21 +1,30 @@
 Introduction
 ============
 
-MoleCool is a Python library for numerical modeling of light-matter interactions,
-specializing in laser cooling in molecules -- from simple few-level systems
-and diatomics to polyatomics and radioactive species.
+``MoleCool`` is a Python library for numerical modeling of light-matter interactions,
+with a focus on **laser cooling of molecules** — from simple few-level systems and diatomics
+to polyatomics and radioactive species.
 
-With MoleCool, you can simulate, analyze, and visualize the dynamics of laser-molecule interactions 
-to design and optimize experimental setups for cutting-edge cooling and trapping experiments.
+.. card:: MoleCool enables you to
 
+    simulate, analyze, and visualize the dynamics of laser-molecule interactions
+    for designing and optimizing experimental setups of cutting-edge cooling
+    and trapping experiments.
+   
+.. note::
 
+    For more details, please refer to our paper and cite it when using this
+    code: |arxiv_badge|
+    
+    
 Key Features
 ------------
 
 - **Flexible dynamics solvers**  
   Supports rate equations and Optical Bloch equations (OBEs) to evaluate interactions in the 
   presence of external magnetic fields. MoleCool reads predefined constants such as dipole matrix 
-  elements, hyperfine frequencies, and g-factors from JSON files.
+  elements, hyperfine frequencies, and g-factors from
+  `JSON files <https://github.com/LangenGroup/MoleCool/tree/master/MoleCool/constants>`_.
 
 - **Interactive level scheme handling**  
   Intuitive tools to explore and adjust electronic, vibrational, and rotational level structures.  
@@ -87,3 +96,5 @@ switching on a magnetic field, and running both OBE and rate equation simulation
 
 For further details, see the :doc:`Installation <../installation>` 
 and :doc:`Getting started <getting_started>` sections.
+
+.. include:: ../substitutions.rst

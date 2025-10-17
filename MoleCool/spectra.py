@@ -11,36 +11,41 @@ Example
 -------
 
 Example for calculating and plotting a spectrum of 138BaF::
+    
+   from MoleCool.spectra import ElectronicStateConstants, Molecule, plt
+   
+   # defining spectroscopic constants
+   const_gr = ElectronicStateConstants(const={
+       'B_e' : 0.2159,   'D_e' : 1.85e-7,  'gamma' : 0.0027,
+       'b_F' : 0.0022,   'c'   : 0.00027,
+   })
+   const_ex = ElectronicStateConstants(const={
+       'B_e' : 0.2117,   'D_e' : 2.0e-7,   'A_e' : 632.2818,
+       'p'   : -0.089545,'q'  : -0.0840,
+       "g'_l": -0.536,   "g'_L":0.980,
+       'T_e' : 11946.31676963,
+   })
 
-    from Molecule import *    
-    # molecular constants in wave numbers (1/cm) within the effective Hamiltonian
-    const_gr_138 = ElectronicStateConstants(const={
-                    'B_e':0.21594802,'D_e':1.85e-7,'gamma':0.00269930,
-                    'b_F':0.002209862,'c':0.000274323})
-    const_ex_138 = ElectronicStateConstants(const={
-                    'A':632.28175,'A_D':3.1e-5,'B_e':0.2117414,
-                    'D_e':2.0e-7,'p+2q':-0.25755,"g'_l":-0.536,"g'_L":0.980,
-                    'T_e':11946.31676963})
-    
-    # create a Molecule instance with nuclear spin 1/2
-    BaF = Molecule(I1=0.5)
-    
-    # add a ground and an excited electronic state and build up hyperfine states
-    BaF.add_electronicstate('X',2,'Sigma', const=const_gr_138)
-    BaF.add_electronicstate('A',2,'Pi', Gamma=2.8421, const=const_ex_138)
-    BaF.X.build_states(Fmax=9)
-    BaF.A.build_states(Fmax=9)
-    
-    # calculate branching ratios and plot spectrum
-    BaF.calc_branratios(threshold=0.05)
-    BaF.calc_spectrum( limits=(11627.0, 11632.8) )
-    plt.plot(BaF.Eplt, BaF.I)
-    plt.xlabel('transition frequency in 1/cm')
-    plt.ylabel('intensity')
+   # initiating empty Molecule instance and adding electronic states
+   # with all quantum states up to a certain quantum number F
+   BaF = Molecule(I1 = 0.5, mass = 157, temp = 4)
+   BaF.add_electronicstate('X', 2, 'Sigma', const=const_gr)
+   BaF.add_electronicstate('A', 2, 'Pi', Gamma=2.84, const=const_ex)
+   BaF.build_states(Fmax=8)
+
+   # calculating branching ratios and molecular spectrum
+   BaF.calc_branratios()
+   E, I = BaF.calc_spectrum(limits=(11627.0, 11632.8))
+   
+   # plotting
+   plt.figure()
+   plt.plot(E, I)
+   plt.xlabel('Frequency (cm$^{-1}$)')
+   plt.ylabel('Intensity (arb. u.)')
     
 Tip
 ---
-The instances of all classes :class:`~Molecule.Molecule`,
+The instances of all classes :class:`Molecule`,
 :class:`ElectronicState`, :class:`Hcasea` and :class:`ElectronicStateConstants`
 can be printed::
     
@@ -693,8 +698,8 @@ class ElectronicStateConstants:
         ---
         Such instance can nicely export the defined constants as a HTML file
         (see :meth:`show`) or can be saved with all its properties
-        via the function :func:`~System.save_object` of the :mod:`System` module
-        and can be loaded later using the function :func:`~System.open_object`.
+        via the function :func:`~.tools.save_object` and can be loaded
+        later using the function :func:`~.tools.open_object`.
         
         Raises
         ------
