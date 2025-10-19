@@ -9,7 +9,7 @@ with a focus on **laser cooling of molecules** — from simple few-level systems
 to polyatomics and even radioactive species.
 
 <p align="center">
-  <a href="https://langengroup.github.io/MoleCool/"><b>📘 Full Documentation</b></a> •
+  <a href="https://molecool-py.readthedocs.io/"><b>📘 Full Documentation</b></a> •
   <a href="https://pypi.org/project/MoleCool/"><b>PyPI</b></a> •
   <a href="https://github.com/LangenGroup/MoleCool/"><b>GitHub</b></a>
 </p>
@@ -55,7 +55,7 @@ MoleCool is intended for **researchers and physicists** working in
 
 We recommend installing MoleCool in a dedicated virtual environment  
 (using either `virtualenv` or `conda`) to avoid dependency conflicts.
-See the [Installation Guide](https://langengroup.github.io/MoleCool/installation.html#contributing)
+See the [Installation Guide](https://molecool-py.readthedocs.io/en/stable/installation.html)
 for more details.
 
 > **Requires:** Python ≥ 3.8 (Python ≤ 3.10 recommended)
@@ -130,8 +130,8 @@ system.plot_N()
 ```
 
 For detailed usage, see the  
-👉 [User Guide](https://langengroup.github.io/MoleCool/user_guide/introduction.html)  
-and [Examples](https://langengroup.github.io/MoleCool/auto_examples/core/index.html).
+👉 [User Guide](https://molecool-py.readthedocs.io/en/stable/user_guide/introduction.html)  
+and [Examples](https://molecool-py.readthedocs.io/en/stable/examples.html).
 
 ---
 
@@ -156,7 +156,7 @@ pip install -e .[dev,doc]
 ```
 
 The `-e` flag enables **editable mode**, allowing immediate testing of code changes.  
-See the [Installation Guide](https://langengroup.github.io/MoleCool/installation.html#contributing)
+See the [Installation Guide](https://molecool-py.readthedocs.io/en/stable/installation.html)
 for more details.
 
 > ⚠️ **Important:** Do not import the package from its parent folder if the
@@ -168,7 +168,7 @@ for more details.
 
 Full documentation, tutorials, and API reference are hosted on **ReadTheDocs**:
 
-👉 [https://langengroup.github.io/MoleCool/](https://langengroup.github.io/MoleCool/)
+👉 [https://molecool-py.readthedocs.io/](https://molecool-py.readthedocs.io/)
 
 ---
 
@@ -182,7 +182,7 @@ If you use MoleCool in your research, please cite the corresponding paper:
 ## 🧠 License
 
 © Felix Kogel — released under the **MIT License**.  
-See [`LICENSE`](./LICENSE) for details.
+See [`LICENSE`](./LICENSE.md) for details.
 
 ---
 

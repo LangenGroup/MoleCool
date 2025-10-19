@@ -113,6 +113,6 @@ where = ["."]
 include = ["MoleCool*"]
 
 [tool.setuptools_scm]
-version_scheme = "post-release"
+version_scheme = "guess-next-dev" # "post-release"
 local_scheme = "no-local-version" # "node-and-date"
 write_to = "MoleCool/_version.py"
