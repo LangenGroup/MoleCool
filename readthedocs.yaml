@@ -9,12 +9,12 @@ python:
         - doc
 
 sphinx:
-  configuration: docs/source/conf.py
+  configuration: doc/source/conf.py
   fail_on_warning: true
 
-# formats:
-#   - pdf
-#   - epub
+formats:
+  - pdf
+  - epub
 
 build:
   os: "ubuntu-22.04"
@@ -27,16 +27,17 @@ build:
       # ==> python -m sphinx -T -W --keep-going -b html -d _build/doctrees -D language=en . $READTHEDOCS_OUTPUT/html
       - date
       - echo "pre-build manually running sphinx-build to already create objects.inv needed in the second build for API links"
-      - python -m sphinx -T --keep-going -b html -d docs/source/_build/doctrees -D language=en docs/source $READTHEDOCS_OUTPUT/html
+      #- python -m sphinx -T --keep-going -b html -d doc/source/_build/doctrees -D language=en doc/source $READTHEDOCS_OUTPUT/html
       - date
       - ls -a
-      - ls -a docs/source
-    # build:
-      # html:
-        # - echo "overriding the default RTD html sphinx build"
-        # python -m sphinx -T -W --keep-going -b html -d docs/source_build/doctrees -D language=en docs/source $READTHEDOCS_OUTPUT/html
+      - ls -a doc/source
+      #- ls -a doc/source/_build/doctrees
+    #build:
+      #html:
+        #- echo "overriding the default RTD html sphinx build"
+        #- python -m sphinx -T -W --keep-going -b html -d doc/source/_build/doctrees -D language=en doc/source $READTHEDOCS_OUTPUT/html
     post_build:
       - date
       - ls -a
-      - ls -a docs/source
+      - ls -a doc/source/_build/doctrees
       - env

@@ -4,8 +4,7 @@ __pycache__/
 *$py.class
 
 # sphinx documentation build, auto-generated Example file
-build/
-Examples.rst
+_build/
 auto_examples
 sg_execution_times.rst
 generated

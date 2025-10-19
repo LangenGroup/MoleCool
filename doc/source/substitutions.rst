@@ -1,5 +1,5 @@
-.. |arxiv_badge| image:: https://img.shields.io/badge/arXiv-2501.16095-blue?logo=arxiv
-   :target: https://arxiv.org/abs/2501.16095
+.. |arxiv_badge| image:: https://img.shields.io/badge/arXiv-Coming%20Soon-blue?logo=arxiv
+   :target: https://arxiv.org/
    :alt: arXiv paper
    :class: inline-badge
    

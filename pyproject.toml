@@ -98,7 +98,7 @@ dev = [
 # Should describe where to find useful info for your project
 # source = "github.com/MyProfile/my_project"
 Homepage = "https://www.coldmolecules.eu/Home/"
-Documentation = "molecool.readthedocs.io/en/stable"
+Documentation = "https://molecool.readthedocs.io/en/stable"
 Repository = "https://github.com/LangenGroup/MoleCool"
 Issues = "https://github.com/LangenGroup/MoleCool/issues"
 
