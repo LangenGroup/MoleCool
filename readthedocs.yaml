@@ -32,6 +32,7 @@ build:
       - ls -a
       - ls -a doc/source
       #- ls -a doc/source/_build/doctrees
+      - find . -type d -name "__pycache__" -exec rm -r {} +
     #build:
       #html:
         #- echo "overriding the default RTD html sphinx build"
