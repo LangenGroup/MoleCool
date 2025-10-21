@@ -12,9 +12,9 @@ sphinx:
   configuration: doc/source/conf.py
   fail_on_warning: true
 
-formats:
+# formats:
   # - pdf # no pdf since latex has few issues with image links and other design elements
-  - epub
+  # - epub
 
 build:
   os: "ubuntu-22.04"
