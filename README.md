@@ -14,6 +14,8 @@ to polyatomics and even radioactive species.
   <a href="https://github.com/LangenGroup/MoleCool/"><b>GitHub</b></a>
 </p>
 
+For citing this package: [![arXiv](https://img.shields.io/badge/arXiv-2510.16203-blue.svg)](https://arxiv.org/abs/2510.16203)
+
 ---
 
 ## ✨ Overview
@@ -172,10 +174,20 @@ Full documentation, tutorials, and API reference are hosted on **ReadTheDocs**:
 
 ---
 
-## 🧾 Citation
+## 🧾 Citation and Further Reading
 
 If you use MoleCool in your research, please cite the corresponding paper:  
 [![arXiv](https://img.shields.io/badge/arXiv-2510.16203-blue.svg)](https://arxiv.org/abs/2510.16203)
+
+Further background on molecular level structure, spectroscopy, and laser cooling, as well as
+the application of ``MoleCool`` to achieve **isotopologue-selective laser cooling**
+of **complex molecules** via *serrodyne* modulation, is presented in the PhD thesis
+
+> **Felix Kogel – [Laser Cooling of Molecules for Precision Measurements of Parity Violation](https://doi.org/10.18419/opus-17104)**
+
+This work introduces a novel strategy for designing optimized optical spectra to laser cool
+heavy, low-abundant **barium monofluoride (BaF)** molecules, whose additional nuclear spin
+creates an exceptionally intricate level structure.
 
 ---
 

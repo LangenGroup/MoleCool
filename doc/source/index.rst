@@ -10,11 +10,13 @@ Current version: |version|
 
 For more details and citing this package, please refer to our paper: |arxiv_badge|
 
-Further background on molecular level structure, spectroscopy, and laser cooling --
-including the application of ``MoleCool`` to achieve **isotopologue-selective laser cooling**
-of **complex molecules** via *serrodyne* modulation --
-is presented in the PhD thesis
-`Kogel – Laser Cooling of Molecules for Precision Measurements of Parity Violation <https://doi.org/10.18419/opus-17104>`_.
+Further background on molecular level structure, spectroscopy, and laser cooling,
+as well as the application of ``MoleCool`` to achieve **isotopologue-selective
+laser cooling** of **complex molecules** via *serrodyne* modulation, is presented
+in the PhD thesis
+
+   Felix Kogel -- `Laser Cooling of Molecules for Precision Measurements of Parity Violation <https://doi.org/10.18419/opus-17104>`_
+
 This work introduces a novel strategy for designing optimized optical spectra to laser cool
 heavy, low-abundant **barium monofluoride (BaF)** molecules, whose additional nuclear spin
 creates an exceptionally intricate level structure.
