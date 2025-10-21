@@ -6,9 +6,18 @@ specializing in **laser cooling of molecules**.
 It is designed for researchers and physicists working with **atomic and molecular systems**,
 from simple few-level models and diatomics to polyatomics and even radioactive species.
 
-More details and citing this package: |arxiv_badge|
-
 Current version: |version|
+
+For more details and citing this package, please refer to our paper: |arxiv_badge|
+
+Further background on molecular level structure, spectroscopy, and laser cooling --
+including the application of ``MoleCool`` to achieve **isotopologue-selective laser cooling**
+of **complex molecules** via *serrodyne* modulation --
+is presented in the PhD thesis
+`Kogel – Laser Cooling of Molecules for Precision Measurements of Parity Violation <https://doi.org/10.18419/opus-17104>`_.
+This work introduces a novel strategy for designing optimized optical spectra to laser cool
+heavy, low-abundant **barium monofluoride (BaF)** molecules, whose additional nuclear spin
+creates an exceptionally intricate level structure.
 
 .. grid:: 1 2 2 2
    :gutter: 3 3 3 4

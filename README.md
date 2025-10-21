@@ -175,7 +175,7 @@ Full documentation, tutorials, and API reference are hosted on **ReadTheDocs**:
 ## 🧾 Citation
 
 If you use MoleCool in your research, please cite the corresponding paper:  
-[![arXiv](https://img.shields.io/badge/arXiv-Coming%20Soon-blue.svg)](https://arxiv.org/)
+[![arXiv](https://img.shields.io/badge/arXiv-2510.16203-blue.svg)](https://arxiv.org/abs/2510.16203)
 
 ---
 
