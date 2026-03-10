@@ -216,7 +216,7 @@ class Lasersystem:
             self.entries[-1].mod_freq  = mod_freq
     
     def make_retrorefl_beams(self, beam_config='oneside',
-                             P_tot=100e-3, FWHM=1.6e-3, w_cylind=0.0,
+                             P_tot=100e-3, FWHM=1.6e-3, w_cylind=0.00,
                              T_airglass=99.62e-2, R_mirror=98.34e-2,
                              mirror_sep=463e-3, reflections=34,
                              int_length=200e-3, x_offset=15e-3, cut_flanks=True,
@@ -326,13 +326,94 @@ class Lasersystem:
         if plotting:
             plt.figure('1D intensity distribution')
             z_shift = 0e-3
-            self.plot_I_1D(ax='x',axshifts=[0e-3,z_shift],limits=[0e-2,23e-2],
+            self.plot_I_1D(ax='x',axshifts=[0e-3,z_shift],limits=[0e-2,60e-2],
                                   label=f"{reflections} refl.", Npoints=10001)
             # 2D
             plt.figure('2D intensity distribution')
             self.plot_I_2D(ax='y',axshift=0,Npoints=501,
-                                  limits=([0e-2,23e-2],[-mirror_sep/2,+mirror_sep/2]))
+                                  limits=([0e-2,60e-2],[-mirror_sep/2,+mirror_sep/2]))
+    def make_bc_beams(self,
+                  axis='y',
+                  P_tot=50e-3,
+                  FWHM=1.6e-3,
+                  x_offset=0.0,
+                  w_cylind=0.0,
+                  r_cylind_trunc=10.0,
+                  plotting=False,
+                      **laser_kwargs):
+        """
+        Create a simple pair of counterpropagating Gaussian beams
+        for bichromatic force deflection.
     
+        Parameters
+        ----------
+        axis : str
+            Propagation axis: 'x', 'y', or 'z'
+        P_tot : float
+            Total optical power (W) split equally between the two beams
+        FWHM : float
+            Gaussian beam FWHM (m)
+        x_offset : float
+            Position of the beam center along x (m)
+        w_cylind : float
+            Cylindrical beam width (optional)
+        r_cylind_trunc : float
+            Truncation radius for cylindrical beams
+        plotting : bool
+            Whether to plot intensity profiles
+        **laser_kwargs
+            Passed to Laser.add() (e.g. wavelength, omega, phi, etc.)
+        """
+
+        # Unit vectors for propagation
+        k_map = {
+            'x': [1, 0, 0],
+            'y': [0, 1, 0],
+            'z': [0, 0, 1],
+            'x+y': [1, 1, 0],
+            'x-y': [1, -1, 0]
+        }
+    
+        if axis not in k_map:
+            raise ValueError("axis must be 'x', 'y', or 'z'")
+    
+        k = k_map[axis]
+        k_minus = [-ki for ki in k]
+    
+        P_beam = P_tot / 2
+
+        # Beam 1
+        self.add(
+            P=P_beam,
+            k=k,
+            r_k=[x_offset, 0, 0],
+            FWHM=FWHM,
+            w_cylind=w_cylind,
+            r_cylind_trunc=r_cylind_trunc,
+            dir_cylind=[1, 0, 0],
+            **laser_kwargs,
+        )
+
+        # Beam 2 (counterpropagating)
+        self.add(
+            P=P_beam,
+            k=k_minus,
+            r_k=[x_offset, 0, 0],
+            FWHM=FWHM,
+            w_cylind=w_cylind,
+            r_cylind_trunc=r_cylind_trunc,
+            dir_cylind=[1, 0, 0],
+            **laser_kwargs,
+        )
+
+        if plotting:
+            plt.figure("BC beam intensity (1D)")
+            self.plot_I_1D(ax='x', axshifts=[0, 0], limits=[0e-2,60e-2])
+    
+            plt.figure("BC beam intensity (2D)")
+            self.plot_I_2D(ax='z', axshift=0,Npoints=501,
+                           limits=([-100e-3,100e-3], [-100e-3, 100e-3]))
+
     def get_intensity_func(self,sum_lasers=True,use_jit=True):
         '''Generate a fast function which uses all the current parameters of
         all lasers in this Lasersystem for calculating the total intensity.
