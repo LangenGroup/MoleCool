@@ -95,6 +95,7 @@ class Bfield:
         self.strength, self.direction = 0.0, np.array([0.,0.,1.])
         if 'angle' in self.__dict__: del self.angle, self.axisforangle
         self._remix_matrix = np.array([[],[]])
+        self.mode = 'uniform'
         
     def get_remix_matrix(self,grs,remix_strength=None):
         """return a matrix to remix all adjacent ground hyperfine levels
@@ -140,6 +141,86 @@ class Bfield:
         """
         return np.tensordot(self.strength,self.direction,axes=0)
     
+    def turnon_quadrupole(self, bprime=0.8, center=[0,0,0], axis='z', cutoff_radius = False):
+        """
+        Turn on an anti-Helmholtz quadrupole field.
+    
+        Parameters
+        ----------
+        bprime : float
+            Field gradient in T/m along the strong axis.
+            Convention (axis='z'): B = ( +b'/2 x, +b'/2 y, -b' z )
+        center : array_like (3,)
+            Field zero position [m].
+        axis : str
+            Strong axis: 'x','y','z'. Default 'z'.
+        remix_strength : float
+            Optional remixing parameter (kept for compatibility).
+        """
+        self.mode = 'quadrupole'
+        self.bprime = float(bprime)
+        self.center = np.array(center, dtype=float)
+        self.axis = axis
+        self.cutoff_radius = cutoff_radius
+
+    def Bvec(self, r):
+        """
+        Return magnetic field vector B(r).
+    
+        Parameters
+        ----------
+        r : array_like, shape (3,) or (N,3)
+    
+        Returns
+        -------
+        B : np.ndarray, shape (3,) or (N,3)
+            Magnetic field in Tesla.
+        """
+        r = np.asarray(r, dtype=float)
+    
+        # uniform field
+        if getattr(self, 'mode', 'uniform') == 'uniform':
+            return np.tensordot(self.strength, self.direction, axes=0)
+    
+        # quadrupole field
+        if self.mode == 'quadrupole':
+            rr = r - self.center
+            # make it work for both (3,) and (N,3)
+            if rr.ndim == 1:
+                rr = rr[None, :]
+    
+            b = self.bprime
+            B = np.zeros_like(rr)
+            
+            """ I keep all signs positive here for each component because OBEs are usually only solved along 1 axis, 
+                but the physics coming from the proper quadrupole field (with negative signs) is taken care of by laser
+                polarizations - which of course have to be correctly defined during OBE calculations."""
+                
+            if self.axis == 'z':
+                B[:,0] = +0.5*b*rr[:,0]
+                B[:,1] = +0.5*b*rr[:,1]
+                B[:,2] = +1.0*b*rr[:,2]
+            elif self.axis == 'y':
+                B[:,0] = +0.5*b*rr[:,0]
+                B[:,1] = +1.0*b*rr[:,1]
+                B[:,2] = +0.5*b*rr[:,2]
+            elif self.axis == 'x':
+                B[:,0] = +1.0*b*rr[:,0]
+                B[:,1] = +0.5*b*rr[:,1]
+                B[:,2] = +0.5*b*rr[:,2]
+            else:
+                raise ValueError("axis must be 'x','y', or 'z'")
+            
+            # An aphysical cutoff to avoid stray magnetic fields beyond the MOT region
+            if self.cutoff_radius:
+                rnorm = np.linalg.norm(rr, axis=1)          # shape (N,)
+                mask  = rnorm > self.cutoff_radius          # shape (N,) boolean
+                B[mask] = 0.0
+
+            return B[0] if r.ndim == 1 else B
+    
+        raise ValueError(f"Unknown Bfield mode: {self.mode}")
+        
     @property
     def Bvec_sphbasis(self):
         """returns the magnetic field vector in the spherical basis."""
@@ -151,7 +232,7 @@ class Bfield:
         if type(ex)         == np.ndarray: eps = (eps.T)[None,:]
         self._Bvec_sphbasis = eps*strength
         return self._Bvec_sphbasis
-    
+
 if __name__ == '__main__':
     B1 = Bfield()   # initialize Bfield instance
     B1.turnon(strength=5e-4,direction=[0,0,1],angle=60)

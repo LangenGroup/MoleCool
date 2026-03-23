@@ -86,9 +86,17 @@ def load_init_distr(system, fname, samplesize=None, x_init=0., plotting=False):
     
     if plotting:
         plt.figure('vel dist y')
-        plt.hist(vdist[:,1],bins=30)
+        plt.hist(vdist[:,1],bins=int(len(vdist[:,1])/10))
         plt.figure('pos dist y')
-        plt.hist(rdist[:,1]*1e3, bins=30)
+        plt.hist(rdist[:,1]*1e3, bins=int(len(rdist[:,1])/10))
+        
+        plt.figure('vel dist z')
+        plt.hist(vdist[:,2],bins=int(len(vdist[:,1])/10))
+        plt.figure('pos dist z')
+        plt.hist(rdist[:,2]*1e3, bins=int(len(rdist[:,1])/10))
+        
+        plt.figure('vel dist x')
+        plt.hist(vdist[:,0],bins=int(len(vdist[:,0])/10))
 
 #%%
 class TrajectoryApertures():

@@ -616,7 +616,183 @@ class System:
         
         return F
     
-    #%%
+    def calc_trajectory_MOT(self, F_profile, t_int=20e-6, t_start=0., dt=None, t_eval=None,
+                    verbose=True, force_axis=None, r_thresh = False,
+                    interpol_kind='linear', save_scipy_sols=False, **kwargs):
+        """ Newly added by Tatsam on 20/02/2026
+        Calculate Monte Carlo simulations of classical particles
+        propagated through a provided pre-calculated force profile.
+        Profiles MUST be compatible with MOT -> Contain v, I, B axis
+        New MOT behavior:
+          - If force table contains B (or Bstr) axis,
+            then it applies:
+                Fx = F(vx, I(r), Bx(r))
+                Fy = F(vy, I(r), By(r))
+                Fz = F(vz, I(r), Bz(r))
+            and integrates full 3D motion.
+        """
+        # -------------------------------------------------------------------------
+        # Defaults
+        # -------------------------------------------------------------------------
+        if 'method' not in kwargs:
+            kwargs['method'] = 'LSODA'
+        from scipy.integrate import solve_ivp
+        # -------------------------------------------------------------------------
+        # Normalize F_profile input
+        # -------------------------------------------------------------------------
+        if not isinstance(F_profile, dict):
+            if np.all([isinstance(dic, dict) for dic in F_profile]):
+                F_profile = {k: v for dic in F_profile for k, v in dic.items()}
+            else:
+                raise ValueError("F_profile must be dictionary or iterable of dictionaries!")
+        # velocity axis
+        if 'v' in F_profile:
+            v = F_profile['v']
+        elif 'v0' in F_profile:
+            v = F_profile['v0']
+        else:
+            raise ValueError("Either 'v' or 'v0' must be included in F_profile!")
+        # intensity axis?
+        has_I = ('I' in F_profile)
+        # magnetic axis? (your get_results labels it as Bstr)
+        has_B = ('B' in F_profile) or ('strength' in F_profile)
+        if has_B:
+            B_axis = F_profile['B'] if ('B' in F_profile) else F_profile['strength']
+        # -------------------------------------------------------------------------
+        # Ensure acceleration exists
+        # -------------------------------------------------------------------------
+        if ('a' not in F_profile) and ('F' in F_profile):
+            F_profile['a'] = F_profile['F'] / self.levels.mass
+            print(f'Converting force to acceleration with mass {self.levels.mass}')
+            a_arr = np.asarray(F_profile['a'])
+        elif ('a' not in F_profile):
+            raise ValueError("Either 'F' or 'a' must be included in F_profile!")
+        # -------------------------------------------------------------------------
+        # Allocate output
+        # -------------------------------------------------------------------------
+        self.trajectory_results = dict(kwargs=locals(), sols=[])
+        v0_arr = np.atleast_2d(self.v0)
+        r0_arr = np.atleast_2d(self.r0)
+        if isinstance(t_int, float):
+            t_int = np.ones(v0_arr.shape[0]) * t_int
+        self.trajectory_results['final_values'] = dict(
+            photons=np.zeros(len(v0_arr)),
+            v=np.zeros((len(v0_arr), 3)),
+            r=np.zeros((len(v0_arr), 3))
+        )
+        # -------------------------------------------------------------------------
+        # Helper: intensity function (if needed)
+        # -------------------------------------------------------------------------
+        if has_I:
+            I_unsort = F_profile['I']
+            sort_idx_I = np.argsort(I_unsort)
+            I = I_unsort[sort_idx_I]
+            I_tot_raw = self.lasers.get_intensity_func()
+            def I_tot(r):
+                It = I_tot_raw(r)
+                
+                if r_thresh:
+                    r_ = r
+                    if r_.ndim == 1:
+                        r_ = r_[None, :]
+                    return It if np.linalg.norm(r_, axis=1) <= r_thresh else 0.0
+                else:
+                    return It
+        else:
+            raise ValueError("No intensity dependence detected in force profile!")
+        # -------------------------------------------------------------------------
+        # Helper: magnetic field function (if needed)
+        # -------------------------------------------------------------------------
+        if has_B:
+            Bvec = self.Bfield.Bvec
+    
+            # Sort B axis (important for RegularGridInterpolator)
+            B_unsort = np.asarray(B_axis)
+            sort_idx_B = np.argsort(B_unsort)
+            B = B_unsort[sort_idx_B]
+        else:
+            raise ValueError("No magnetic field dependence detected in force profile!")
+    
+        # -------------------------------------------------------------------------
+        # Build interpolators
+        # -------------------------------------------------------------------------
+        from scipy.interpolate import RegularGridInterpolator as interp    
+        # -----------------------------
+        # NEW MOT BEHAVIOR (vector force)
+        # -----------------------------
+        # Expected shapes:
+        #   a_arr: (Nv, NI, NB)
+        #
+        # Same for Nscattrate (can be scalar or per-axis; we assume scalar)
+        # Sort I and B axes in the stored arrays
+        a_arr = a_arr[:, sort_idx_I, :]
+        R_arr = np.asarray(F_profile['Nscattrate'])[:, sort_idx_I, :]
+        a_arr = a_arr[:, :, sort_idx_B]
+        R_arr = R_arr[:, :, sort_idx_B]
+
+        # Build interpolators
+        a_intp = interp((v, I, B), a_arr, method=interpol_kind, 
+                         bounds_error=False, fill_value=None)
+        R_intp = interp((v, I, B), R_arr, method=interpol_kind,
+                        bounds_error=False, fill_value=None)
+        def a(vcomp, r, bcomp):
+            return a_intp((vcomp, I_tot(r), bcomp))
+        def R(vmag_like, r, bmag_like):
+            # We use component-consistent rate:
+            # simplest: use vx and bx (symmetry).
+            return R_intp(xi=(vmag_like, I_tot(r), bmag_like))
+        # -------------------------------------------------------------------------
+        # Differential equation
+        # -------------------------------------------------------------------------
+        def ode_MC(t, y, i_particle=None):
+            """
+            y = [vx, vy, vz, x, y, z, photons]
+            """
+            dy = np.zeros(7)
+            vx, vy, vz = y[0:3]
+            r = y[3:6]
+    
+            # MOT: full vector dynamics
+            Bxyz = Bvec(r)  # (3,)
+            bx, by, bz = Bxyz[0], Bxyz[1], Bxyz[2]
+            dy[0] = a(vx, r, bx)
+            dy[1] = a(vy, r, by)
+            dy[2] = a(vz, r, bz)
+            # scattering: simplest consistent choice
+            # (you can improve later: e.g. average over components)
+            dy[6] = R(vx, r, bx)
+            # kinematics
+            dy[3:6] = y[0:3]
+            return dy
+        # -------------------------------------------------------------------------
+        # Run trajectories
+        # -------------------------------------------------------------------------
+        from tqdm import tqdm
+        iterator = tqdm(range(len(v0_arr)), smoothing=0.0) if verbose else range(len(v0_arr))
+        for i in iterator:
+            v0 = v0_arr[i]
+            r0 = r0_arr[i]
+            # Default time sampling (same as your original)
+            if t_eval is None:
+                t_eval_i = np.linspace(0, t_int[i], 100000)
+            else:
+                t_eval_i = t_eval
+            y0 = np.array([v0[0], v0[1], v0[2], r0[0], r0[1], r0[2], 0.0])
+            sol = solve_ivp(
+                lambda t, y: ode_MC(t, y, i_particle=i),
+                (0.0, t_int[i]),
+                y0,
+                t_eval=t_eval_i,
+                **kwargs
+            )
+            if save_scipy_sols:
+                self.trajectory_results['sols'].append(sol)
+    
+            self.trajectory_results['final_values']['v'][i] = sol.y[0:3, -1]
+            self.trajectory_results['final_values']['r'][i] = sol.y[3:6, -1]
+            self.trajectory_results['final_values']['photons'][i] = sol.y[6, -1]
+        return a
+    
     def calc_trajectory(self,F_profile,t_int=20e-6,t_start=0.,dt=None,t_eval=None,
                         verbose=True,force_axis=None,
                         interpol_kind='linear',save_scipy_sols=False,**kwargs):
@@ -659,7 +835,11 @@ class System:
             
         if 'I' in F_profile:
             position_dep    = True
-            I               = F_profile['I']
+            I_unsort        = F_profile['I']
+            sort_idx        = np.argsort(I_unsort)
+            I               = I_unsort[sort_idx]
+            F_profile['a']  = F_profile['a'][:, sort_idx]
+            F_profile['Nscattrate']  = F_profile['Nscattrate'][:, sort_idx]
             I_tot           = self.lasers.get_intensity_func()
             
             from scipy.interpolate import RegularGridInterpolator as interp
@@ -678,7 +858,7 @@ class System:
                 force_axis = np.atleast_2d(np.array(force_axis)/np.linalg.norm(force_axis)) +v0_arr*0
             else:
                 raise Exception('input argument <force axis> has to be given!')
-                
+
         else:
             position_dep = False
             from scipy.interpolate import interp1d
@@ -698,11 +878,13 @@ class System:
                 dy[:3] = a(v_proj)*force_axis
                 dy[-1] = R(v_proj)
             dy[3:6] = y[:3]
+            #print(dy)
             return dy
         #__________________________________
         
         iterator = tqdm(v0_arr,smoothing=0.0) if verbose else v0_arr
         for i,v0 in enumerate(iterator):
+            t_eval = np.linspace(0, t_int[i], 1000)  # 1000 steps per particle
             sol = solve_ivp(ode_MC1D, (0.,t_int[i]), np.array([*v0, *r0_arr[i], 0.0]),
                             t_eval=t_eval, args=(force_axis[i],position_dep),
                             **kwargs)
@@ -896,13 +1078,17 @@ class System:
                 # print('diff & prop',np.all(np.abs(m1-m2)*1e2<con1),np.all(np.abs(1-m1/m2)*1e2 <con2))
                 #___check if conditions for steady state are fulfilled
                 if np.all(np.abs(m1-m2)*1e2 < con1) and np.all(np.nan_to_num(np.abs(1-m1/m2)*1e2,posinf=0,neginf=0) < con2):
+                    if verbose: print('Steady state condition satisfied at step ', self.step,'!')
+                    #self.conv = np.mean(np.abs(m1-m2)*1e2)
                     break
                 else:
                     m1      = m2
                     N0mat   = self.ymat[:,:,-1]
-                    t_start = self.t[-1]       
+                    t_start = self.t[-1]
+                    if self.step == self.steadystate['maxiters']-1:
+                        print('Maximum calculation steps reached! Increase allowed maxiters for convergence.')
             if verbose: print(' calculation steps: ',self.step+1)
-            
+            self.conv = np.max(np.abs(m1-m2)*1e2)
         #: execution time for the ODE solving
         self.exectime = time.perf_counter() - start_time
         self._verify_calculation()

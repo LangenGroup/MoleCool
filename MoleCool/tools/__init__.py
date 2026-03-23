@@ -490,11 +490,18 @@ def get_results(fname, Z_keys='F', XY_keys=[],
         if scale_F and (Z_key == 'F'):
             # Further scaling of the Z data, i.e. the force to more intuitive unit
             unit    = s4.hbarkG2
+            from MoleCool.System import hbar, pi
+            Gamma   = s4.levels.calc_Gamma().mean()
+            lamb    = s4.lasers.getarr('lamb').mean()
             if (scale_F == 'hbar*k*Gamma/2') and (abs(Z.max()) < 100*unit):
                 Z /= unit
             elif (scale_F == 'N') and (abs(Z.max()) > 100*unit):
                 Z *= unit
+                #print('unit', unit)
+                #print('definition unit', hbar*2*pi/lamb*Gamma/2)
             else:
+                #print('unit', unit)
+                #print('definition unit', hbar*2*pi/lamb*Gamma/2)
                 print('No Scaling of the force applied.')
     
         Z_dict[Z_key] = Z
