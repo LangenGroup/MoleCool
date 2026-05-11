@@ -347,7 +347,37 @@ Example: Optical cycling simulation for BaF
    integrated with LSODA, while OBEs use explicit Runge–Kutta methods (RK45).
    Both solvers are JIT-compiled with ``numba`` for near-C performance.
 
+OBE Convergence in Multi-Level Systems
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Evaluating the convergence of OBEs in complex multi-level systems is qualitatively
+different from two-level systems. The time-dependent populations only reach a steady
+state for very simple systems. In the multi-level case, only a periodic quasi steady
+state is typically reached, wherein the state populations exhibit sustained oscillations
+in time. This is either induced by the periodic motion of the molecule through a standing
+wave with a certain period :math:`\lambda` or by an artificial periodicity in the
+Hamiltonian which can be created by rounding the frequencies of all laser components
+as well as the Doppler shifts to e.g. :math:`\omega_{min} = \Gamma/100`. This would
+then result in a period :math:`T = 2\pi/\omega_{min}` of the equations. These criteria
+can be defined in the ``MoleCool`` framework using
+``steadystate['period'] = 'standing wave'`` or ``rounded=True`` respectively.
+To obtain a mean force, the populations have to come to a steady or
+periodic quasi steady state first. This is achieved by propagating the equations in
+time, simultaneously comparing the populations of two consecutive periods, and
+terminating if they are within a threshold of absolute and relative deviation defined
+as ``steadystate['condition'] = [absolute, relative]`` percentage deviation.
+Afterwards, they must be averaged over one period to get an accurate mean force.
+
+.. tip::
+
+   Sometimes in larger level systems, such as the 64 level system of fermionic BaF,
+   there are couplings of certain transitions to far-off-resonant laser components.
+   These fast oscillating terms can greatly slow down the differential equation solving
+   and significantly increase the wall time per iteration, while causing a negligible
+   net effect on the populations or the force as the fast oscillations can be averaged
+   out similarly to the rotating wave approximation. These terms can be neglected by
+   using a threshold frequency ``freq_clip_TH``, typically :math:`{\sim}500\,\Gamma`, to set a maximum
+   detuning under which the molecule-light interaction is considered for each transition.
 
 Other modules
 -------------
