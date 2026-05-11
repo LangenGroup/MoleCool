@@ -39,7 +39,7 @@ if __name__ == '__main__':
     
             Gamma       = system.levels.calc_Gamma()[0]
             delta       = 75*Gamma /(2*pi)
-            chi         = pi/4
+            chi         = pi/2                      # Bichromatic phase
             det         = {'138BaF':20e6, 'CaF':-38e6}[label]
             Isat        = system.levels.Isat.mean() # = pi*c*h*Gamma/(3*531e-9**3)
             I           = 3*Isat*(delta*2*pi/(Gamma/np.sqrt(3)))**2
@@ -53,7 +53,7 @@ if __name__ == '__main__':
                         I               = I,#freq_Rabi=np.sqrt(3/2)*delta*2*pi,
                         freq_shift      = s2*delta+det,
                         k               = [0,0,s1*1],
-                        phi             = -1*s1*s2*chi/2
+                        phi             = -1*s1*s2*chi/4
                         )
             
 # %%

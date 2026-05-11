@@ -651,7 +651,7 @@ class ElectronicStateConstants:
     #: Lambda-doubling constants
     const_LD        = ['o','p','q']#,'p_D','q_D'] can maybe extracted out of Fortran code
     #: (magnetic) Zeeman constants. `g_S` and `g'_L` are initially set to 2.002 and 1. respectively.
-    const_Zeeman    = ['g_l',"g'_l",'g_S',"g'_L"]  
+    const_Zeeman    = ['g_l',"g'_l",'g_S',"g'_L", "g_r", "g_N1", "g_N2", "g'_r"]  
     #: sum of all constant names
     const_all = const_elec + const_vib + const_rot + const_sr + const_so \
                 + const_HFS + const_eq0Q + const_LD + const_Zeeman
@@ -1398,6 +1398,35 @@ class ElectronicState:
                 
         return self.HcaseBasis
     
+    def calc_basis_decoupled(self):
+        """Transform eigenstates to fully decoupled basis |N,mN,S,mS,I1,mI1,I2,mI2>.
+        !!!ONLY implemented for the fermions (137/135BaF) - with two nuclear spins - so far.!!!
+        
+        Note: This separate function for calc_basis is needed because MoleCool 
+        builds states using Fmax as a limit. This is an artificial limit, and 
+        produces a constrained hilbert space for the coupled angular momenta 
+        (S = 0.5, I1 = 1.5, I2 = 0.5, L = 0, rotations) that go into it. The 
+        actual full decoupled hilbert space (where Fmax is not defined, and 
+        therefore cannot be used as a constraint), is a full tensor product 
+        of these angular momenta spaces - therefore larger. So, a rectangular
+        transformation is required to go from MoleCool's Hcase (a) basis to
+        full decoupled basis. This was not implemented in calc_basis_change()."""
+        
+        states_decoupled = []
+        rows = []
+        for st in self.states:
+            lincom = st.to_Hcase(Hcase='decoupled_b_betaS')
+            row = np.zeros(len(self.states))  # placeholder, will expand
+            for prefac, st_d in zip(lincom['prefacs'], lincom['states']):
+                if st_d not in states_decoupled:
+                    states_decoupled.append(st_d)
+                    rows.append(np.zeros(len(self.states)))
+                idx = states_decoupled.index(st_d)
+                rows[idx][self.states.index(st)] = prefac
+        self.states_Hcase = states_decoupled
+        self.HcaseBasis = np.array(rows)
+        return self.HcaseBasis
+
     def get_gfactors(self, Bmax=1e-4):
         """calculates the mixed g-factors for every hyperfine level eigenstate.
         These g-factors are returned as an array with the same order as the
@@ -1497,7 +1526,95 @@ class ElectronicState:
         plt.ylabel('Energy (cm$^{-1}$)')
         
         return plt.gca()
+    
+    def plot_Zeeman_fast(self, Bfield, highlighted = np.arange(-3.5, 4.0, 1.0)):
+        '''Calculates Zeeman shifts very quickly by only diagonalizing the Hamiltonian once, and factoring out the magnetic field.
+        Some additional stuff for giving ordered eigenvalue and eigenvector arrays, block diagonal in mF.
         
+        Parameters
+        ----------
+        Bfield : array-type or float
+            When `Bfield` is of array-type the eigenenergies are calculated for
+            every single value. Otherwise, if `Bfield` is a float, the Zeeman
+            Hamiltonian is evaluated for 20 values from 0.0 to `Bfield`.
+            This input parameter has to be provided in units of Tesla.
+        highlighted : Array of mF state labels to be highlighted in common colors.
+            States outside of this range will be colored gray. Typically supply:
+                highlighted = np.arange(-3.5, 4.0, 1.0)  # -7/2 to +7/2 for fermions
+                or 
+                highlighted = np.arange(-2, 2.5, 1.0)  # -2 to +2 for bosons
+        '''
+        if not isinstance(Bfield, Iterable):
+            Bfield = np.linspace(0, Bfield, 20)
+        Bfield = np.asarray(Bfield, dtype=float)
+    
+        N     = self.N
+        const = self.const.to_dict()
+    
+        H0 = np.zeros((N, N))
+        HZ = np.zeros((N, N))
+        for i, st_i in enumerate(self.states):
+            for j in range(i, N):
+                st_j     = self.states[j]
+                H0[i, j] = H_tot(st_i, st_j, const)
+                HZ[i, j] = H_Zeeman(st_i, st_j, const, Bfield=1.0)
+                H0[j, i] = H0[i, j]
+                HZ[j, i] = HZ[i, j]
+    
+        # --- block-diagonalize per mF, vectorized over Bfield ---
+        mF_indices = {key: [] for key in np.arange(-self.Fmax, self.Fmax+0.1, 1)}
+        for i, st in enumerate(self.states):
+            mF_indices[st.mF].append(i)
+
+        Ew_B_arr = np.zeros((len(Bfield), N))
+        Ev_B_dict = {}
+        for mF, indices in mF_indices.items():
+            if len(indices) == 0:
+                continue
+            ix = np.ix_(indices, indices)
+            H_stack  = H0[ix][None] + Bfield[:, None, None] * HZ[ix][None]
+            Ew_block, Ev_block = np.linalg.eigh(H_stack)
+            # eigh already sorts each step ascending — no initial sort needed
+            for i in range(2, Ew_block.shape[0]):
+                slope = (Ew_block[i-1] - Ew_block[i-2]) / (Bfield[i-1] - Bfield[i-2])
+                ind_arr = []
+                for j in range(Ew_block.shape[1]):
+                    inds = np.argsort(np.abs(
+                        Ew_block[i-1,j] + slope[j]*(Bfield[i]-Bfield[i-1]) - Ew_block[i]))
+                    for ind in inds:
+                        if ind not in ind_arr:
+                            ind_arr.append(ind)
+                            break
+                ind_arr = np.array(ind_arr)
+                Ew_block[i]   = Ew_block[i,   ind_arr]
+                Ev_block[i]   = Ev_block[i, :, ind_arr]
+            Ew_B_arr[:, indices] = Ew_block
+            Ev_B_dict[mF]        = Ev_block
+            
+        mF_vals = np.array([st.mF for st in self.states])
+        unique_mF = np.unique(mF_vals)
+        
+        highlighted = highlighted
+        cmap = plt.cm.get_cmap('tab10', len(highlighted))
+        color_map = {mF: cmap(i) for i, mF in enumerate(highlighted)}
+    
+        plt.figure()
+        legend_handles = []
+        for i in range(Ew_B_arr.shape[1]):
+            mF = mF_vals[i]
+            if mF in color_map:
+                c = color_map[mF]
+                line, = plt.plot(Bfield * 1e4, Ew_B_arr[:, i] * cm2MHz * 1e-3, '-', color=c)
+            else:
+                plt.plot(Bfield * 1e4, Ew_B_arr[:, i] * cm2MHz * 1e-3, '-', color='gray', alpha=0.4)
+    
+        for mF, c in color_map.items():
+            legend_handles.append(plt.Line2D([0],[0], color=c, label=f'$m_F={mF:.1f}$'))
+        plt.legend(handles=legend_handles, fontsize=7, ncol=2)
+        plt.xlabel('Magnetic field (G)')
+        plt.ylabel('Energy (GHz)')
+        return plt.gca(), Ew_B_arr, Ev_B_dict, mF_indices
+
     def export_OBE_properties(self, index_filter={}, rounded=None, QuNrs=[], 
                               HFfreq_offset=0, Bmax=1e-4, nested_dict=False,
                               get_QuNr_keyval_pairs_kwargs={}):
@@ -1662,7 +1779,7 @@ class QuState:
                 if self.__dict__[QuNr] != other.__dict__[QuNr]:
                     return False
         return True
-    
+
     def QuNrs_default(self): 
         QuNrs_def = {}
         for QuNr in ['F','F1','mF','S','I1','I2']:
@@ -1706,13 +1823,13 @@ class Hcasea(QuState):
                     states.append(Hcasea_p(L=abs(self.L),P=P,Om=abs(self.Om),J=self.J,**QuNrs_def))
                     prefacs.append(prefac)
             elif Hcase == 'b' or Hcase == 'b_betaS':
-                for N in addJ(self.S,self.J):
+                for N in addJ(self.S, self.J):
                     prefac = np.sqrt(2*N+1)*phs(self.J+self.Om)*w3j(self.S,N,self.J,self.Si,self.L,-self.Om)
                     if prefac == 0: continue
-                    st = Hcaseb(L=self.L,N=N,J=self.J,**QuNrs_def)
+                    st = Hcaseb(L=self.L, N=N, J=self.J, **QuNrs_def)
                     if Hcase == 'b_betaS':
                         lincom_ = st.to_Hcase(Hcase='b_betaS')
-                        for prefac_,st_ in zip(lincom_['prefacs'],lincom_['states']):
+                        for prefac_, st_ in zip(lincom_['prefacs'], lincom_['states']):
                             if st_ in states:
                                 prefacs[states.index(st_)] += prefac_*prefac
                             else:
@@ -1721,8 +1838,62 @@ class Hcasea(QuState):
                     else:
                         states.append(st)
                         prefacs.append(prefac)
-            else: # Transformation for the fermions is missing?!
-                raise ValueError("Invalid string value '{}' for `Hcase` parameter".format(Hcase))
+            elif Hcase == 'decoupled_b_betaS':
+                # Extract quantum numbers from the case (a) state
+                J = self.J
+                Om = self.Om          # Ω = Λ + Σ
+                L = self.L            # Λ (projection of L)
+                Si = self.Si          # Σ (projection of S)
+                S = self.S
+                I1 = self.I1
+                I2 = self.I2
+                F = self.F
+                mF = self.mF
+                F1 = self.F1
+                # Step 1: Transform case (a) → case (b) to get N
+                # We will combine this with subsequent decoupling steps.
+                for N in addJ(S, J):          # N = |J-S| ... J+S
+                    c_N = np.sqrt(2*N+1) * phs(J + Om) * w3j(S, N, J, Si, L, -Om)
+                    if abs(c_N) < 1e-12:
+                        continue
+                    # It is easier to iterate over all magnetic quantum numbers:
+                    # mI2, mF1, mI1, mJ, then mN, mS.
+                    for mI2 in np.arange(-I2, I2+1e-9, 1):
+                        mF1 = mF - mI2
+                        if abs(mF1) > F1 + 1e-9: continue
+                        # Coefficient for uncoupling F → F1 + I2
+                        c_F = phs(F1 - I2 + mF) * np.sqrt(2*F+1) * w3j(F1, I2, F, mF1, mI2, -mF)
+                        if abs(c_F) < 1e-12: continue
+                        for mI1 in np.arange(-I1, I1+1e-9, 1):
+                            mJ = mF1 - mI1
+                            if abs(mJ) > J + 1e-9: continue
+                            # Coefficient for uncoupling F1 → J + I1
+                            c_F1 = phs(J - I1 + mF1) * np.sqrt(2*F1+1) * w3j(J, I1, F1, mJ, mI1, -mF1)
+                            if abs(c_F1) < 1e-12: continue
+                            # Now we have mJ fixed.
+                            # Uncouple J into N and S: |J mJ⟩ = sum_{mN, mS} CG(N mN; S mS|J mJ) |N mN⟩|S mS⟩
+                            for mN in np.arange(-N, N+1e-9, 1):
+                                mS = mJ - mN
+                                if abs(mS) > S + 1e-9: continue
+                                c_J = phs(N - S + mJ) * np.sqrt(2*J+1) * w3j(N, S, J, mN, mS, -mJ)
+                                if abs(c_J) < 1e-12: continue
+                                # Total coefficient
+                                prefac = c_N * c_J * c_F1 * c_F
+                                if abs(prefac) < 1e-12:
+                                    continue
+                                # Create fully decoupled state
+                                st_fully = FullyDecoupledState(
+                                    N=N, mN=mN,
+                                    S=S, mS=mS,
+                                    I1=I1, mI1=mI1,
+                                    I2=I2, mI2=mI2
+                                )
+                                # Add to linear combination
+                                if st_fully in states:
+                                    prefacs[states.index(st_fully)] += prefac
+                                else:
+                                    states.append(st_fully)
+                                    prefacs.append(prefac)
             self.linearcombi[Hcase] = dict(states=states, prefacs=prefacs)
         
         if printing:
@@ -1769,12 +1940,13 @@ class Hcaseb(QuState):
                 states.append(self)
                 prefacs.append(+1)
             elif Hcase == 'b_betaS':
-                for G in addJ(self.S,self.I1):
+                for G in addJ(self.S, self.I1):
                     prefac = np.sqrt((2*self.J+1)*(2*G+1))*phs(self.N+self.S+F+self.I1)\
-                             * w6j(self.N,self.S,self.J,
-                                   self.I1,    F,     G)
+                             * w6j(self.N, self.S, self.J, self.I1, F, G)
                     if prefac == 0: continue
-                    states.append(Hcaseb_betaS(L=self.L,N=self.N,G=G,**QuNrs_def))
+                    QuNrs_bS = QuNrs_def.copy()
+                    QuNrs_bS['F1'] = F  # F1 in b_betaS = G+N = F (the intermediate used in 6j)
+                    states.append(Hcaseb_betaS(L=self.L, N=self.N, G=G, **QuNrs_bS))
                     prefacs.append(prefac)
             else: # Transformation for the fermions is missing?!
                 raise ValueError("Invalid string value '{}' for `Hcase` parameter".format(Hcase))
@@ -1786,11 +1958,14 @@ class Hcaseb(QuState):
                 print('{:+.4f} *\n{}'.format(prefac,state,end='\n'))
         
         return self.linearcombi[Hcase]
-
+    
 class Hcaseb_betaS(QuState):
     goodQuNrs = ['L','N','G']
     description = 'Hunds case b_betaS'
-
+    
+class FullyDecoupledState(QuState):
+    goodQuNrs = ['N', 'mN', 'S', 'mS', 'I1', 'mI1', 'I2', 'mI2']
+    description = 'Fully decoupled basis'
 #%% Hamiltonians
 def H_tot(x,y,const):
     """calculates and returns the matrix element of the total Hamiltonian without
@@ -1930,10 +2105,9 @@ def H_tot(x,y,const):
     
     return H_hfs + H_rot + H_sr + H_so + H_LD + H_eq0Q + H_hfs2
 
-def H_Zeeman(x,y,const,Bfield):
+def H_Zeeman(x, y, const, Bfield):
     """calculates and returns the matrix element of the Zeeman interaction
     between two states.
-
     Parameters
     ----------
     x : :class:`Hcasea`
@@ -1942,63 +2116,204 @@ def H_Zeeman(x,y,const,Bfield):
         second state.
     const : dict
         dictionary of all constants required for the effective Hamiltonian.
-        When this function is called by the method :meth:`ElectronicState.calc_eigenstates`,
-        the method :meth:`ElectronicStateConstants.to_dict` of the attribute
-        ``const`` within :class:`ElectronicState` is used to
-        create a proper dictionary.
     Bfield : float
         magnetic field strength in T.
     """
-    # x: lower state, y: upper state
-    # prevent mixing of different mF values
-    if kd(x.mF,y.mF) == 0: return 0.0
-    S   = x.S
-    L, Si, Om, J  = x.L, x.Si, x.Om, x.J
-    L_,Si_,Om_,J_ = y.L, y.Si, y.Om, y.J
-    unit = 0.4668644778272809#mu_B/h*1e-6/cm2MHz #Bfield*mu_B=E, E/h=f, f in MHz -> cm^-1
+    if kd(x.mF, y.mF) == 0: return 0.0
+
+    S    = x.S
+    L,  Si,  Om,  J  = x.L,  x.Si,  x.Om,  x.J
+    L_, Si_, Om_, J_ = y.L,  y.Si,  y.Om,  y.J
+
+    unit = 0.4668644778272809  # mu_B/h * 1e-6/cm2MHz
+
     if x.I2 > 0:
-        F, mF, F1   = x.F,x.mF,x.F1
-        F_,mF_,F1_  = y.F,y.mF,y.F1
-        I1,I2       = x.I1,x.I2
-        
-        sum1 = 0.0
-        for q in [-1,0,+1]:
-            sum1 += w3j(J,1,J_,-Om,q,Om_)*( const["g'_L"]*L*kd(Si,Si_) #-const['g_l']*kd(Si,Si_)*Si #see Brown&Carrington, but not used in Fortran code
-                + (const['g_S']+const['g_l'])*phs(S-Si)*cb(S)*w3j(S,1,S,-Si,q,Si_) )
-        H_z1 = Bfield*kd(L,L_)*sum1
-        
-        sum2 = 0.0
-        for q in [-1,+1]:
-            sum2 += kd(L,L_-2*q)*w3j(S,1,S,-Si,q,Si_)*w3j(J,1,J_,-Om,-q,Om_)
-        H_z2 = -Bfield*const["g'_l"]* phs(S-Si)*cb(S)*sum2
-        
-        #common factor
-        common_fac = phs(F-mF+J-Om)*sb(J)*sb(J_)*w3j(F,1,F_,-mF,0,mF)\
-                    *sb(F1)*sb(F1_)*w6j(J,F1,I1,F1_,J_,1)*phs(F1_+J+I1+1)\
-                    *sb(F)*sb(F_)*w6j(F1,F,I2,F_,F1_,1)*phs(F_+F1+I2+1)
-        return (H_z1 + H_z2)*common_fac*unit
+        F,  mF,  F1  = x.F,  x.mF,  x.F1
+        F_, mF_, F1_ = y.F,  y.mF,  y.F1
+        I1, I2       = x.I1, x.I2
+    
+        muN_over_muB = 1/1836.15267343
+        # Outer recoupling prefactor P_out — shared by Terms I, II, IIIa, IV
+        P_out = (phs(F - mF) * phs(F_ + F1 + I2 + 1)
+                 * sb(F1) * sb(F1_) * sb(F) * sb(F_)
+                 * w6j(F1, F, I2, F_, F1_, 1)
+                 * w3j(F, 1, F_, -mF, 0, mF))
+        # Term I — Electronic Zeeman (body-frame, off-diagonal in J, F1, Fhat)
+        H_I = 0.0
+        if kd(L, L_):
+            inner_sum = 0.0
+            for q in [-1, 0, +1]:
+                t3j     = w3j(J, 1, J_, -Om, q, Om_)
+                orbital = (const["g'_L"] + const['g_r']) * L * kd(Si, Si_)
+                spin    = ((const['g_S'] + const['g_r'] + const['g_l'])
+                           * phs(S - Si) * cb(S) * w3j(S, 1, S, -Si, q, Si_))
+                gl_term = -const['g_l'] * Si * kd(Si, Si_)
+                inner_sum += t3j * (orbital + spin + gl_term)
+            H_I = (Bfield * phs(J + I1 + F1_ + 1) * phs(J - Om)
+                   * sb(J) * sb(J_)
+                   * w6j(J, F1, I1, F1_, J_, 1)
+                   * inner_sum)
+        # Term II — J_z rotational (diagonal J; off-diagonal F1, Fhat)
+        H_II = 0.0
+        if kd(J, J_) and kd(Si, Si_) and kd(L, L_):
+            H_II = (-Bfield * const['g_r']
+                    * phs(J + I1 + F1_ + 1)
+                    * w6j(J, F1, I1, F1_, J, 1)
+                    * cb(J))
+        # Term IIIa — I1_z Ba-137 nuclear Zeeman (diagonal J; off-diagonal F1, Fhat)
+        # Define g_N1 and g_N2 in order of coupling strengths! 
+        # For 137BaF, always Ba spin as g_N1! Likewise for I1 & I2.
+        H_IIIa = 0.0
+        if kd(J, J_) and kd(Si, Si_) and kd(L, L_):
+            H_IIIa = (-Bfield * const['g_N1'] * muN_over_muB
+                      * phs(J + I1 + F1 + 1)      # F1, not F1_
+                      * w6j(I1, F1, J, F1_, I1, 1)
+                      * cb(I1))
+        # Term IIIb — I2_z F-19 nuclear Zeeman (diagonal J AND F1; off-diagonal Fhat)
+        # STRUCTURALLY DISTINCT: no P_out; phase carries Fhat (BRA), not Fhat'.
+        H_IIIb = 0.0
+        if kd(J, J_) and kd(Si, Si_) and kd(L, L_) and kd(F1, F1_):
+            H_IIIb = (-Bfield * const['g_N2'] * muN_over_muB
+                      * phs(F + F1 + I2 + 1)      # Fhat (BRA), not Fhat'
+                      * phs(F - mF)
+                      * sb(F) * sb(F_)
+                      * w6j(I2, F, F1, F_, I2, 1)
+                      * cb(I2)
+                      * w3j(F, 1, F_, -mF, 0, mF))
+        # Term IV — L-uncoupling (q = ±1, delta_{A, A'∓2})
+        # Same outer structure as Term I but q = ±1 only and delta_{L, L'∓2}
+        H_IV = 0.0
+        for q in [-1, +1]:
+            if not kd(L, L_ - 2*q): continue
+    
+            inner_IV = 0.0
+            # IVa
+            IVa = ((const["g'_l"] - const["g'_r"])
+                   * phs(S - Si) * cb(S)
+                   * w3j(S, 1, S, -Si,  q, Si_)
+                   * w3j(J, 1, J_, -Om, -q, Om_))
+            # IVb
+            IVb = 0.0
+            if const["g'_r"] != 0.0:
+                Om__ = -min(J, J_)
+                while Om__ <= min(J, J_) + 1e-10:
+                    t1 = (phs(J  - Om__)
+                          * w3j(J,  1, J,  -Om,  -q, Om__)
+                          * w3j(J,  1, J_, -Om__, -q, Om_)
+                          * cb(J))
+                    t2 = (phs(J_ - Om__)
+                          * w3j(J,  1, J_, -Om,  -q, Om__)
+                          * w3j(J_, 1, J_, -Om__, -q, Om_)
+                          * cb(J_))
+                    IVb  += kd(Si, Si_) * 0.5 * (t1 + t2)
+                    Om__ += 1.0
+                IVb *= -const["g'_r"]
+            inner_IV = IVa + IVb
+    
+            H_IV += -(Bfield * phs(J + I1 + F1_ + 1) * phs(J - Om)
+                     * sb(J) * sb(J_)
+                     * w6j(J, F1, I1, F1_, J_, 1)
+                     * inner_IV)
+        # ------------------------------------------------------------------
+        # Assemble
+        # Terms I, II, IIIa, IV share P_out.
+        # Term IIIb is self-contained (has its own 3j and phase).
+        # ------------------------------------------------------------------
+        return ((H_I + H_II + H_IIIa + H_IV) * P_out + H_IIIb) * unit
 
     else:
-        F, mF   = x.F,x.mF
-        F_,mF_  = y.F,y.mF
+        # --- Constants from const dict ---
+        gS  = const['g_S']
+        gL  = const["g'_L"]
+        gl  = const['g_l']
+        gr  = const['g_r']
+        gN  = const['g_N1']
+        gr_ = const["g'_r"]
+        gl_ = const["g'_l"]
+        muN_over_muB = 1/1836.15267343 # mu_N/mu_B ~ 1/1836, enter when gN is set
+        F,  mF  = x.F, x.mF
+        F_, mF_ = y.F, y.mF
         I       = x.I1
-        
-        sum1 = 0.0
-        for q in [-1,0,+1]:
-            sum1 += w3j(J,1,J_,-Om,q,Om_)*( const["g'_L"]*L*kd(Si,Si_)
-                + (const['g_S']+const['g_l'])*phs(S-Si)*cb(S)*w3j(S,1,S,-Si,q,Si_) )
-        H_z1 = Bfield*kd(L,L_)*sum1
-        
-        sum2 = 0.0
-        for q in [-1,+1]:
-            sum2 += kd(L,L_-2*q)*w3j(S,1,S,-Si,q,Si_)*w3j(J,1,J_,-Om,-q,Om_)
-        H_z2 = -Bfield*const["g'_l"]*phs(S-Si)*cb(S)*sum2
-        
-        #common factor
-        common_fac = phs(F-mF+J-Om)*sb(J)*sb(J_)*w3j(F,1,F_,-mF,0,mF)\
-                    *sb(F)*sb(F_)*w6j(J,F,I,F_,J_,1)*phs(F_+J+I+1)
-        
-        return (H_z1 + H_z2)*common_fac*unit
+        # ------------------------------------------------------------------
+        # Common angular prefactor (Terms I, II share this):
+        # ------------------------------------------------------------------
+        ang_common = (phs(J + I + F_ + 1) * phs(F - mF)
+                      * sb(F) * sb(F_)
+                      * w6j(J, F, I, F_, J_, 1)
+                      * w3j(F, 1, F_, -mF, 0, mF))
+        # ------------------------------------------------------------------
+        # Term I — Electronic Zeeman (body-frame, off-diagonal J,J')
+        # ------------------------------------------------------------------
+        H_I = 0.0
+        if kd(L, L_):
+            for q in [-1, 0, +1]:
+                t3j     = w3j(J, 1, J_, -Om, q, Om_)
+                orbital = (gL + gr) * L * kd(Si, Si_)
+                spin    = (gS + gr + gl) * phs(S - Si) * cb(S) * w3j(S, 1, S, -Si, q, Si_)
+                gl_term = -gl * Si * kd(Si, Si_)
+                H_I    += t3j * (orbital + spin + gl_term)
+            H_I *= Bfield * sb(J) * sb(J_) *  phs(J - Om) 
+        # ------------------------------------------------------------------
+        # Term II — J_z rotational correction (diagonal J, off-diagonal F,F')
+        # ------------------------------------------------------------------
+        H_II = 0.0
+        if kd(J, J_) and kd(Si, Si_) and kd(L, L_):
+            H_II = -Bfield * gr * cb(J)
+        # ------------------------------------------------------------------
+        # Term III — I_z nuclear (diagonal J, off-diagonal F,F')
+        # ------------------------------------------------------------------
+        H_III = 0.0
+        if kd(J, J_) and kd(Si, Si_) and kd(L, L_) and I > 0:
+            ang_III = (phs(J + I + F + 1) * phs(F - mF)
+                       * sb(F) * sb(F_)
+                       * w6j(I, F, J, F_, I, 1)
+                       * w3j(F, 1, F_, -mF, 0, mF))
+            H_III = -Bfield * gN * muN_over_muB * cb(I) * ang_III
+        # ------------------------------------------------------------------
+        # Term IV — L-uncoupling (q = ±1, delta_{A, A'∓2})
+        # ------------------------------------------------------------------
+        H_IV = 0.0
+        for q in [-1, +1]:
+            if not kd(L, L_ - 2*q): continue  # delta_{A, A'∓2}
+
+            phase_IV = (phs(J + I + F_ + 1) * phs(F - mF)
+                        * phs(J - Om)
+                        * sb(J) * sb(J_) * sb(F) * sb(F_)
+                        * w6j(J, F, I, F_, J_, 1)
+                        * w3j(F, 1, F_, -mF, 0, mF))
+            # IVa
+            IVa = ((gl_-gr_)
+                   * phs(S - Si) * cb(S)
+                   * w3j(S, 1, S, -Si,  q, Si_)
+                   * w3j(J, 1, J_, -Om, -q, Om_))
+            # IVb — sum over Om'' (nopython-safe: step over half-integers)
+            IVb = 0.0
+            if gr_ != 0.0:
+                cbJ  = cb(J)
+                cbJ_ = cb(J_)
+                # Om'' must satisfy |Om''| <= J and |Om''| <= J'
+                Om_min = -min(J, J_)
+                Om__   =  Om_min
+                while Om__ <= min(J, J_) + 1e-10:
+                    t1 = (phs(J  - Om__)
+                          * w3j(J,  1, J,  -Om,  -q, Om__)
+                          * w3j(J,  1, J_, -Om__, -q, Om_)
+                          * cbJ)
+                    t2 = (phs(J_ - Om__)
+                          * w3j(J,  1, J_, -Om,  -q, Om__)
+                          * w3j(J_, 1, J_, -Om__, -q, Om_)
+                          * cbJ_)
+                    IVb  += kd(Si, Si_) * 0.5 * (t1 + t2)
+                    Om__ += 1.0
+                IVb *= -gr_
+            H_IV += -Bfield * phase_IV * (IVa + IVb)
+        # ------------------------------------------------------------------
+        # Assemble
+        # Terms I and II share ang_common.
+        # Term III uses ang_III (computed internally, already Bfield-scaled).
+        # Term IV carries phase_IV per q (already Bfield-scaled).
+        # ------------------------------------------------------------------
+        return ((H_I + H_II) * ang_common + H_III + H_IV) * unit
 
 def H_d(x,y):
     """calculates and returns the matrix element of the electric dipole
@@ -2039,6 +2354,91 @@ def H_d(x,y):
         mF,mF_ = x.mF, y.mF
         H *= phs(F_-mF_)*w3j(F_,1,F,-mF_,mF_-mF,mF)
     return H
+
+def H_PNC(x, y):
+    """Implemented directly from Rahmlow's PhD Thesis (2010). 
+    ONLY valid for a 2\Sigma state in case(a) basis for 2 nuclear spins.
+    returns: Matrix element for Parity non-conserving hamiltonian term
+            between two states"""
+    S = x.S
+    L, Si, Om, J, F1, F, mF = x.L, x.Si, x.Om, x.J, x.F1, x.F, x.mF
+    L_,Si_,Om_,J_,F1_,F_,mF_ = y.L, y.Si, y.Om, y.J, y.F1, y.F, y.mF
+    I1 = x.I1
+    
+    if abs(J-J_)>1+1e-8: return 0.0 
+    if kd(Om, Om_): return 0.0 
+    if abs(Om-Om_)>1+1e-8: return 0.0
+    norm = I1
+    deltas = kd(F1,F1_)*kd(F,F_)*kd(mF,mF_)
+    factors = np.sqrt(2)*Om_*(Om-Om_)*phs(F1_+J+J_+I1-Om)*cb(I1)*sb(J)*sb(J_)
+    wjs = w6j(F1_, I1, J, 1, J_, I1)*w3j(J, 1, J_, -Om, Om-Om_, Om_)
+
+    return deltas*factors*wjs/norm
+
+
+def H_Stark(x, y, D=3.170):
+    """Implemented directly from Rahmlow's PhD Thesis (2010) equation for H_Stark (p 100).
+    ONLY valid for a 2Sigma state in case(a) basis with two nuclear spins.
+    Returns matrix element of the Stark Hamiltonian between two states
+    in the same electronic state.
+    
+    Multiply result by * E [V/cm]
+    to get the energy shift in kHz.
+
+    Parameters
+    ----------
+    x : Hcasea
+        bra state.
+    y : Hcasea
+        ket state.
+    D : float
+        body-fixed permanent electric dipole moment (e.g. 3.17 Debye for BaF X state).
+    """
+    if x.I2 > 0:
+        L,  Si,  Om,  J,  F1,  F,  mF  = x.L, x.Si, x.Om, x.J, x.F1, x.F, x.mF
+        L_, Si_, Om_, J_, F1_, F_, mF_  = y.L, y.Si, y.Om, y.J, y.F1, y.F, y.mF
+        I1 = x.I1
+        I2 = x.I2
+    
+        # selection rules
+        if kd(L,  L_)  == 0: return 0.0
+        if kd(Om, Om_) == 0: return 0.0
+        if abs(J - J_) > 1 + 1e-8: return 0.0  # Delta J = +/-1, 0
+        if abs(F - F_) > 1 + 1e-8: return 0.0
+        if abs(mF - mF_) > 1 + 1e-8: return 0.0  
+    
+        phase   = phs( F + F_ + F1 + F1_ + I1 + I2 + Om - mF )
+        sqrts   = (sb(F) * sb(F_) * sb(F1) * sb(F1_) * sb(J) * sb(J_))
+        wj6_1   = w6j(F1, F,  I2, F_, F1_, 1)
+        wj6_2   = w6j(J,  F1, I1, F1_, J_, 1)
+        wj3_mF  = w3j(F,  1,  F_, -mF, mF - mF_, mF_)   # p=0 so mF'-mF=0
+        wj3_Om  = w3j(J, 1,  J_,  -Om, Om-Om_,  Om_)           # q=0 component only
+    
+        return D * 503.4 * phase * sqrts * wj6_1 * wj6_2 * wj3_mF * wj3_Om
+    
+    else:  # single nuclear spin (I2 = 0)
+        I = x.I1
+        L,  Si,  Om,  J, F,  mF  = x.L, x.Si, x.Om, x.J, x.F, x.mF
+        L_, Si_, Om_, J_, F_, mF_  = y.L, y.Si, y.Om, y.J, y.F, y.mF
+    
+        # Selection rules
+        if kd(Om, Om_) == 0: return 0.0          # Delta Omega = 0
+        if abs(J - J_) > 1 + 1e-8: return 0.0   # Delta J = 0, +/-1
+        if abs(F - F_) > 1 + 1e-8: return 0.0   # Delta F = 0, +/-1
+        if abs(mF - mF_) > 1 + 1e-8: return 0.0
+    
+        phase   = (phs(F - mF) *
+                  phs(J + I + F_ + 1) *
+                  phs(J - Om))
+    
+        sqrts  = sb(F) * sb(F_) * sb(J) * sb(J_)
+    
+        wj6    = w6j(J,  F,  I, F_, J_, 1)
+        wj3_mF = w3j(F,  1,  F_, -mF, mF - mF_, mF_)
+        wj3_Om = w3j(J,  1,  J_, -Om, Om - Om_, Om_)
+    
+        return D * 503.4 * phase * sqrts * wj6 * wj3_mF * wj3_Om
+        
 
 #%%% small functions
 @jit(nopython=True,parallel=False)
